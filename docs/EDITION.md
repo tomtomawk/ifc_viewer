@@ -114,8 +114,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   rétablit l'ancienne valeur (sans quitter l'outil en cours).
 - **Modéliser → Niveau** liste les niveaux (nom et altitude modifiables) ;
   « Ajouter un niveau » crée « Niveau n » au-dessus du plus haut, à la hauteur du
-  dernier étage (3 m s'il n'y a qu'un niveau). **Quadrillage** crée des axes
-  droits, visibles dans les plans natifs. Les dimensions du modèle sont saisies en
+  dernier étage (3 m s'il n'y a qu'un niveau). **Quadrillage** : dans une vue en plan,
+  un axe droit se trace en deux clics (accrochages, Maj : orthogonal) avec le repère
+  du réglage, ou le suivant libre ; le repère suivant est proposé (A → B, 1 → 2) et
+  l'outil reste actif ; Échap ou clic droit reprennent le départ, puis quittent.
+  Les axes sont visibles dans les plans natifs. Les dimensions du modèle sont saisies en
   centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
   les commandes CLI/MCP et les tailles sur papier restent en millimètres.
 - **Modéliser → Poteau / Poutre** crée des poteaux rectangulaires et des poutres

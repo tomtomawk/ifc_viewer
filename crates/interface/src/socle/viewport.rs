@@ -69,10 +69,13 @@ impl Application {
         let texte_annotation = self.texte_annotation_actif();
         // Étiquette : un clic sur un élément la pose au point cliqué
         let etiquette_annotation = self.etiquette_annotation_actif();
+        // Quadrillage : ligne en deux clics dans une vue en plan
+        let quadrillage = self.quadrillage_actif();
+        if !quadrillage { self.bim.depart_quadrillage = None; }
         // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
         self.suivre_transformation();
         let deplacement = self.transfo.outil;
-        let mode_trace = mode_attache || mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || texte_annotation || etiquette_annotation || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
+        let mode_trace = mode_attache || mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || texte_annotation || etiquette_annotation || quadrillage || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
         let axe = if mode_trace || edition_arc { None } else { self.axe_selection() };
@@ -314,6 +317,14 @@ impl Application {
                         self.error = Some(if altitude_structure.is_none() { "Choisissez un niveau pour la structure." } else { "Le plan de placement est parallèle à la vue. Utilisez une vue de dessus ou une vue 3D inclinée." }.into());
                     }
                 }
+            } else if quadrillage {
+                // clic droit : reprend le départ, sinon quitte l'outil (comme Échap)
+                if resp.clicked_by(PointerButton::Secondary) && self.bim.depart_quadrillage.take().is_none() { self.ruban_edition.annuler(); }
+                if resp.clicked() && let Some(q) = resp.interact_pointer_pos()
+                    && let Err(e) = self.clic_quadrillage(rect, q, shift)
+                {
+                    self.error = Some(e);
+                }
             } else if etiquette_annotation {
                 if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos()
@@ -518,6 +529,7 @@ impl Application {
         }
         if texte_annotation { self.apercu_texte_vue(ui, rect, resp.hover_pos()); }
         if etiquette_annotation { self.apercu_etiquette_vue(ui, rect, resp.hover_pos()); }
+        if quadrillage { self.apercu_quadrillage(ui, rect, resp.hover_pos()); }
         // Ouverture : un clic sur un mur la place (branche du clic plus haut) ; consigne et
         // clic droit comme les autres placements
         if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Ouverture) {

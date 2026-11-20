@@ -23,6 +23,8 @@ pub(crate) struct EtatBim {
     /// Réglages des prochaines poutres (outil Poutre, n° 6 à 10).
     pub(crate) poutre: crate::outils::modeliser::poutres::ReglagesPoutre,
     pub(crate) depart_structure: Option<[f64; 2]>,
+    /// Départ de la ligne de quadrillage en cours (outil Quadrillage).
+    pub(crate) depart_quadrillage: Option<[f64; 2]>,
     /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
     pub(crate) composant: modele::Composant,
     /// Arbre à placer (essence, hauteur, houppier, décalage).
@@ -72,6 +74,7 @@ impl Default for EtatBim {
             niveau_haut_poteau: None,
             decalage_haut_poteau: 0.0,
             depart_structure: None,
+            depart_quadrillage: None,
             composant: modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
             arbre: modele::elements::arbre::Arbre { id: String::new(), nom: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, essence: Default::default(), hauteur: 10_000.0, diametre: 7_000.0, asset: None },
             nom_piece: "Pièce".into(),

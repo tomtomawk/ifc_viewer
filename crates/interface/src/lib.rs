@@ -958,6 +958,8 @@ impl eframe::App for Application {
                 // Déplacer, Copier, Tourner, Aligner : une étape en arrière
             } else if self.bim.attache_toiture_active && self.reculer_attache_toiture() {
                 // Attacher au toit : le dernier mur choisi est retiré
+            } else if self.bim.depart_quadrillage.take().is_some() {
+                // Quadrillage : le départ est repris
             } else if self.bim.depart_structure.take().is_some() {
                 // Le premier clic d'une poutre est abandonné sans modifier le projet.
             } else if self.coupe_depart.is_some() {

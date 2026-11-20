@@ -5,3 +5,4 @@ pub(crate) mod garde_corps;
 pub(crate) mod escalier;
 pub(crate) mod poutres;
 pub(crate) mod liens;
+pub(crate) mod quadrillage;

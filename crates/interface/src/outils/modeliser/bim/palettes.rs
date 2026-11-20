@@ -137,19 +137,13 @@ impl Application {
         self.executer_palette(commande);
     }
 
-    /// Quadrillage : repère et tracé (champs communs), puis les deux points et la création.
+    /// Quadrillage : repère de la prochaine ligne ; la ligne se trace en deux clics dans
+    /// une vue en plan (`outils/modeliser/quadrillage.rs`).
     pub(crate) fn parametres_quadrillage(&mut self, ui: &mut egui::Ui) {
         self.ruban_edition.section_parametres(ui, Outil::Quadrillage, self.natif.as_ref().map(|(p, _)| p));
-        points_ui(ui, &mut self.bim.points);
-        let mut commande = None;
-        if ui.button("Créer le quadrillage droit").clicked() {
-            commande = Some(Commande::Quadrillage {
-                nom: self.ruban_edition.texte_option(Outil::Quadrillage, 0),
-                debut: self.bim.points[0],
-                fin: self.bim.points[1],
-            });
+        if !self.vue_en_plan() {
+            ui.label("Ouvrez une vue en plan pour tracer le quadrillage.");
         }
-        self.executer_palette(commande);
     }
 
     fn executer_palette(&mut self, commande: Option<Commande>) {
