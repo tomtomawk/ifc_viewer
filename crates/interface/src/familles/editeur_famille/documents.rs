@@ -22,9 +22,9 @@ impl Application {
         let (actuelle, modifiable) = if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
             if ed.selection != SelectionFamille::Aucune || !ed.multiple.is_empty() { return; }
             use modele::famille::modelee::CategorieFamille as C;
-            (match ed.famille.categorie { C::Composant => 0, C::Porte => 1, C::Fenetre => 2, C::Profil => 3, C::Cartouche => 4, C::EtiquettePiece => 5 }, ed.type_id.is_none())
+            (match ed.famille.categorie { C::Composant => 0, C::Porte => 1, C::Fenetre => 2, C::Profil => 3, C::Cartouche => 4, C::EtiquettePiece => 5, C::Vegetation => 6 }, ed.type_id.is_none())
         } else { return; };
-        let categories = ["Composant", "Porte", "Fenêtre", "Profil", "Cartouche", "Étiquette de pièce"];
+        let categories = ["Composant", "Porte", "Fenêtre", "Profil", "Cartouche", "Étiquette de pièce", "Végétation"];
         let mut choix = actuelle;
         ui.label("Catégorie de famille");
         ui.add_enabled_ui(modifiable, |ui| {
@@ -35,7 +35,7 @@ impl Application {
         if choix == actuelle { return; }
         use modele::famille::modelee::CategorieFamille as C;
         if let Some(ed) = self.famille.as_mut().filter(|_| self.famille_active) {
-            ed.famille.categorie = [C::Composant, C::Porte, C::Fenetre, C::Profil, C::Cartouche, C::EtiquettePiece][choix];
+            ed.famille.categorie = [C::Composant, C::Porte, C::Fenetre, C::Profil, C::Cartouche, C::EtiquettePiece, C::Vegetation][choix];
             ed.famille.genre = match ed.famille.categorie { C::Porte => GenreOuverture::Porte, C::Fenetre => GenreOuverture::Fenetre, _ => GenreOuverture::Libre };
             if matches!(ed.famille.categorie, C::Profil | C::Cartouche | C::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
             ed.message = Some("Catégorie modifiée : le contenu de la famille est conservé.".into());
@@ -708,7 +708,7 @@ impl Application {
         let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
         let existe = |nom: &str| match f.famille.categorie {
             C::Porte | C::Fenetre => p.types_ouvertures.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
-            C::Composant => p.types_composants.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::Composant | C::Vegetation => p.types_composants.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Profil => p.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Cartouche => nom.eq_ignore_ascii_case(modele::documentation::NOM_CARTOUCHE_STANDARD) || p.familles_cartouches.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::EtiquettePiece => nom.eq_ignore_ascii_case("Étiquette standard") || p.familles_etiquettes.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
@@ -731,7 +731,7 @@ impl Application {
                 let famille = modele::documentation::FamilleEtiquette { id: String::new(), nom: f.nom.clone(), document_famille: Box::new(f.clone()) };
                 self.enregistrer_famille_etiquette(famille, None, "")?
             }
-            C::Composant => {
+            C::Composant | C::Vegetation => {
                 let type_composant = modele::TypeComposant { id: String::new(), nom: f.nom.clone(), largeur: f.largeur, profondeur: f.profondeur, hauteur: f.hauteur, modele: f.famille.clone() };
                 self.executer_bim(commandes::Commande::TypeComposant { type_composant })?.into_iter().next().ok_or("Composant non créé.")?
             }
@@ -866,6 +866,6 @@ impl Application {
 /// Titre d'onglet d'un éditeur : catégorie, type, « * » si non chargé.
 pub(super) fn titre_editeur(ed: &EditeurFamille) -> String {
     use modele::famille::modelee::CategorieFamille as C;
-    let genre = match ed.famille.categorie { C::Porte => "Porte", C::Fenetre => "Fenêtre", C::Composant => "Composant", C::Profil => "Profil", C::Cartouche => "Cartouche", C::EtiquettePiece => "Étiquette de pièce" };
+    let genre = match ed.famille.categorie { C::Porte => "Porte", C::Fenetre => "Fenêtre", C::Composant => "Composant", C::Profil => "Profil", C::Cartouche => "Cartouche", C::EtiquettePiece => "Étiquette de pièce", C::Vegetation => "Végétation" };
     format!("{genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" })
 }

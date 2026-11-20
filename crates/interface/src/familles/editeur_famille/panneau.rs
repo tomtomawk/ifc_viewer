@@ -192,6 +192,20 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
                             }
                         });
                     }
+                    GenreParametre::Texte => {
+                        // Rendu : référence de la géométrie de rendu (générateurs intégrés)
+                        if p.nom == modele::famille::modelee::PARAMETRE_RENDU {
+                            let texte = if p.formule.trim().is_empty() { "(géométrie de la famille)".to_string() } else { p.formule.clone() };
+                            egui::ComboBox::from_id_salt(("valeur_rendu", k)).width(80.0).selected_text(texte).show_ui(ui, |ui| {
+                                ui.selectable_value(&mut p.formule, String::new(), "(géométrie de la famille)");
+                                for (id, nom) in modele::elements::vegetation::REFERENCES {
+                                    ui.selectable_value(&mut p.formule, id.to_string(), nom);
+                                }
+                            }).response.on_hover_text("Géométrie montrée dans le style Réaliste à la place de celle de la famille, ajustée à son encombrement");
+                        } else {
+                            ui.add_sized([80.0, 20.0], egui::TextEdit::singleline(&mut p.formule)).on_hover_text("Texte (non calculé)");
+                        }
+                    }
                     GenreParametre::Longueur => {
                         let aide = if p.portee == Portee::Occurrence { "Valeur par défaut ; chaque ouverture placée peut la changer dans Propriétés" } else { "Formule : nombres (mm), paramètres, + - * / ( )" };
                         ui.add_sized([80.0, 20.0], egui::TextEdit::singleline(&mut p.formule)).on_hover_text(aide);
@@ -203,18 +217,21 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
                             p.formule = match g {
                                 GenreParametre::Longueur => "100".into(),
                                 GenreParametre::OuiNon => "1".into(),
-                                GenreParametre::Materiau => String::new(),
+                                GenreParametre::Materiau | GenreParametre::Texte => String::new(),
                             };
+                            // texte : paramètre de type seulement
+                            if g == GenreParametre::Texte { p.portee = Portee::Type; }
                         }
                     }
-                }).response.on_hover_text("Longueur (mm), oui/non (visibilité des volumes) ou matériau (couleur des volumes)");
+                }).response.on_hover_text("Longueur (mm), oui/non (visibilité des volumes), matériau (couleur des volumes) ou texte (« Rendu » : référence de la géométrie de rendu)");
                 egui::ComboBox::from_id_salt(("portee", k)).width(74.0).selected_text(p.portee.nom()).show_ui(ui, |ui| {
-                    for x in Portee::TOUTES.into_iter().filter(|x| *x != Portee::Partage || p.genre != GenreParametre::Materiau) {
+                    for x in Portee::TOUTES.into_iter().filter(|x| (*x != Portee::Partage || p.genre != GenreParametre::Materiau) && (p.genre != GenreParametre::Texte || *x == Portee::Type)) {
                         ui.selectable_value(&mut p.portee, x, x.nom());
                     }
                 }).response.on_hover_text("Type : valeur de la famille · Occurrence : propre à chaque ouverture · Partagé : valeur du projet (longueurs et oui/non)");
                 match (p.genre, r.valeurs.get(&p.nom), r.materiaux.get(&p.nom)) {
                     (GenreParametre::Materiau, _, Some(m)) => ui.label(RichText::new(if m.is_empty() { "—" } else { m.as_str() }).weak()),
+                    (GenreParametre::Texte, _, _) => ui.label(RichText::new("texte").weak()),
                     (GenreParametre::OuiNon, Some(v), _) => ui.label(RichText::new(if v.abs() > 1e-9 { "oui" } else { "non" }).weak()),
                     (_, Some(v), _) => ui.label(RichText::new(u.afficher(*v)).weak()),
                     _ => ui.colored_label(Color32::from_rgb(200, 40, 40), "?"),

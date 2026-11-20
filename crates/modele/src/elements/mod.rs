@@ -2,6 +2,7 @@
 pub mod cadrage;
 pub mod arbre;
 pub mod composant;
+pub mod vegetation;
 pub mod piece;
 pub mod escalier;
 pub mod escalier_balance;

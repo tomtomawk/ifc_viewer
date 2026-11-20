@@ -270,6 +270,8 @@ impl Application {
                                         change = true;
                                     }
                                 }
+                                // texte : paramètre de type, jamais d'occurrence
+                                GenreParametre::Texte => {}
                                 GenreParametre::Longueur => {
                                     let mut v = r.valeurs.get(nom).copied().unwrap_or(0.0);
                                     if ui.add(egui::DragValue::new(&mut v).dimensions().speed(5.0)).changed() {

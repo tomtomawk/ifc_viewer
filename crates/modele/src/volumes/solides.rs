@@ -513,6 +513,7 @@ pub fn parametres_ouverture(p: &Projet, o: &Ouverture) -> BTreeMap<String, Strin
                 GenreParametre::Materiau => r.materiaux.get(&x.nom).cloned().unwrap_or_default(),
                 GenreParametre::OuiNon => r.valeurs.get(&x.nom).map_or(String::new(), |v| if v.abs() > 1e-9 { "oui".into() } else { "non".into() }),
                 GenreParametre::Longueur => r.valeurs.get(&x.nom).map_or(String::new(), |v| format!("{v:.0}")),
+                GenreParametre::Texte => x.formule.trim().to_string(),
             };
             (x.nom.clone(), v)
         })

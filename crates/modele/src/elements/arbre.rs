@@ -176,26 +176,35 @@ impl Arbre {
     /// branches vers le houppier et 150 à 260 plans de feuillage orientés au hasard dans
     /// son volume (ellipsoïde, cône ou colonne selon l'essence).
     pub fn remplacement(&self, z0: f64) -> Remplacement {
-        let mut alea = Alea::de(&format!("{}-feuillage", self.id));
         let pied = DVec3::new(self.position[0], self.position[1], z0 + self.decalage);
-        let (h, d) = (self.hauteur.max(500.0), self.diametre.max(300.0));
+        remplacement_vegetal(self.essence, pied, self.hauteur, self.diametre, &self.id)
+    }
+}
+
+/// Végétal de remplacement du style Réaliste (mm) pour une essence, pied en `pied`,
+/// hauteur `h`, diamètre du houppier `d` : tronc, branches et plans de feuillage tirés
+/// d'une suite pseudo-aléatoire déterminée par `graine` (même végétal à chaque calcul).
+pub fn remplacement_vegetal(essence: Essence, pied: DVec3, h: f64, d: f64, graine: &str) -> Remplacement {
+    {
+        let mut alea = Alea::de(&format!("{graine}-feuillage"));
+        let (h, d) = (h.max(500.0), d.max(300.0));
         let rt = (d * 0.035).clamp(60.0, 400.0);
         let mut bois = Vec::new();
         let mut feuillage = Vec::new();
         // volume du houppier : centre, demi-axes, forme
-        let (fut, centre, rh, rv) = match self.essence {
+        let (fut, centre, rh, rv) = match essence {
             Essence::Feuillu => (h * 0.35, h * 0.35 + (h - h * 0.35) * 0.5, d * 0.5, (h - h * 0.35) * 0.5),
             Essence::Conifere => (h * 0.12, h * 0.12 + (h - h * 0.12) * 0.5, d * 0.5, (h - h * 0.12) * 0.5),
             Essence::Fastigie => (h * 0.1, h * 0.1 + (h - h * 0.1) * 0.5, d * 0.5, (h - h * 0.1) * 0.5),
         };
-        let haut_tronc = match self.essence { Essence::Conifere => h * 0.92, _ => fut + rv * 0.9 };
+        let haut_tronc = match essence { Essence::Conifere => h * 0.92, _ => fut + rv * 0.9 };
         bois.extend(tronc(pied, haut_tronc, rt, rt * 0.35, 10));
         // branches : du tronc vers la périphérie du houppier
-        let nb_branches = match self.essence { Essence::Feuillu => 7, Essence::Conifere => 10, Essence::Fastigie => 5 };
+        let nb_branches = match essence { Essence::Feuillu => 7, Essence::Conifere => 10, Essence::Fastigie => 5 };
         for k in 0..nb_branches {
             let z = fut + (haut_tronc - fut) * (k as f64 + 0.5) / nb_branches as f64 * 0.8;
             let a = k as f64 * 2.39996 + alea.entre(-0.3, 0.3);
-            let portee = rh * match self.essence { Essence::Conifere => 0.9 * (1.0 - (z - fut) / (h - fut)), _ => 0.65 };
+            let portee = rh * match essence { Essence::Conifere => 0.9 * (1.0 - (z - fut) / (h - fut)), _ => 0.65 };
             let depart = pied + DVec3::Z * z;
             let fin = depart + DVec3::new(a.cos() * portee, a.sin() * portee, portee * 0.5);
             let dir = fin - depart;
@@ -213,14 +222,14 @@ impl Arbre {
             }
         }
         // plans de feuillage
-        let (n_cartes, cote) = match self.essence {
+        let (n_cartes, cote) = match essence {
             Essence::Feuillu => ((d * d / 220_000.0) as usize, d * 0.2),
             Essence::Conifere => ((d * h / 260_000.0) as usize, d * 0.22),
             Essence::Fastigie => ((d * h / 160_000.0) as usize, d * 0.38),
         };
         for _ in 0..n_cartes.clamp(120, 260) {
             let q = dans_boule(&mut alea);
-            let c = match self.essence {
+            let c = match essence {
                 Essence::Conifere => {
                     // cône : rayon décroissant avec la hauteur
                     let zr = alea.entre(-1.0, 0.95);
@@ -242,6 +251,9 @@ impl Arbre {
         }
         Remplacement { bois, feuillage }
     }
+}
+
+impl Arbre {
 
     /// Géométrie (mm, repère du projet) : tronc et houppier, pied à l'altitude `z0`.
     pub fn solides(&self, z0: f64) -> (Vec<[DVec3; 3]>, Vec<[DVec3; 3]>) {

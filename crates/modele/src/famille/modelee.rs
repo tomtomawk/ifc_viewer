@@ -89,8 +89,9 @@ pub struct Parametre {
     pub genre: GenreParametre,
 }
 
-/// Nature d'un paramètre : longueur (mm, formule), oui/non (formule : 0 = non) ou
-/// matériau (nom d'un matériau du projet).
+/// Nature d'un paramètre : longueur (mm, formule), oui/non (formule : 0 = non),
+/// matériau (nom d'un matériau du projet) ou texte (la formule est le texte, non calculé ;
+/// `Rendu` : référence de la géométrie de rendu, voir `reference_rendu`).
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GenreParametre {
@@ -98,10 +99,11 @@ pub enum GenreParametre {
     Longueur,
     OuiNon,
     Materiau,
+    Texte,
 }
 
 impl GenreParametre {
-    pub const TOUS: [GenreParametre; 3] = [Self::Longueur, Self::OuiNon, Self::Materiau];
+    pub const TOUS: [GenreParametre; 4] = [Self::Longueur, Self::OuiNon, Self::Materiau, Self::Texte];
     pub fn est_longueur(&self) -> bool {
         *self == Self::Longueur
     }
@@ -110,6 +112,7 @@ impl GenreParametre {
             Self::Longueur => "Longueur",
             Self::OuiNon => "Oui/non",
             Self::Materiau => "Matériau",
+            Self::Texte => "Texte",
         }
     }
 }
@@ -366,7 +369,11 @@ fn menuiserie() -> Materiau {
 /// Catégorie d'utilisation d'un document de famille unique.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum CategorieFamille { Composant, Porte, Fenetre, Profil, Cartouche, EtiquettePiece }
+pub enum CategorieFamille { Composant, Porte, Fenetre, Profil, Cartouche, EtiquettePiece, Vegetation }
+
+/// Nom du paramètre texte qui porte la référence de la géométrie de rendu (style
+/// Réaliste) d'une famille ; vide ou absent : la géométrie de la famille est rendue.
+pub const PARAMETRE_RENDU: &str = "Rendu";
 
 /// Famille commune aux catégories modélisées et documentaires.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -612,7 +619,7 @@ impl FamilleModelee {
                 v.insert(p.nom.clone(), *x);
             }
         }
-        let mut restants: Vec<&Parametre> = self.parametres.iter().filter(|p| p.genre != GenreParametre::Materiau && !v.contains_key(&p.nom)).collect();
+        let mut restants: Vec<&Parametre> = self.parametres.iter().filter(|p| !matches!(p.genre, GenreParametre::Materiau | GenreParametre::Texte) && !v.contains_key(&p.nom)).collect();
         while !restants.is_empty() {
             let avant = restants.len();
             restants.retain(|p| match evaluer(&p.formule, &v) {
@@ -645,6 +652,12 @@ impl FamilleModelee {
             r.materiaux.insert(p.nom.clone(), surcharge.cloned().unwrap_or_else(|| p.formule.trim().to_string()));
         }
         r
+    }
+
+    /// Référence de la géométrie de rendu (paramètre texte `Rendu`), si elle est donnée.
+    pub fn reference_rendu(&self) -> Option<&str> {
+        self.parametres.iter().find(|p| p.nom == PARAMETRE_RENDU && p.genre == GenreParametre::Texte)
+            .map(|p| p.formule.trim()).filter(|t| !t.is_empty())
     }
 
     /// Visibilité d'un volume : son paramètre oui/non (absent ou non calculé : visible).
@@ -820,6 +833,12 @@ impl FamilleModelee {
             }
             if p.genre == GenreParametre::Materiau && p.portee == Portee::Partage {
                 return Err(format!("{} : un paramètre matériau ne peut pas être partagé (type ou occurrence).", p.nom));
+            }
+            if p.genre == GenreParametre::Texte && p.portee != Portee::Type {
+                return Err(format!("{} : un paramètre texte est un paramètre de type.", p.nom));
+            }
+            if p.nom == PARAMETRE_RENDU && p.genre != GenreParametre::Texte {
+                return Err(format!("{PARAMETRE_RENDU} : la référence de rendu est un paramètre texte."));
             }
         }
         for v in &self.volumes {
