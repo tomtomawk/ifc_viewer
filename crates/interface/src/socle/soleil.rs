@@ -265,7 +265,7 @@ impl Application {
             let mut texte = ui.data(|d| d.get_temp::<String>(id_texte)).unwrap_or_default();
             let r = ui.add(egui::TextEdit::singleline(&mut texte).desired_width(180.0).hint_text("48.1173, -1.6778"));
             if r.lost_focus() || r.changed() && texte.contains(',') && texte.split(',').count() == 2 && texte.split(',').all(|x| x.trim().parse::<f64>().is_ok()) {
-                let v: Vec<f64> = texte.split(|c| c == ',' || c == ';').filter_map(|x| x.trim().parse().ok()).collect();
+                let v: Vec<f64> = texte.split([',', ';']).filter_map(|x| x.trim().parse().ok()).collect();
                 if let [lat, lon] = v[..] && lat.abs() <= 90.0 && lon.abs() <= 180.0 {
                     l.latitude = lat;
                     l.longitude = lon;

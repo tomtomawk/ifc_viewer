@@ -93,12 +93,11 @@ impl Application {
         let (zone, reste) = argument.trim().split_once(' ').unwrap_or((argument, ""));
         let mut reste = reste.trim();
         let mut taille = None;
-        if let Some((t, apres)) = reste.split_once(' ') {
-            if let Some((Ok(l), Ok(h))) = t.split_once('x').map(|(l, h)| (l.parse::<u32>(), h.parse::<u32>())) {
+        if let Some((t, apres)) = reste.split_once(' ')
+            && let Some((Ok(l), Ok(h))) = t.split_once('x').map(|(l, h)| (l.parse::<u32>(), h.parse::<u32>())) {
                 taille = Some((l, h));
                 reste = apres.trim();
             }
-        }
         let chemin = reste.trim_matches('"').to_string();
         if chemin.is_empty() {
             let _ = reponse.send(pilote::erreur("usage : capture vue|fenetre [LxH] <chemin.png>"));
@@ -250,9 +249,8 @@ impl Application {
 
     pub(crate) fn commande(&mut self, ctx: &egui::Context, commande: &str, argument: &str) -> String {
         use pilote::{erreur, liste, objet, succes, texte};
-        if matches!(commande,"editer"|"annuler"|"retablir"|"mur"|"dalle"|"pente"|"type_mur"|"vue_plan"|"coupe_vue"|"enregistrer"|"modifier_trace"|"famille_ouvrir"|"famille_charger"|"famille_enregistrer"|"collaborer"|"collaboration_associer") {
-            if let Err(e)=self.pilote_disponible() {return erreur(&e);}
-        }
+        if matches!(commande,"editer"|"annuler"|"retablir"|"mur"|"dalle"|"pente"|"type_mur"|"vue_plan"|"coupe_vue"|"enregistrer"|"modifier_trace"|"famille_ouvrir"|"famille_charger"|"famille_enregistrer"|"collaborer"|"collaboration_associer")
+            && let Err(e)=self.pilote_disponible() {return erreur(&e);}
         if let Some(r) = self.commande_complete(ctx, commande, argument) {
             return match r { Ok(v) => { let mut v = v; if v.get("ok").is_none() { v["ok"] = true.into(); } v.to_string() }, Err(e) => erreur(&e) };
         }
@@ -431,7 +429,7 @@ impl Application {
                     echanges::enregistrement::effacer_recuperation(ancien);
                     let _=self.historique.enregistrer(p);
                     self.finaliser_enregistrement_sous(chemin);
-                } else {self.enregistrer_projet(&ctx);}
+                } else {self.enregistrer_projet(ctx);}
                 if let Some(e) = &self.error { erreur(e) } else { self.etat() }
             }
             "taille" => {

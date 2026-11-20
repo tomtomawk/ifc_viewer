@@ -163,10 +163,10 @@ fn reservation_generation_et_compensation_refusent_ancien_detenteur() {
     let mut a = d.proteger().unwrap();
     let mut e = a.initialiser(&p).unwrap();
     let key = format!("murs/{}", p.murs[0].id);
-    a.reserver(&mut e, &[key.clone()], "a", false, false)
+    a.reserver(&mut e, std::slice::from_ref(&key), "a", false, false)
         .unwrap();
     let generation = e.baux[&key].generation;
-    a.reserver(&mut e, &[key.clone()], "b", true, false)
+    a.reserver(&mut e, std::slice::from_ref(&key), "b", true, false)
         .unwrap();
     assert!(e.baux[&key].generation > generation);
     let mut change = p.clone();
@@ -719,11 +719,10 @@ fn reponse_perdue_retrouve_uuid_et_contenu_prepare_sans_republication() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     loop {
-        if let Ok(mut a) = depot.proteger() {
-            if a.lire().unwrap().unwrap().acceptes.contains_key(&id) {
+        if let Ok(mut a) = depot.proteger()
+            && a.lire().unwrap().unwrap().acceptes.contains_key(&id) {
                 break;
             }
-        }
         assert!(std::time::Instant::now() < fin);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
@@ -763,7 +762,7 @@ fn session_ancien_detenteur_ne_reacquiert_pas_silencieusement() {
     {
         let mut a = d.proteger().unwrap();
         let mut e = a.lire().unwrap().unwrap();
-        a.reserver(&mut e, &[cle.clone()], "b", true, false)
+        a.reserver(&mut e, std::slice::from_ref(&cle), "b", true, false)
             .unwrap();
         assert!(e.baux[&cle].generation > generation);
     }

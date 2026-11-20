@@ -43,12 +43,10 @@ impl Application {
             let mut gerer = false;
             if ids.is_empty() {
                 let mut contexte = self.natif.as_ref().unwrap().0.clone();
-                if self.ruban_edition.contexte_creation(ui, &mut contexte) {
-                    if let Err(e) = self.appliquer_projet(contexte) { self.error = Some(e); }
-                }
-            } else if let Some(projet) = self.contexte_selection(ui, &ids, &mut gerer) {
-                if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
-            }
+                if self.ruban_edition.contexte_creation(ui, &mut contexte)
+                    && let Err(e) = self.appliquer_projet(contexte) { self.error = Some(e); }
+            } else if let Some(projet) = self.contexte_selection(ui, &ids, &mut gerer)
+                && let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             // « Gérer les phases… » : lien en fin de chacune des listes de contexte
             if gerer || std::mem::take(&mut self.ruban_edition.demande_gestion_contextes) {
                 self.ouvrir_gestion_contextes();
@@ -74,14 +72,11 @@ impl Application {
             if self.proprietes_segment_edition(ui) { return; }
             // Un seul sélecteur pendant les créations successives : celui de l'outil.
             let selecteur_creation = matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.ruban_edition.selecteur_creation_actif();
-            if !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif()) {
-                if let Some(projet)=self.selecteur_type_selection(ui) {
-                    if let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
-                }
-            }
-            if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids)) {
-                if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
-            }
+            if !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif())
+                && let Some(projet)=self.selecteur_type_selection(ui)
+                    && let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
+            if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids))
+                && let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             if let Some((_, memes)) = &self.report_selection {
                 ui.label(RichText::new(format!("{} éléments de même sorte sélectionnés : une modification de l'élément affiché s'applique à tous.", memes.len())).small().weak());
             }
@@ -125,8 +120,6 @@ impl Application {
             }
         }
         let element_selectionne = self.selected.is_some() || !self.selection_bim().is_empty();
-        if self.natif.is_some() {
-        }
         if self.natif.is_some() && !element_selectionne {
             self.proprietes_vue_native(ui);
             self.proprietes_contexte_vue(ui);
@@ -152,12 +145,11 @@ impl Application {
             }
             return;
         };
-        if self.natif.is_some() {
-            if let Some(projet) = self.proprietes_natif(ui, id) {
+        if self.natif.is_some()
+            && let Some(projet) = self.proprietes_natif(ui, id) {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
                 return;
             }
-        }
         // élément natif : tout est dans le panneau ci-dessus, pas d'attributs génériques
         if self.natif.is_some() && (self.cle_native(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.dalles.iter().any(|d| modele::identifiants::id_natif("remblai", &d.id) == id))) {
             return;
@@ -374,9 +366,9 @@ impl Application {
             self.hidden_objects.remove(o);
             self.masques_utilisateur.remove(o);
         }
-        if let (Some(cle), Some(vue_id)) = (self.cle_native(racine), self.vue_native_id()) {
-            if let Some((projet, _)) = &self.natif {
-                if projet.vues.iter().find(|v| v.id == vue_id).is_some_and(|v| v.elements_masques.contains(&cle)) {
+        if let (Some(cle), Some(vue_id)) = (self.cle_native(racine), self.vue_native_id())
+            && let Some((projet, _)) = &self.natif
+                && projet.vues.iter().find(|v| v.id == vue_id).is_some_and(|v| v.elements_masques.contains(&cle)) {
                     let mut copie = projet.clone();
                     if let Some(v) = copie.vues.iter_mut().find(|v| v.id == vue_id) {
                         v.elements_masques.retain(|x| x != &cle);
@@ -386,8 +378,6 @@ impl Application {
                     }
                     self.coupe_dirty = true;
                 }
-            }
-        }
         self.visibility_dirty = true;
         self.status = "Élément réaffiché — cliquer un autre élément magenta, Échap pour sortir.".into();
         true

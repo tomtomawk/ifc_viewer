@@ -9,76 +9,6 @@ pub(crate) struct EditeurGabaritVue {
     erreur: Option<String>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dupliquer_attribue_la_copie_a_la_vue_courante() {
-        let mut projet = modele::Projet::nouveau("Gabarits");
-        projet.niveaux.push(modele::Niveau {
-            id: "rdc".into(),
-            nom: "RDC".into(),
-            altitude: 0.0,
-            origine: None,
-        });
-        let vue = projet.ajouter_vue_plan("rdc", 1200.0).unwrap();
-        let source = GabaritVue {
-            id: "plan".into(),
-            nom: "Plan détaillé".into(),
-            echelle: 50.0,
-            poche: "plein".into(),
-            phase: Some("Projet".into()),
-            variante: None,
-        };
-        projet.enregistrer_gabarit_vue(source.clone()).unwrap();
-        projet.affecter_gabarit_vue("3d", Some(&source.id)).unwrap();
-        projet.affecter_gabarit_vue(&vue, Some(&source.id)).unwrap();
-        projet.enregistrer_gabarit_vue(GabaritVue {
-            id: "copie".into(),
-            nom: "Plan détaillé (COPIE)".into(),
-            ..source.clone()
-        }).unwrap();
-
-        let ctx = egui::Context::default();
-        let mut app = Application::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
-        let chemin = std::env::temp_dir().join(format!("gabarit-{}.modele.json", noyau::uuid::uuid()));
-        app.natif = Some((projet, chemin.clone()));
-        app.ouvrir_gabarit_par_id(&vue, &source.id, true);
-        let brouillon = app.editeur_gabarit_vue.as_ref().unwrap();
-        assert!(brouillon.gabarit.id.is_empty());
-        assert_eq!(brouillon.gabarit.nom, "Plan détaillé (copie 2)");
-
-        let mut image = |events| { let mut s = ctx.run_ui(egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
-            events,
-            ..Default::default()
-        }, |ui| app.fenetre_gabarit_vue(ui.ctx())); s.textures_delta.clear(); s };
-        image(vec![]);
-        let sortie = image(vec![]);
-        let bouton = sortie.shapes.iter().find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.text() == "Créer et attribuer" => Some(t.pos + t.galley.size() / 2.0),
-            _ => None,
-        }).expect("Bouton de confirmation absent");
-        image(vec![egui::Event::PointerMoved(bouton)]);
-        for pressed in [true, false] {
-            image(vec![egui::Event::PointerButton {
-                pos: bouton, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
-            }]);
-        }
-        echanges::enregistrement::effacer_recuperation(&chemin);
-
-        let projet = &app.natif.as_ref().unwrap().0;
-        assert_eq!(projet.gabarit_vue("3d"), Some(&source));
-        let copie = projet.gabarit_vue(&vue).unwrap();
-        assert_ne!(copie.id, source.id);
-        assert_eq!(copie.nom, "Plan détaillé (copie 2)");
-        assert_eq!((copie.echelle, &copie.poche, &copie.phase, &copie.variante),
-            (source.echelle, &source.poche, &source.phase, &source.variante));
-        assert_eq!(projet.gabarits_vues.len(), 3);
-    }
-}
-
 impl Application {
     pub(crate) fn vue_gabaritee(&self) -> bool {
         self.id_vue_contexte().and_then(|id| self.natif.as_ref()?.0.gabarit_vue(&id)).is_some()
@@ -190,5 +120,75 @@ impl Application {
             }
         }
         if ouvert && !annuler { self.editeur_gabarit_vue = Some(editeur); }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dupliquer_attribue_la_copie_a_la_vue_courante() {
+        let mut projet = modele::Projet::nouveau("Gabarits");
+        projet.niveaux.push(modele::Niveau {
+            id: "rdc".into(),
+            nom: "RDC".into(),
+            altitude: 0.0,
+            origine: None,
+        });
+        let vue = projet.ajouter_vue_plan("rdc", 1200.0).unwrap();
+        let source = GabaritVue {
+            id: "plan".into(),
+            nom: "Plan détaillé".into(),
+            echelle: 50.0,
+            poche: "plein".into(),
+            phase: Some("Projet".into()),
+            variante: None,
+        };
+        projet.enregistrer_gabarit_vue(source.clone()).unwrap();
+        projet.affecter_gabarit_vue("3d", Some(&source.id)).unwrap();
+        projet.affecter_gabarit_vue(&vue, Some(&source.id)).unwrap();
+        projet.enregistrer_gabarit_vue(GabaritVue {
+            id: "copie".into(),
+            nom: "Plan détaillé (COPIE)".into(),
+            ..source.clone()
+        }).unwrap();
+
+        let ctx = egui::Context::default();
+        let mut app = Application::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
+        let chemin = std::env::temp_dir().join(format!("gabarit-{}.modele.json", noyau::uuid::uuid()));
+        app.natif = Some((projet, chemin.clone()));
+        app.ouvrir_gabarit_par_id(&vue, &source.id, true);
+        let brouillon = app.editeur_gabarit_vue.as_ref().unwrap();
+        assert!(brouillon.gabarit.id.is_empty());
+        assert_eq!(brouillon.gabarit.nom, "Plan détaillé (copie 2)");
+
+        let mut image = |events| { let mut s = ctx.run_ui(egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
+            events,
+            ..Default::default()
+        }, |ui| app.fenetre_gabarit_vue(ui.ctx())); s.textures_delta.clear(); s };
+        image(vec![]);
+        let sortie = image(vec![]);
+        let bouton = sortie.shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.text() == "Créer et attribuer" => Some(t.pos + t.galley.size() / 2.0),
+            _ => None,
+        }).expect("Bouton de confirmation absent");
+        image(vec![egui::Event::PointerMoved(bouton)]);
+        for pressed in [true, false] {
+            image(vec![egui::Event::PointerButton {
+                pos: bouton, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
+            }]);
+        }
+        echanges::enregistrement::effacer_recuperation(&chemin);
+
+        let projet = &app.natif.as_ref().unwrap().0;
+        assert_eq!(projet.gabarit_vue("3d"), Some(&source));
+        let copie = projet.gabarit_vue(&vue).unwrap();
+        assert_ne!(copie.id, source.id);
+        assert_eq!(copie.nom, "Plan détaillé (copie 2)");
+        assert_eq!((copie.echelle, &copie.poche, &copie.phase, &copie.variante),
+            (source.echelle, &source.poche, &source.phase, &source.variante));
+        assert_eq!(projet.gabarits_vues.len(), 3);
     }
 }

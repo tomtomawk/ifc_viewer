@@ -336,15 +336,14 @@ impl Application {
             if let Some(marque) = marques.get_mut(o as usize).filter(|m| **m == 0) { *marque = 128; }
         }
         // éléments démolis : teinte de démolition (octet 48)
-        if let Some((p, _)) = &self.natif {
-            if !p.demolitions.is_empty() {
+        if let Some((p, _)) = &self.natif
+            && !p.demolitions.is_empty() {
                 for (i, o) in scene.objects.iter().enumerate() {
                     if marques[i] == 0 && self.cle_native(self.cible_clic(o.id)).is_some_and(|id| p.demolitions.contains_key(&id)) {
                         marques[i] = 48;
                     }
                 }
             }
-        }
         marques
     }
 
@@ -386,26 +385,22 @@ impl Application {
             ancienne.extend(ids); ancienne.sort_unstable(); ancienne.dedup(); ids = ancienne;
         }
         let mut vues = if fenetre.ajouter { self.bim.selection.clone() } else { Vec::new() };
-        if self.vue_en_plan() {
-            if let Some((p, _)) = &self.natif {
+        if self.vue_en_plan()
+            && let Some((p, _)) = &self.natif {
                 let z = self.altitude_vue_native();
                 let masques = self.vue_native_id().and_then(|id| p.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
                 for v in &p.vues {
                     if masques.contains(&v.id) { continue; }
-                    if let modele::GenreVue::Coupe { debut, fin, .. } = &v.genre {
-                        if let (Some(a), Some(b)) = (self.ecran_plan(vue, *debut, z), self.ecran_plan(vue, *fin, z)) {
-                            if moteur3d::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(v.id.clone()); }
-                        }
-                    }
+                    if let modele::GenreVue::Coupe { debut, fin, .. } = &v.genre
+                        && let (Some(a), Some(b)) = (self.ecran_plan(vue, *debut, z), self.ecran_plan(vue, *fin, z))
+                            && moteur3d::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(v.id.clone()); }
                 }
                 for g in &p.quadrillages {
                     if masques.contains(&g.id) { continue; }
-                    if let (Some(a), Some(b)) = (self.ecran_plan(vue, g.debut, z), self.ecran_plan(vue, g.fin, z)) {
-                        if moteur3d::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(g.id.clone()); }
-                    }
+                    if let (Some(a), Some(b)) = (self.ecran_plan(vue, g.debut, z), self.ecran_plan(vue, g.fin, z))
+                        && moteur3d::selection_rectangle::segment(rectangle, a, b, croisement) { vues.push(g.id.clone()); }
                 }
             }
-        }
         if let Some((p, _)) = &self.natif {
             vues.retain(|id| p.vues.iter().any(|v| v.id == *id) || p.quadrillages.iter().any(|g| g.id == *id) || p.annotations.iter().any(|a| a.id == *id) || p.pieces.iter().any(|a| a.id == *id));
         }

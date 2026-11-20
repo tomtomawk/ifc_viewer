@@ -135,8 +135,8 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
         let depart = ui.input(|i| i.pointer.press_origin()).is_some_and(sur_anneau);
         ui.data_mut(|d| d.insert_temp(brut_id, depart.then(|| angle(camera))));
     }
-    if resp.dragged_by(PointerButton::Primary) {
-        if let (Some(position), Some(brut)) = (pointer, ui.data(|d| d.get_temp::<Option<f32>>(brut_id)).flatten()) {
+    if resp.dragged_by(PointerButton::Primary)
+        && let (Some(position), Some(brut)) = (pointer, ui.data(|d| d.get_temp::<Option<f32>>(brut_id)).flatten()) {
             let precedent = position - ui.input(|i| i.pointer.delta());
             let a = position - centre;
             let b = precedent - centre;
@@ -147,7 +147,6 @@ pub fn afficher(ui: &mut egui::Ui, vue: egui::Rect, camera: &mut Camera, origine
                 orienter(camera, if libre { brut } else { aimanter(brut) });
             }
         }
-    }
     let rotation = camera.view();
     let direction = |v: Vec3, rayon: f32| {
         let q = rotation.transform_vector3(v);

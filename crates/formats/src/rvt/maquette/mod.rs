@@ -759,11 +759,10 @@ pub fn decodage(path: &Path) -> Result<Decodage, String> {
     // flux globaux comptés lus s'ils se lisent en entier
     let mut globaux_lus = Vec::new();
     for f in FLUX_GLOBAUX {
-        if let Some(raw) = cfb.read(&f[1..])? {
-            if flux_global(&sch, f, &raw).is_ok() {
+        if let Some(raw) = cfb.read(&f[1..])?
+            && flux_global(&sch, f, &raw).is_ok() {
                 globaux_lus.push(*f);
             }
-        }
     }
     let lu = |p: &str| LUS.contains(&p) || globaux_lus.contains(&p) || p.starts_with("/Partitions/");
     let lus: u64 = entrees.iter().filter(|e| !e.1 && lu(&e.0)).map(|e| e.2).sum();

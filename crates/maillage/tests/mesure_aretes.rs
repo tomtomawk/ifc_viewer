@@ -9,7 +9,7 @@ fn empreinte(chemin: &str) {
     let mut tous: Vec<(u64, Vec<[i64; 3]>)> = s.objects.iter().map(|o| {
         let r = o.aretes;
         let mut v: Vec<[i64; 3]> = s.vertices[r.start as usize..(r.start + r.count) as usize].chunks(2)
-            .map(|c| { let mut a = [c[0].pos, c[1].pos]; a.sort_by(|x, y| x.partial_cmp(y).unwrap()); a }).flatten()
+            .flat_map(|c| { let mut a = [c[0].pos, c[1].pos]; a.sort_by(|x, y| x.partial_cmp(y).unwrap()); a })
             .map(|p| p.map(|x| (x as f64 * 1e4).round() as i64)).collect();
         v.sort();
         (o.id, v)

@@ -197,7 +197,7 @@ fn cliquer(
             }
             _ => None,
         })
-        .last()
+        .next_back()
         .unwrap_or_else(|| panic!("commande absente : {texte}"));
 
     for pressed in [true, false] {
@@ -287,7 +287,7 @@ fn selecteur_surfaces_et_reglages_independants() {
                 egui::Shape::Text(t) if t.galley.text() == "Dalle · Dalle BA 200" => Some(t.pos),
                 _ => None,
             })
-            .last()
+            .next_back()
             .expect("sélecteur Dalle dans Propriétés");
         assert!(
             encart.x < 284.0 && encart.y > HAUTEUR_GROUPE,

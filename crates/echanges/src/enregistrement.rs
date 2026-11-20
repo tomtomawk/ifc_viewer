@@ -82,64 +82,6 @@ pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(Stri
     Ok(Bilan { chemin: sortie.to_path_buf(), rapport, murs: projet.murs.len(), importes: projet.importes.len() })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// L'échec d'une copie de récupération écrite en arrière-plan est rendu à
-    /// l'interface, une seule fois.
-    #[test]
-    fn echec_de_recuperation_rendu() {
-        let chemin = dossier().join("absent").join("projet.modele.json");
-        recuperer_plus_tard(&Projet::nouveau("essai"), &chemin).unwrap();
-        let debut = std::time::Instant::now();
-        let e = loop {
-            if let Some(e) = erreur_recuperation() { break e; }
-            assert!(debut.elapsed().as_secs() < 10, "aucune erreur rendue");
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        };
-        assert!(e.contains("Copie de récupération non écrite") && e.contains("projet.modele.recuperation.json"), "{e}");
-        assert_eq!(erreur_recuperation(), None);
-    }
-    static TEST: AtomicU64 = AtomicU64::new(0);
-    fn dossier() -> PathBuf {
-        let p = std::env::temp_dir().join(format!("ifc-v0-save-{}-{}",std::process::id(),TEST.fetch_add(1,Ordering::Relaxed)));
-        std::fs::create_dir(&p).unwrap(); p
-    }
-    #[test]
-    fn sauvegarde_rvt_source_modifiee_ou_destination_invalide() {
-        let p = dossier();
-        let entree = p.join("source.rvt");
-        std::fs::write(&entree,b"source initiale").unwrap();
-        let source = SourceRvt::ouvrir(&entree).unwrap();
-        assert!(enregistrer_rvt(&source,&entree,&|_|{}).is_err());
-        std::fs::write(&entree,b"source modifiee sur disque").unwrap();
-        let sortie = p.join("projet.modele.json");
-        std::fs::write(&sortie,b"ancienne sauvegarde").unwrap();
-        assert!(enregistrer_rvt(&source,&sortie,&|_|{}).unwrap_err().contains("changé"));
-        assert_eq!(std::fs::read(&sortie).unwrap(),b"ancienne sauvegarde");
-        std::fs::remove_file(sortie).unwrap(); std::fs::remove_file(entree).unwrap(); std::fs::remove_dir(p).unwrap();
-    }
-    #[test]
-    fn sauvegarde_rvt_v0_aller_retour_et_remplacement() {
-        let base = std::env::var_os("RVT_ESSAIS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Users\theba\Projets code\Decodage RVT"));
-        let entree = base.join(r"essais\2026\E04_mur.rvt");
-        if !entree.exists() { eprintln!("fichier d'essai absent : {}",entree.display()); return; }
-        let source = SourceRvt::ouvrir(&entree).unwrap();
-        let p = dossier();
-        let sortie = p.join("projet.modele.json");
-        std::fs::write(&sortie,b"ancienne sauvegarde").unwrap();
-        let bilan = enregistrer_rvt(&source,&sortie,&|_|{}).unwrap();
-        assert_eq!(bilan.murs,1);
-        let relu = Projet::lire_json(&std::fs::read_to_string(&sortie).unwrap()).unwrap();
-        assert_eq!(relu.version,modele::VERSION); assert_eq!(relu.murs.len(),1);
-        assert_eq!(relu.sources[0].format,"RVT");
-        let rapport = bilan.rapport.unwrap(); assert!(std::fs::read_to_string(&rapport).unwrap().contains("Conversion"));
-        source.verifier().unwrap();
-        std::fs::remove_file(sortie).unwrap(); std::fs::remove_file(rapport).unwrap(); std::fs::remove_dir(p).unwrap();
-    }
-}
-
 /// Valide et remplace un fichier natif sans écriture partielle.
 pub fn enregistrer_natif(p: &Projet, chemin: &Path) -> Result<(), String> {
     if !chemin.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) {return Err("Un projet natif doit être enregistré dans un fichier .json.".into());}
@@ -213,4 +155,62 @@ pub fn effacer_recuperation(chemin: &Path) {
     rang_suivant(chemin);
     let _verrou = recuperations().fichier.lock().unwrap_or_else(|e| e.into_inner());
     let _=std::fs::remove_file(chemin_recuperation(chemin));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// L'échec d'une copie de récupération écrite en arrière-plan est rendu à
+    /// l'interface, une seule fois.
+    #[test]
+    fn echec_de_recuperation_rendu() {
+        let chemin = dossier().join("absent").join("projet.modele.json");
+        recuperer_plus_tard(&Projet::nouveau("essai"), &chemin).unwrap();
+        let debut = std::time::Instant::now();
+        let e = loop {
+            if let Some(e) = erreur_recuperation() { break e; }
+            assert!(debut.elapsed().as_secs() < 10, "aucune erreur rendue");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        assert!(e.contains("Copie de récupération non écrite") && e.contains("projet.modele.recuperation.json"), "{e}");
+        assert_eq!(erreur_recuperation(), None);
+    }
+    static TEST: AtomicU64 = AtomicU64::new(0);
+    fn dossier() -> PathBuf {
+        let p = std::env::temp_dir().join(format!("ifc-v0-save-{}-{}",std::process::id(),TEST.fetch_add(1,Ordering::Relaxed)));
+        std::fs::create_dir(&p).unwrap(); p
+    }
+    #[test]
+    fn sauvegarde_rvt_source_modifiee_ou_destination_invalide() {
+        let p = dossier();
+        let entree = p.join("source.rvt");
+        std::fs::write(&entree,b"source initiale").unwrap();
+        let source = SourceRvt::ouvrir(&entree).unwrap();
+        assert!(enregistrer_rvt(&source,&entree,&|_|{}).is_err());
+        std::fs::write(&entree,b"source modifiee sur disque").unwrap();
+        let sortie = p.join("projet.modele.json");
+        std::fs::write(&sortie,b"ancienne sauvegarde").unwrap();
+        assert!(enregistrer_rvt(&source,&sortie,&|_|{}).unwrap_err().contains("changé"));
+        assert_eq!(std::fs::read(&sortie).unwrap(),b"ancienne sauvegarde");
+        std::fs::remove_file(sortie).unwrap(); std::fs::remove_file(entree).unwrap(); std::fs::remove_dir(p).unwrap();
+    }
+    #[test]
+    fn sauvegarde_rvt_v0_aller_retour_et_remplacement() {
+        let base = std::env::var_os("RVT_ESSAIS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Users\theba\Projets code\Decodage RVT"));
+        let entree = base.join(r"essais\2026\E04_mur.rvt");
+        if !entree.exists() { eprintln!("fichier d'essai absent : {}",entree.display()); return; }
+        let source = SourceRvt::ouvrir(&entree).unwrap();
+        let p = dossier();
+        let sortie = p.join("projet.modele.json");
+        std::fs::write(&sortie,b"ancienne sauvegarde").unwrap();
+        let bilan = enregistrer_rvt(&source,&sortie,&|_|{}).unwrap();
+        assert_eq!(bilan.murs,1);
+        let relu = Projet::lire_json(&std::fs::read_to_string(&sortie).unwrap()).unwrap();
+        assert_eq!(relu.version,modele::VERSION); assert_eq!(relu.murs.len(),1);
+        assert_eq!(relu.sources[0].format,"RVT");
+        let rapport = bilan.rapport.unwrap(); assert!(std::fs::read_to_string(&rapport).unwrap().contains("Conversion"));
+        source.verifier().unwrap();
+        std::fs::remove_file(sortie).unwrap(); std::fs::remove_file(rapport).unwrap(); std::fs::remove_dir(p).unwrap();
+    }
 }

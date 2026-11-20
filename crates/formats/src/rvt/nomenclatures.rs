@@ -277,11 +277,10 @@ fn texte_formule(m: &Maquette, c: &Champ, v: &Valeur) -> String {
 }
 
 fn texte(m: &Maquette, c: &Champ, b: &Brut, st: Stockage) -> String {
-    if let (Some(f), Brut::Reel(x)) = (&c.format, b) {
-        if let Some(t) = parametres::formater(*x, f, m.unites.virgule) {
+    if let (Some(f), Brut::Reel(x)) = (&c.format, b)
+        && let Some(t) = parametres::formater(*x, f, m.unites.virgule) {
             return t;
         }
-    }
     let (spec, enumeration) = match (m.definitions.get(&c.param), parametres::integres().get(&c.param)) {
         (Some(d), _) => (d.spec.as_str(), ""),
         (None, Some(i)) => (i.spec, i.enumeration),

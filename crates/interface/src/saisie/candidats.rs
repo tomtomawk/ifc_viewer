@@ -33,7 +33,7 @@ impl Application {
     pub(crate) fn contexte_cycle(&self, rect: egui::Rect) -> u64 {
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let mut v: Vec<u64> = vp.to_cols_array().iter().map(|x| x.to_bits() as u64).collect();
-        v.extend([self.bim.revision as u64, self.vue_active.map_or(u64::MAX, |x| x as u64), self.visible.iter().filter(|x| **x).count() as u64]);
+        v.extend([self.bim.revision, self.vue_active.map_or(u64::MAX, |x| x as u64), self.visible.iter().filter(|x| **x).count() as u64]);
         v.extend([rect.min.x, rect.min.y, rect.max.x, rect.max.y].map(|x| x.to_bits() as u64));
         crate::saisie::cycle::empreinte(&v)
     }
@@ -148,7 +148,7 @@ impl Application {
                 let id = *id;
                 if ctrl && self.natif.is_none() {
                     let mut ids = self.selection_multiple.clone();
-                    if ids.is_empty() { if let Some(sel) = self.selected { ids.push(sel); } }
+                    if ids.is_empty() && let Some(sel) = self.selected { ids.push(sel); }
                     if let Some(pos) = ids.iter().position(|x| *x == id) { ids.remove(pos); } else { ids.push(id); }
                     self.select(ids.first().copied(), true);
                     self.selection_multiple = ids;

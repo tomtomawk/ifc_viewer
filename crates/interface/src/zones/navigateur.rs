@@ -170,11 +170,10 @@ impl Application {
             }
             if r.double_clicked() {
                 *action = vue.map(ActionNav::Activer).or_else(|| entite.map(ActionNav::IsolerType));
-            } else if r.clicked() {
-                if let Some(e) = entite {
+            } else if r.clicked()
+                && let Some(e) = entite {
                     *action = Some(ActionNav::Selection(e));
                 }
-            }
         };
         let titre_vue = |v: &scene::NavVue| if v.nom.is_empty() { format!("{} [{}]", v.genre, v.revit_id) } else { v.nom.clone() };
         // section : repliable sous « Tout », seule et dépliée sous son onglet
@@ -201,11 +200,10 @@ impl Application {
         // Vues (tout) : rubriques dans l'ordre de Revit, puis type de vue
         let mut rubriques: BTreeMap<(u8, &str, String), Vec<usize>> = BTreeMap::new();
         for (i, v) in nav.vues.iter().enumerate() {
-            if let Some((ordre, nom)) = rubrique(&v.genre) {
-                if garde(&titre_vue(v)) && glissables.get(&v.revit_id).is_none_or(|id| correspond(id, &opt_vues)) {
+            if let Some((ordre, nom)) = rubrique(&v.genre)
+                && garde(&titre_vue(v)) && glissables.get(&v.revit_id).is_none_or(|id| correspond(id, &opt_vues)) {
                     rubriques.entry((ordre, nom, v.type_vue.clone())).or_default().push(i);
                 }
-            }
         }
         rubrique_nav(ui, LeftTab::Vues, "Vues".into(), true, &mut |ui| {
             for ((_, nom, type_vue), vues) in &rubriques {
@@ -445,11 +443,10 @@ impl Application {
                                             }
                                         }
                                     }
-                                    if let (true, FamilleCatalogue::Ouverture(tid, _)) = (ouverture, types[0].0) {
-                                        if ui.selectable_label(false, RichText::new("＋ Nouveau type").weak()).on_hover_text("Nouveau type dans cette famille").clicked() {
+                                    if let (true, FamilleCatalogue::Ouverture(tid, _)) = (ouverture, types[0].0)
+                                        && ui.selectable_label(false, RichText::new("＋ Nouveau type").weak()).on_hover_text("Nouveau type dans cette famille").clicked() {
                                             copier_type = Some((tid.clone(), "Nouveau type".into()));
                                         }
-                                    }
                                 });
                         }
                         if titre == "Profils" {
@@ -522,12 +519,11 @@ impl Application {
         }
         if creer_jeu { self.creer_jeu_arborescence(None); }
         if let Some(jeu) = dupliquer_jeu { self.creer_jeu_arborescence(Some(&jeu)); }
-        if let Some(jeu) = ajouter_feuille_jeu {
-            if let Some((p, _)) = &self.natif {
+        if let Some(jeu) = ajouter_feuille_jeu
+            && let Some((p, _)) = &self.natif {
                 let f = Self::nouvelle_feuille(p, &jeu);
                 if let Err(e) = self.executer_bim(commandes::Commande::Feuille { feuille: f }) { self.error = Some(e); }
             }
-        }
         if let Some(jeu) = exporter_jeu_nav { self.exporter_jeu_dialogue(&jeu); }
         if let Some((extension, id)) = exporter_feuille_nav { self.exporter_feuille(&ui.ctx().clone(), extension, &id); }
         if let Some((jeu, feuille)) = regler_jeu {
@@ -537,8 +533,8 @@ impl Application {
             self.selectionner_famille(famille);
         }
         if let Some(genre) = nouvelle_ouverture { self.ouvrir_editeur_famille_type(None, genre); }
-        if let Some((id, nom)) = copier_type {
-            if let Some((p, _)) = &self.natif {
+        if let Some((id, nom)) = copier_type
+            && let Some((p, _)) = &self.natif {
                 match p.avec_copie_type_ouverture(&id, &nom).and_then(|(q, nouvel)| self.appliquer_projet(q).map(|_| nouvel)) {
                     Ok(nouvel) => {
                         let genre = self.natif.as_ref().and_then(|(p, _)| p.types_ouvertures.iter().find(|t| t.id == nouvel).map(|t| t.genre));
@@ -548,16 +544,13 @@ impl Application {
                     Err(e) => self.error = Some(e),
                 }
             }
-        }
         if nouveau_profil { self.ouvrir_profil(None); }
         if charger_profil { self.charger_profil_fichier(); }
-        if charger_famille {
-            if let Some(c) = rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file() {
-                if let Err(e) = self.charger_famille_fichier(&c) {
+        if charger_famille
+            && let Some(c) = rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file()
+                && let Err(e) = self.charger_famille_fichier(&c) {
                     self.error = Some(e);
                 }
-            }
-        }
         if let Some((id, jeu, avant)) = deplacer {
             self.deplacer_feuille(&id, &jeu, avant.as_deref());
         }

@@ -88,7 +88,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
             let aide = SURFACES.iter().chain(TERRE_PLEIN).find(|(o, _)| *o == surface).map_or("", |(_, a)| *a);
             let mut choix_type: Option<(Outil, usize)> = None;
             selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
-                if let Some(o) = selecteur::onglets(ui, &sortes, surface, 74.0, |o| o.nom().into(), aide, |p, r, o, c| icone(p, r, o, c)) {
+                if let Some(o) = selecteur::onglets(ui, &sortes, surface, 74.0, |o| o.nom().into(), aide, icone) {
                     choix_type = Some((o, self.type_surface.get(&o).copied().unwrap_or(0)));
                 }
                 for (i, (nom, couches)) in types.iter().enumerate() {

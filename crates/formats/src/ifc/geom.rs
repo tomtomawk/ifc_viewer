@@ -269,14 +269,13 @@ impl<'a> Geom<'a> {
             (s, s)
         };
         let mut f = frame(origin, z, x);
-        if !is3d {
-            if let Some(y) = self.direction(e.arg(1).as_ref()) {
+        if !is3d
+            && let Some(y) = self.direction(e.arg(1).as_ref()) {
                 // Repère 2D éventuellement miroir.
                 if f.y_axis.truncate().dot(y) < 0.0 {
                     f.y_axis = -f.y_axis;
                 }
             }
-        }
         f * DMat4::from_scale(DVec3::new(s, s2, s3))
     }
 
@@ -597,8 +596,8 @@ impl<'a> Geom<'a> {
     fn edge_points(&self, edge: &Entity) -> Vec<DVec3> {
         let vp = |i: usize| self.deref(edge, i).and_then(|v| self.point(v.arg(0).as_ref()));
         let (Some(a), Some(b)) = (vp(0), vp(1)) else { return vec![] };
-        if edge.is("IFCEDGECURVE") {
-            if let Some(c) = edge.arg(2).as_ref() {
+        if edge.is("IFCEDGECURVE")
+            && let Some(c) = edge.arg(2).as_ref() {
                 let ty = self.m.ty(c);
                 if matches!(ty, "IFCPOLYLINE" | "IFCBSPLINECURVEWITHKNOTS" | "IFCRATIONALBSPLINECURVEWITHKNOTS" | "IFCINDEXEDPOLYCURVE") {
                     let mut pts = self.curve(c, 0);
@@ -612,13 +611,11 @@ impl<'a> Geom<'a> {
                         return pts;
                     }
                 }
-                if ty == "IFCCIRCLE" || ty == "IFCELLIPSE" {
-                    if let Some(pts) = self.conic_between(c, a, b, edge.arg(3).as_bool().unwrap_or(true)) {
+                if (ty == "IFCCIRCLE" || ty == "IFCELLIPSE")
+                    && let Some(pts) = self.conic_between(c, a, b, edge.arg(3).as_bool().unwrap_or(true)) {
                         return pts;
                     }
-                }
             }
-        }
         vec![a, b]
     }
 

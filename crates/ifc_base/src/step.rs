@@ -175,11 +175,10 @@ impl StepFile {
             let st = trim_start(&data[s..e]);
             if st.starts_with(b"FILE_SCHEMA") {
                 let mut p = Parser { s: st, i: 11, profondeur: 0 };
-                if let Some(v) = p.value() {
-                    if let Some(name) = first_str(&v) {
+                if let Some(v) = p.value()
+                    && let Some(name) = first_str(&v) {
                         schema = name.to_uppercase();
                     }
-                }
                 break;
             }
         }
@@ -498,13 +497,12 @@ pub fn decode_step_string(raw: &[u8]) -> String {
                 }
                 continue;
             }
-            if rest.starts_with(b"\\X\\") && i + 5 <= n {
-                if let Some(v) = hex(&raw[i + 3..i + 5]) {
+            if rest.starts_with(b"\\X\\") && i + 5 <= n
+                && let Some(v) = hex(&raw[i + 3..i + 5]) {
                     out.push(char::from_u32(v).unwrap_or('?'));
                     i += 5;
                     continue;
                 }
-            }
             if rest.starts_with(b"\\S\\") && i + 3 < n {
                 out.push(char::from_u32(raw[i + 3] as u32 + 128).unwrap_or('?'));
                 i += 4;
@@ -522,13 +520,12 @@ pub fn decode_step_string(raw: &[u8]) -> String {
         }
         // Certains exporteurs écrivent directement de l'UTF-8.
         let len = utf8_len(c);
-        if len > 1 && i + len <= n {
-            if let Ok(s) = std::str::from_utf8(&raw[i..i + len]) {
+        if len > 1 && i + len <= n
+            && let Ok(s) = std::str::from_utf8(&raw[i..i + len]) {
                 out.push_str(s);
                 i += len;
                 continue;
             }
-        }
         out.push(if c < 128 { c as char } else { char::from_u32(c as u32).unwrap_or('?') });
         i += 1;
     }

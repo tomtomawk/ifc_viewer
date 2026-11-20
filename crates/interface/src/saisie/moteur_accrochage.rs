@@ -83,11 +83,10 @@ pub(crate) fn accrocher_points(c: DVec2, tol: f64, geoms: &[Geom], droites: &[(D
             points.extend(croisement(a, d, b, e));
         }
         for g in geoms {
-            if let Geom::Segment([p, q]) = g && p.distance(*q) > 1e-9 {
-                if let Some(x) = croisement(a, d, *p, (*q - *p).normalize()) && (x - *p).dot(x - *q) <= 1e-9 {
+            if let Geom::Segment([p, q]) = g && p.distance(*q) > 1e-9
+                && let Some(x) = croisement(a, d, *p, (*q - *p).normalize()) && (x - *p).dot(x - *q) <= 1e-9 {
                     points.push(x);
                 }
-            }
         }
     }
     if let Some(p) = points.into_iter().filter(|p| p.distance(c) <= tol).min_by(|x, y| x.distance(c).total_cmp(&y.distance(c))) {

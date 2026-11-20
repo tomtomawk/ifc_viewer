@@ -62,8 +62,8 @@ impl Application {
     pub(crate) fn souris_arc_mur(&mut self,ui:&egui::Ui,rect:egui::Rect,resp:&egui::Response,autre_outil:bool)->bool {
         if autre_outil {self.dessin2d.arc_glisse=None;return false;}
         let Some((id,points,z))=self.arc_mur_selection() else {self.dessin2d.arc_glisse=None;return false};
-        if resp.drag_started_by(PointerButton::Primary) {
-            if let Some(q)=ui.input(|i|i.pointer.press_origin()) {
+        if resp.drag_started_by(PointerButton::Primary)
+            && let Some(q)=ui.input(|i|i.pointer.press_origin()) {
                 let poignee=points.iter().enumerate().filter_map(|(i,p)|self.ecran_plan(rect,p.to_array(),z).map(|e|(i,e.distance(q))))
                     .filter(|(_,d)|*d<=9.).min_by(|a,b|a.1.total_cmp(&b.1));
                 if let Some((i,_))=poignee {
@@ -73,7 +73,6 @@ impl Application {
                     self.dessin2d.arc_glisse=Some((id.clone(),i,points));
                 }
             }
-        }
         let actif=self.dessin2d.arc_glisse.is_some();
         if ui.input(|i|i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary) {
             self.dessin2d.arc_glisse=None;self.terminer_edition_axe();return actif;
@@ -93,8 +92,8 @@ impl Application {
                 }
             }
         }
-        if resp.drag_stopped_by(PointerButton::Primary) {
-            if let Some((id,i,pts))=self.dessin2d.arc_glisse.take() {
+        if resp.drag_stopped_by(PointerButton::Primary)
+            && let Some((id,i,pts))=self.dessin2d.arc_glisse.take() {
                 let valeur = if self.dessin2d.saisie.is_empty() { None } else { self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * modele::unite::unite().facteur()) };
                 let valide = if self.dessin2d.saisie.is_empty() { true } else if let (Some(valeur), Some((axe,_))) = (valeur, self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id))) { ajuster_arc(axe,i,pts[i],Some(valeur)).is_ok() } else { false };
                 self.terminer_edition_axe();
@@ -111,7 +110,6 @@ impl Application {
                     },Err(e)=>self.error=Some(e)
                 }
             }
-        }
         actif
     }
     pub(crate) fn dessiner_axes_courbes(&mut self,ui:&mut egui::Ui,rect:egui::Rect,survol:Option<egui::Pos2>) {
@@ -122,7 +120,7 @@ impl Application {
         for id in &ids {
             let Some((axe,z))=p.trajectoire_justification(id) else {continue};
             let Some(mut points)=points_controle(axe) else {continue};
-            if let Some((gid,_,pts))=&self.dessin2d.arc_glisse {if gid==id {points=*pts;}}
+            if let Some((gid,_,pts))=&self.dessin2d.arc_glisse&& gid==id {points=*pts;}
             let Some((o,r,d,s))=noyau::forme2d::arc_3_points(points[0],points[1],points[2]) else {continue};
             let ligne:Vec<_>=noyau::forme2d::points_arc(o,r,d,s).into_iter().filter_map(|p|self.ecran_plan(rect,p.to_array(),z)).collect();
             painter.add(egui::Shape::dashed_line(&ligne,egui::Stroke::new(1.5,bleu),8.,4.));

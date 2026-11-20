@@ -45,8 +45,8 @@ impl Application {
             let resp = ui.interact(rect, egui::Id::unique(("entete_panneau", p.nom())), Sense::click_and_drag());
             let encre = ui.visuals().strong_text_color();
             ui.painter_at(rect).text(rect.left_center(), egui::Align2::LEFT_CENTER, titre, egui::FontId::proportional(15.0), encre);
-            if resp.drag_started_by(PointerButton::Primary) {
-                if let Some(q)=resp.interact_pointer_pos() {
+            if resp.drag_started_by(PointerButton::Primary)
+                && let Some(q)=resp.interact_pointer_pos() {
                     let appui=ui.input(|i|i.pointer.press_origin()).unwrap_or(q);
                     let decalage=appui-rect.min;
                     let origine=ui.ctx().input(|i|i.viewport().inner_rect.map_or(egui::Pos2::ZERO,|r|r.min));
@@ -54,7 +54,6 @@ impl Application {
                     self.deplacement_panneau=Some((p,decalage,ui.ctx().viewport_id()));
                     self.ancrer(p,Ancrage::Externe);
                 }
-            }
             self.volets[i].entete=Some(rect);
             self.menu_volet(&resp,p);
             if self.ancrages[i]==Ancrage::Externe && resp.double_clicked() {

@@ -194,7 +194,7 @@ pub fn hote(p: &Projet, id: &str) -> Result<(Axe, f64, String), String> {
             .find(|m| m.id == id)
             .ok_or("Hôte de l'ouverture introuvable.")?;
         Ok((
-            m.axe.clone(),
+            m.axe,
             p.type_mur(&m.type_mur)
                 .ok_or("Type de mur absent.")?
                 .epaisseur(),
@@ -228,7 +228,7 @@ fn mur_brut(
     };
     for (o, hote) in ouvertures {
         let (axe, ep, niveau) = match hote {
-            Some(Ok(h)) => (h.axe.clone(), h.epaisseur, h.niveau.clone()),
+            Some(Ok(h)) => (h.axe, h.epaisseur, h.niveau.clone()),
             Some(Err(e)) => return Err(e.clone()),
             None => hote_ouverture(p, o)?,
         };

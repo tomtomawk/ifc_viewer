@@ -720,7 +720,7 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
             ("Extrémité libre", point_mm(p.libre)),
             ("Direction", vecteur(p.direction)),
             ("Normale", vecteur(p.normale)),
-            ("Est une référence", Value::Str(texte_reference(p.reference).into())),
+            ("Est une référence", Value::Str(texte_reference(p.reference))),
             ("Définit l'origine", Value::Str((if p.definit_origine { "Oui" } else { "Non" }).into())),
         ];
         let id = b.add("IFCANNOTATION", vec![guid("RVT", p.id), n.clone(), Value::Str(p.nom.clone()), n.clone(), Value::Str("Plan de référence".into()), Value::Ref(shape), n.clone()]);
@@ -993,9 +993,8 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     let model = IfcModel::new(StepFile { schema: format!("REVIT {format}"), entities: b.entities });
     let mut s = crate::ifc::assemblage::assemble(model, geoms, file_name);
     for (&ent, &el) in &element_de {
-        if let Some(mur) = m.murs.iter().find(|w| w.id == el) {
-            if let Some(bandes) = bandes_couches_mur(m, mur, s.origin) { s.couches_coupe.insert(ent, bandes); }
-        }
+        if let Some(mur) = m.murs.iter().find(|w| w.id == el)
+            && let Some(bandes) = bandes_couches_mur(m, mur, s.origin) { s.couches_coupe.insert(ent, bandes); }
     }
     let mut nav = nav;
     for (&ent, &el) in &element_de {

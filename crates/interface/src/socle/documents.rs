@@ -379,17 +379,16 @@ impl Application {
         if !application { self.changer_document(document); }
         if action == 0 {
             if self.natif_modifie {
-                self.enregistrer_projet(&ctx);
+                self.enregistrer_projet(ctx);
                 if self.natif_modifie { return; }
             }
             if application {
                 for d in self.documents.values_mut().filter(|d| d.modifie) {
-                    if let Some((p, chemin)) = &d.natif {
-                        if let Err(e) = echanges::enregistrement::enregistrer_natif(p, chemin) {
+                    if let Some((p, chemin)) = &d.natif
+                        && let Err(e) = echanges::enregistrement::enregistrer_natif(p, chemin) {
                             self.error = Some(format!("Enregistrement impossible de {} : {e}", chemin.display()));
                             return;
                         }
-                    }
                     if let Some((p, chemin)) = &d.natif { let _ = d.historique.enregistrer(p); echanges::enregistrement::effacer_recuperation(chemin); }
                     d.modifie = false;
                 }

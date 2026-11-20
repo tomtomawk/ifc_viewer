@@ -136,11 +136,10 @@ impl Transaction {
             // Une ouverture ou un garde-corps hébergé réserve aussi son hôte.
             for v in c.avant.iter().chain(c.apres.iter()) {
                 for champ in ["mur", "assemblage", "escalier"] {
-                    if let Some(id) = v.get(champ).and_then(Value::as_str) {
-                        if let Some(k) = cle_id(&nouveaux, id).or_else(|| cle_id(o, id)) {
+                    if let Some(id) = v.get(champ).and_then(Value::as_str)
+                        && let Some(k) = cle_id(&nouveaux, id).or_else(|| cle_id(o, id)) {
                             cles.insert(k);
                         }
-                    }
                 }
             }
         }
@@ -233,14 +232,13 @@ fn emprise(k: &str, v: &Value, o: &Objets) -> Option<Zone> {
             if let Some(m) = v.get("representation").filter(|m| !m.is_null()) {
                 points(m.get("sommets")?, &mut p);
             } else {
-                if let Some(id) = v.get("type_ouverture").and_then(Value::as_str) {
-                    if o.get(&format!("types_ouvertures/{id}"))
+                if let Some(id) = v.get("type_ouverture").and_then(Value::as_str)
+                    && o.get(&format!("types_ouvertures/{id}"))
                         .and_then(|t| t.get("modele"))
                         .is_some_and(|m| !m.is_null())
                     {
                         return None;
                     }
-                }
                 let hote = v.get("mur")?.as_str()?;
                 let cle = cle_id(o, hote)?;
                 let z = emprise(&cle, o.get(&cle)?, o)?;
@@ -375,7 +373,7 @@ pub fn empreinte_zone(o: &Objets, zones: &[Zone]) -> String {
 fn completer_selection(o:&Objets,index:&Index,selection:&mut BTreeSet<String>) {
     let mut front: Vec<_> = selection.iter().cloned().collect();
     while let Some(k) = front.pop() {
-        for r in references(&index, &k) {
+        for r in references(index, &k) {
             if selection.insert(r.clone()) {
                 front.push(r);
             }

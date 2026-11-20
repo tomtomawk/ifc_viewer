@@ -87,9 +87,8 @@ pub(super) fn survol(ui: &mut egui::Ui, ed: &mut EditeurFamille, resp: &egui::Re
         None if !appui => ed.cycle = None,
         None => {}
     }
-    if resp.hovered() && ed.cycle.as_ref().is_some_and(|c| c.candidats.len() > 1) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
-        if let Some(c) = ed.cycle.as_mut() { c.suivant(); }
-    }
+    if resp.hovered() && ed.cycle.as_ref().is_some_and(|c| c.candidats.len() > 1) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab))
+        && let Some(c) = ed.cycle.as_mut() { c.suivant(); }
     if let (Some(c), Some(q)) = (&ed.cycle, resp.hover_pos()) && let Some((_, libelle, segments)) = c.courant() {
         crate::saisie::cycle::dessiner(painter, q, segments, c.indice, c.candidats.len(), libelle);
     }

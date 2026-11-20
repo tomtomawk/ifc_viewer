@@ -128,7 +128,7 @@ impl RubanEdition {
             ui.interact(haut, ui.scope_id().with("type_mur_selecteur_haut"), Sense::click())
                 .union(ui.interact(bas, ui.scope_id().with("type_mur_selecteur_bas"), Sense::click()))
         } else { ui.interact(r, ui.scope_id().with("type_mur_selecteur"), Sense::click()) };
-        let visuel = ui.style().interact(&bouton).clone();
+        let visuel = *ui.style().interact(&bouton);
         ui.painter().rect(r, 3.0, visuel.bg_fill, visuel.bg_stroke, egui::StrokeKind::Inside);
         let ligne = egui::Rect::from_min_size(r.min, egui::vec2(r.width(), 28.0));
         let fleche = egui::Rect::from_center_size(egui::pos2(r.right() - 12.0, ligne.center().y), egui::vec2(8.0, 8.0));

@@ -4,11 +4,10 @@ use crate::*;
 impl Application {
     /// Fiche d'un fichier Revit : vignette, version, informations projet, références.
     pub(crate) fn revit_view(&mut self, ui: &mut egui::Ui) {
-        if self.rvt_preview.is_none() {
-            if let Some(img) = self.rvt.as_ref().and_then(|i| i.preview_png.as_deref()).and_then(decode_png) {
+        if self.rvt_preview.is_none()
+            && let Some(img) = self.rvt.as_ref().and_then(|i| i.preview_png.as_deref()).and_then(decode_png) {
                 self.rvt_preview = Some(ui.ctx().load_texture("rvt-preview", img, egui::TextureOptions::LINEAR));
             }
-        }
         let Some(info) = &self.rvt else { return };
         let preview = self.rvt_preview.clone();
         let mut close = false;

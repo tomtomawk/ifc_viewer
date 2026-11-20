@@ -14,7 +14,7 @@ pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<Stri
     let mut groupes: HashMap<String, Vec<([DVec3; 3], usize)>> = HashMap::new();
     for (k, (g, noms)) in geoms.iter().zip(materiaux).enumerate().filter(|(_, (g, _))| !exclus.contains(&g.id)) {
         for (i, p) in g.parts.iter().enumerate() {
-            let cle = noms.get(i).cloned().flatten().map_or_else(|| format!("\u{0}{k}:{i}"), |n| n);
+            let cle = noms.get(i).cloned().flatten().unwrap_or_else(|| format!("\u{0}{k}:{i}"));
             groupes.entry(cle).or_default().extend(p.tris.iter().map(|t| (*t, k)));
         }
     }

@@ -619,13 +619,13 @@ impl Materiau {
 
     /// Arrière-plan de coupe : motif (uni ou hachures) et couleur (blanc par défaut).
     pub fn fond_coupe(&self) -> (MotifCoupe, [u8; 3]) {
-        let motif = self.coupe_fond_motif.clone().filter(|m| arriere_plan_valide(m)).unwrap_or(MotifCoupe::Uni);
+        let motif = self.coupe_fond_motif.clone().filter(arriere_plan_valide).unwrap_or(MotifCoupe::Uni);
         (motif, self.coupe_fond.unwrap_or([255, 255, 255]))
     }
 
     /// Arrière-plan de surface : motif (uni par défaut, ou hachures).
     pub fn fond_surface(&self) -> MotifCoupe {
-        self.surface_fond_motif.clone().filter(|m| arriere_plan_valide(m)).unwrap_or(MotifCoupe::Uni)
+        self.surface_fond_motif.clone().filter(arriere_plan_valide).unwrap_or(MotifCoupe::Uni)
     }
 
     /// Encre du motif de surface.

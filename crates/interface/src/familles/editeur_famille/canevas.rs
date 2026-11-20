@@ -298,12 +298,11 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         ((p.x, p.y), a)
     };
     // repère d'accrochage sous la souris (hors sélection) : marqueur commun
-    if ed.outil != OutilFamille::Selection || ed.poignee.is_some() {
-        if let Some(q) = curseur.filter(|_| resp.hovered() || ed.poignee.is_some()) {
+    if (ed.outil != OutilFamille::Selection || ed.poignee.is_some())
+        && let Some(q) = curseur.filter(|_| resp.hovered() || ed.poignee.is_some()) {
             let (p, a) = viser(q, depart_courant);
             crate::saisie::moteur_accrochage::peindre_marqueur(&painter, cadre.ecran(p.0, p.1), a);
         }
-    }
     dessiner_axe_revolution(&painter, &cadre, ed);
     match ed.outil {
         OutilFamille::Selection | OutilFamille::ModifierTrace => {
@@ -358,15 +357,14 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let visee = |q: egui::Pos2| poignees.iter().filter(|p| p.1.distance(q) < 7.0).min_by(|a, b| a.1.distance(q).total_cmp(&b.1.distance(q))).copied();
             // clic droit sur un sommet : le retirer (au moins 3 sommets pour un profil, 2
             // pour une ligne, l'arc garde ses 3 points)
-            if resp.clicked_by(PointerButton::Secondary) {
-                if let Some((Poignee::Sommet { extrusion, k, i }, _, false)) = resp.interact_pointer_pos().and_then(visee) {
+            if resp.clicked_by(PointerButton::Secondary)
+                && let Some((Poignee::Sommet { extrusion, k, i }, _, false)) = resp.interact_pointer_pos().and_then(visee) {
                     if extrusion && ed.supprimer_sommet_forme(k, i) {
                     } else if !extrusion && ed.supprimer_sommet_ancre(k, i) {
                     } else {
                         ed.message = Some("Sommet conservé : nombre minimal atteint.".into());
                     }
                 }
-            }
             // point d'appui du glissement (egui signale le glissement après quelques pixels)
             let appui = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos());
             // ligne de cote glissée : étiquette ou ligne visée
@@ -474,8 +472,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             if resp.drag_stopped_by(PointerButton::Primary) {
                 ed.deplace = None;
             }
-            if resp.clicked() && !traits::clic_segment(ed, &cadre, &r, resp.interact_pointer_pos()) {
-                if let Some(q) = resp.interact_pointer_pos() {
+            if resp.clicked() && !traits::clic_segment(ed, &cadre, &r, resp.interact_pointer_pos())
+                && let Some(q) = resp.interact_pointer_pos() {
                     let cible = cycle_famille::au_clic(ed, &zones, q);
                     // Ctrl+clic, comme dans le projet : ajoute ou retire
                     if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
@@ -491,7 +489,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                         ed.selection = cible;
                     }
                 }
-            }
             // fenêtre de sélection : glisser hors des poignées, cotes et plans
             if resp.drag_started_by(PointerButton::Primary) && ed.poignee.is_none() && ed.cote_deplacee.is_none() && ed.deplace.is_none() && ed.deplacement_2d.is_none() && ed.outil == OutilFamille::Selection {
                 ed.fenetre = appui.map(|d| FenetreSelection { debut: d, fin: d, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
@@ -502,8 +499,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             if let Some(f) = ed.fenetre {
                 f.dessiner(&painter);
             }
-            if resp.drag_stopped_by(PointerButton::Primary) {
-                if let Some(f) = ed.fenetre.take() {
+            if resp.drag_stopped_by(PointerButton::Primary)
+                && let Some(f) = ed.fenetre.take() {
                     // segments de chaque élément à l'écran, puis la règle commune
                     let mut elements: Vec<(SelectionFamille, Vec<[egui::Pos2; 2]>)> = Vec::new();
                     let fermes = |pts: &[egui::Pos2]| (0..pts.len()).map(|i| [pts[i], pts[(i + 1) % pts.len()]]).collect::<Vec<_>>();
@@ -541,7 +538,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     ed.selectionner(liste);
                     garder_multiple = true;
                 }
-            }
         }
         OutilFamille::PlanReference => {
             // deux points : le plan passe par le premier et suit la direction dominante
@@ -576,14 +572,13 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 ed.debut = ui.input(|i| i.pointer.press_origin()).map(|q| viser(q, None).0);
             }
             if resp.drag_stopped_by(PointerButton::Primary) {
-                if let (Some(a), Some(q)) = (ed.debut, resp.interact_pointer_pos()) {
-                    if assez_long(a, q) {
+                if let (Some(a), Some(q)) = (ed.debut, resp.interact_pointer_pos())
+                    && assez_long(a, q) {
                         ed.debut = None;
                         poser(ed, a, viser(q, Some(a)).0);
                     }
-                }
-            } else if resp.clicked() {
-                if let Some(q) = resp.interact_pointer_pos() {
+            } else if resp.clicked()
+                && let Some(q) = resp.interact_pointer_pos() {
                     match ed.debut {
                         Some(a) if assez_long(a, q) => {
                             ed.debut = None;
@@ -596,7 +591,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                         }
                     }
                 }
-            }
         }
         OutilFamille::Volume | OutilFamille::Vide => {
             let vide = ed.outil == OutilFamille::Vide;
@@ -612,8 +606,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     painter.rect(r, 0.0, couleur_materiau(&ed.famille, Materiau::Menuiserie).gamma_multiply(0.6), egui::Stroke::new(1.5, orange), egui::StrokeKind::Inside);
                 }
             }
-            if resp.drag_stopped_by(PointerButton::Primary) {
-                if let (Some(a), Some(q)) = (ed.debut.take(), resp.interact_pointer_pos()) {
+            if resp.drag_stopped_by(PointerButton::Primary)
+                && let (Some(a), Some(q)) = (ed.debut.take(), resp.interact_pointer_pos()) {
                     let b = viser(q, None).0;
                     let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
                         Some((n, d)) if d.abs() <= tol => Face { plan: n, decalage: 0.0 },
@@ -635,7 +629,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                         ed.message = Some("Faces verrouillées sur les plans les plus proches (avec décalage au-delà de 7 px).".into());
                     }
                 }
-            }
         }
         OutilFamille::Texte | OutilFamille::Libelle => {
             if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
@@ -751,9 +744,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             if let Some(evenement) = evenement {
                 let avant = trace.points.len();
                 let formes = trace.appliquer(evenement);
-                if trace.points.len() > avant {
-                    if let Some(point) = point_verrouille { ed.esquisse.push(point); }
-                }
+                if trace.points.len() > avant
+                    && let Some(point) = point_verrouille { ed.esquisse.push(point); }
                 if let Some(forme) = formes.into_iter().next() {
                     if let (OutilFamille::Ligne, Forme2D::Polyligne { fermee, .. }) = (ed.outil, &forme) {
                         let points = std::mem::take(&mut ed.esquisse).into_iter().map(|(p, _)| p).collect();
@@ -857,8 +849,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             // plan visé : coloré (rouge s'il n'est pas parallèle aux plans déjà choisis),
             // et cote provisoire depuis le dernier plan choisi
             let axe_choisi = ed.clics.first().and_then(|p| ed.famille.plan(p)).map(|p| p.axe);
-            if let Some((q, nom)) = curseur.filter(|_| resp.hovered()).and_then(|q| plan_vise(q).map(|n| (q, n))) {
-                if let Some((_, vertical, c)) = lignes.iter().find(|l| l.0 == nom) {
+            if let Some((q, nom)) = curseur.filter(|_| resp.hovered()).and_then(|q| plan_vise(q).map(|n| (q, n)))
+                && let Some((_, vertical, c)) = lignes.iter().find(|l| l.0 == nom) {
                     let parallele = axe_choisi.is_none() || ed.famille.plan(&nom).map(|p| p.axe) == axe_choisi;
                     let couleur = if parallele { Color32::from_rgb(0, 160, 230) } else { Color32::from_rgb(210, 40, 40) };
                     let (a, b) = if *vertical { (egui::pos2(*c, rect.top()), egui::pos2(*c, rect.bottom())) } else { (egui::pos2(rect.left(), *c), egui::pos2(rect.right(), *c)) };
@@ -877,7 +869,6 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                         painter.text(p0.lerp(p1, 0.5) - t * 2.0, egui::Align2::CENTER_BOTTOM, modele::unite::unite().afficher(valeur), police.clone(), couleur);
                     }
                 }
-            }
             // cote : après les deux plans, le troisième clic place la ligne de cote
             // (méthode commune : deux références, puis position)
             let position = ed.outil == OutilFamille::Cote && ed.clics.len() == 2;
@@ -917,7 +908,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     ed.selection = SelectionFamille::Contrainte(ed.famille.contraintes.len() - 1);
                     ed.message = Some("Égalité créée.".into());
                 } else if n == 2 {
-                    ed.message = Some(GenreCote::Lineaire.invite(ed.clics.len()).replace("point à coter", "plan à coter").into());
+                    ed.message = Some(GenreCote::Lineaire.invite(ed.clics.len()).replace("point à coter", "plan à coter"));
                 } else {
                     ed.message = Some(format!("{} plan(s) sur {n}.", ed.clics.len()));
                 }

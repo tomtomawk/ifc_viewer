@@ -76,14 +76,13 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
         let debuts = debuts.get(&0x66).map(Vec::as_slice).unwrap_or_default();
         for (eid, body) in records(donnees, true, ids8).map_err(|e| format!("{p}, section 0x66 : {e}"))? {
             if !table.contains_key(&eid) {
-                if let (Some(c), Some(doc)) = (champs::class_id(body), document_de(debuts, body.as_ptr() as usize - donnees.as_ptr() as usize)) {
-                    if classes_embarquees.contains(&c) {
+                if let (Some(c), Some(doc)) = (champs::class_id(body), document_de(debuts, body.as_ptr() as usize - donnees.as_ptr() as usize))
+                    && classes_embarquees.contains(&c) {
                         embarques.insert(eid, (doc, body.to_vec()));
                         if Some(c) == classe_region {
                             regions_embarquees.insert(eid);
                         }
                     }
-                }
                 continue;
             }
             let Some(c) = champs::class_id(body) else { continue };
@@ -246,7 +245,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
                     Media::InstanceLien(i) => liens.push(i),
                 }
             }
-            Ok(Extrait::LigneZone(sc, niv, a, b)) => lignes_zones.entry((sc, niv)).or_insert_with(Vec::new).push((a, b)),
+            Ok(Extrait::LigneZone(sc, niv, a, b)) => lignes_zones.entry((sc, niv)).or_default().push((a, b)),
             Ok(Extrait::Forme(f)) => formes.push(f),
             Ok(Extrait::Categorie(id, nom)) => drop(categories.insert(id, nom)),
             Ok(Extrait::Vue(v)) => vues.push(v),

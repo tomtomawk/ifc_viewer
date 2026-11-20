@@ -264,11 +264,10 @@ fn remapper_annotation(annotation: &mut documentation::Annotation, ids: &HashMap
         }
         F::Cote { debut, fin, .. } => {
             for p in [debut, fin] {
-                if let PointCote::Mur { id, .. } | PointCote::Arete { id, .. } = p {
-                    if let Some(nouveau) = ids.get(id) {
+                if let PointCote::Mur { id, .. } | PointCote::Arete { id, .. } = p
+                    && let Some(nouveau) = ids.get(id) {
                         *id = nouveau.clone();
                     }
-                }
             }
         }
         F::CoteAngulaire { aretes: Some(aretes), .. } => {

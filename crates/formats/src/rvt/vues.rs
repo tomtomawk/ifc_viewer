@@ -393,11 +393,10 @@ pub fn texte_rtf(b: &[u8]) -> String {
                 let mut j = i + 1;
                 if s.get(j) == Some(&'\'') {
                     let hex: String = s.get(j + 1..j + 3).map(|h| h.iter().collect()).unwrap_or_default();
-                    if depth_ignore.is_none() {
-                        if let Ok(v) = u8::from_str_radix(&hex, 16) {
+                    if depth_ignore.is_none()
+                        && let Ok(v) = u8::from_str_radix(&hex, 16) {
                             out.push(super::cp1252(v));
                         }
-                    }
                     i = j + 3;
                     continue;
                 }
@@ -458,12 +457,11 @@ pub fn element(id: i64, r: &Record) -> Option<Element2D> {
         "TextNote" => {
             let frags = o.get("m_arrTextFragments").map(Val::list).unwrap_or_default();
             let mut texte: String = frags.iter().filter_map(|f| f.obj()?.get("m_text")?.str()).collect();
-            if texte.is_empty() {
-                if let Some(rtf) = r.field_body(o, "m_oSavedRtfData") {
+            if texte.is_empty()
+                && let Some(rtf) = r.field_body(o, "m_oSavedRtfData") {
                     let b: Vec<u8> = rtf.get("m_arrRtfStream").map(Val::list).unwrap_or_default().iter().filter_map(|v| v.int().map(|c| c as u8)).collect();
                     texte = texte_rtf(&b);
                 }
-            }
             let reel = |n| o.get(n).and_then(Val::real).unwrap_or(0.0) * FT;
             let (rtf, gras) = r.field_body(o, "m_oSavedRtfData").map(style_rtf).unwrap_or((Alignement::Gauche, false));
             let (alignement, vertical) = alignements(o, rtf);

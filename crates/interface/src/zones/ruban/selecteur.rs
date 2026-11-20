@@ -37,7 +37,7 @@ pub(crate) fn entete(ui: &mut egui::Ui, titre: &str, detail: Option<&str>, bulle
     let largeur = ui.available_width();
     let hauteur = if vignette.is_some() { HAUTEUR_ENTETE } else { 30.0 };
     let (r, bouton) = ui.allocate_exact_size(egui::vec2(largeur, hauteur), Sense::click());
-    let visuel = ui.style().interact(&bouton).clone();
+    let visuel = *ui.style().interact(&bouton);
     ui.painter().rect(r, 3.0, visuel.bg_fill, visuel.bg_stroke, egui::StrokeKind::Inside);
     let fleche = egui::pos2(r.right() - 12.0, r.center().y);
     triangle_bas(ui.painter(), fleche, visuel.fg_stroke.color);

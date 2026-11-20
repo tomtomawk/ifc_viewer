@@ -520,7 +520,7 @@ pub fn primitives_arbres(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 // festons : 8 lobes
                 Essence::Feuillu => r * (0.9 + 0.1 * (t * 8.0 * std::f64::consts::TAU).cos().abs()),
                 // dents : 16 pointes
-                Essence::Conifere => r * if k % 3 == 0 { 1.0 } else { 0.86 },
+                Essence::Conifere => r * if k.is_multiple_of(3) { 1.0 } else { 0.86 },
                 Essence::Fastigie => r,
             }
         };
@@ -984,7 +984,7 @@ pub fn geometrie_angle(sommet: DVec2, debut: DVec2, fin: DVec2, rayon: f64, obli
     let n = ((balayage.to_degrees() / 5.0).ceil() as usize).max(2);
     let arc: Vec<DVec2> = (0..=n).map(|i| sommet + DVec2::from_angle(depart + balayage * i as f64 / n as f64) * r).collect();
     let mut traits: Vec<[DVec2; 2]> = arc.windows(2).map(|w| [w[0], w[1]]).collect();
-    for (p, t) in [(debut, depart), (fin, depart + balayage)].into_iter().map(|(p, t)| (p, t)) {
+    for (p, t) in [(debut, depart), (fin, depart + balayage)].into_iter() {
         let d = DVec2::from_angle(t);
         let l = (p - sommet).length();
         if l < r { traits.push([sommet + d * l, sommet + d * (r + marge * 0.4)]); }

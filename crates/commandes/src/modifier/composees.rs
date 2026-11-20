@@ -175,7 +175,7 @@ impl ModificationInterne for Projet {
         let couches_copie = self.couches_de(&copie);
         let p = DVec2::from_array(point);
         for (c, c2) in couches.iter().zip(&couches_copie) {
-            let Some(Axe::Droit { debut, fin }) = self.murs.iter().find(|m| &m.id == c).map(|m| m.axe.clone()) else { continue };
+            let Some(Axe::Droit { debut, fin }) = self.murs.iter().find(|m| &m.id == c).map(|m| m.axe) else { continue };
             let (a, b) = (DVec2::from_array(debut), DVec2::from_array(fin));
             let v = (b - a).normalize();
             let q = a + v * (p - a).dot(v);
@@ -293,11 +293,10 @@ impl ModificationInterne for Projet {
         if let Some(ph) = &phase {
             let rang = self.phases.iter().position(|p| p == ph).ok_or_else(|| format!("Phase inconnue : {ph}"))?;
             for id in &ids {
-                if let Some(creation) = self.phase_element(id) {
-                    if self.phases.iter().position(|p| p == &creation).is_some_and(|c| c > rang) {
+                if let Some(creation) = self.phase_element(id)
+                    && self.phases.iter().position(|p| p == &creation).is_some_and(|c| c > rang) {
                         return Err(format!("Démolir : un élément créé en phase {creation} ne peut pas être démoli en phase {ph}."));
                     }
-                }
             }
         }
         for id in &ids {
@@ -328,13 +327,13 @@ impl ModificationInterne for Projet {
                 let x = self.dalles.iter_mut().find(|x| &x.id == c).ok_or("Reproduire : la cible doit être une dalle, comme la source.")?;
                 x.type_dalle = d.type_dalle.clone();
                 x.decalage = d.decalage;
-                x.sorte = d.sorte.clone();
+                x.sorte = d.sorte;
                 x.phase = d.phase.clone();
             }
         } else if let Some(o) = self.ouvertures.iter().find(|o| o.id == source).cloned() {
             for c in &cibles {
                 let x = self.ouvertures.iter_mut().find(|x| &x.id == c).ok_or("Reproduire : la cible doit être une ouverture, comme la source.")?;
-                x.genre = o.genre.clone();
+                x.genre = o.genre;
                 x.type_ouverture = o.type_ouverture.clone();
                 x.largeur = o.largeur;
                 x.hauteur = o.hauteur;

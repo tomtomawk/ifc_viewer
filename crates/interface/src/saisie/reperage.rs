@@ -142,9 +142,8 @@ impl Reperage {
             let u = DVec2::from_angle(th);
             let v = DVec2::new(-u.y, u.x);
             let mut lignes = Vec::new();
-            if trace_actif {
-                if let Some(p) = precedent { lignes.extend([(p, u), (p, v)]); }
-            }
+            if trace_actif
+                && let Some(p) = precedent { lignes.extend([(p, u), (p, v)]); }
             if let Some(p) = self.reference {
                 lignes.extend([(p, u), (p, v)]);
                 for &d in &self.directions_reference { lignes.extend([(p, d), (p, d.perp())]); }

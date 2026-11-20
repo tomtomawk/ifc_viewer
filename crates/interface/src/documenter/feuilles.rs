@@ -353,13 +353,12 @@ impl Application {
                 etat.cadre_pour = Some(jeu.clone());
             }
             // feuille demandée : cadrée entière en haut de la vue
-            if let Some(id) = etat.defiler_vers.take() {
-                if let Some(k) = feuilles.iter().position(|f| f.id == id) {
+            if let Some(id) = etat.defiler_vers.take()
+                && let Some(k) = feuilles.iter().position(|f| f.id == id) {
                     let (l, h) = (feuilles[k].largeur as f32, feuilles[k].hauteur as f32);
                     etat.zoom = (rect.width() * 0.85 / l).min((rect.height() - HAUT_FEUILLES - 34.0) / h).max(0.05);
                     etat.decalage = egui::vec2((rect.width() - l * etat.zoom) * 0.5, HAUT_FEUILLES - ys[k] * etat.zoom);
                 }
-            }
             // molette : zoom autour du curseur
             if let Some(q) = resp.hover_pos() {
                 let d = ui.input(|i| i.smooth_scroll_delta.y);
@@ -491,14 +490,13 @@ impl Application {
             if resp.drag_stopped() {
                 if let (Some(id), Some(q)) = (etat.glisse_feuille.take(), resp.interact_pointer_pos().or(ui.input(|i| i.pointer.latest_pos()))) {
                     let t = rang_sous(q);
-                    if let Some(k) = feuilles.iter().position(|f| f.id == id) {
-                        if t != k && t != k + 1 {
+                    if let Some(k) = feuilles.iter().position(|f| f.id == id)
+                        && t != k && t != k + 1 {
                             deplacement = Some((id, feuilles.get(t).map(|f| f.id.clone())));
                         }
-                    }
                 }
-                if let Some((fid, j, d)) = etat.glisse.take() {
-                    if let Some(f) = feuilles.iter().find(|f| f.id == fid) {
+                if let Some((fid, j, d)) = etat.glisse.take()
+                    && let Some(f) = feuilles.iter().find(|f| f.id == fid) {
                         let mut f = (*f).clone();
                         let nv = f.vues.len();
                         let position = if j < nv { f.vues.get_mut(j).map(|v| &mut v.position) } else { f.nomenclatures.get_mut(j - nv).map(|n| &mut n.position) };
@@ -510,7 +508,6 @@ impl Application {
                             }
                         }
                     }
-                }
             }
             if resp.clicked() {
                 self.famille_selectionnee = None;
@@ -521,14 +518,13 @@ impl Application {
                     commandes.push(Commande::Feuille { feuille: f });
                 }
             }
-            if resp.double_clicked() && !matches!(etat.selection, SelectionFeuille::Cartouche(_)) {
-                if let Some((k, j)) = resp.interact_pointer_pos().and_then(vue_sous) {
+            if resp.double_clicked() && !matches!(etat.selection, SelectionFeuille::Cartouche(_))
+                && let Some((k, j)) = resp.interact_pointer_pos().and_then(vue_sous) {
                     match feuilles[k].vues.get(j) {
                         Some(v) => ouvrir_vue = Some(v.vue.clone()),
                         None => ouvrir_vue = feuilles[k].nomenclatures.get(j - feuilles[k].vues.len()).map(|n| format!("nomenclature:{}", n.nomenclature)),
                     }
                 }
-            }
             // vue déposée depuis l'arborescence : placée, centrée sur le curseur
             let survol_depot = resp.dnd_hover_payload::<VueGlissee>().map(|_| ()).or(resp.dnd_hover_payload::<NomenclatureGlissee>().map(|_| ())).and_then(|_| resp.hover_pos().or(ui.input(|i| i.pointer.hover_pos()))).and_then(papier).map(|(k, _)| k);
             // (une lecture du dépôt retire l'objet glissé quel que soit son type : ne lire
@@ -660,15 +656,14 @@ impl Application {
                 painter.rect_stroke(r, 0.0, egui::Stroke::new(2.0, bleu), egui::StrokeKind::Outside);
             }
             // feuille glissée : barre d'insertion entre deux feuilles
-            if etat.glisse_feuille.is_some() {
-                if let Some(q) = ui.input(|i| i.pointer.latest_pos()) {
+            if etat.glisse_feuille.is_some()
+                && let Some(q) = ui.input(|i| i.pointer.latest_pos()) {
                     let t = rang_sous(q);
                     let y = if t < feuilles.len() { ys[t] - ECART * 0.9 } else { y_ajout - ECART * 0.9 };
                     let a = o + egui::vec2(-10.0 / z, y) * z;
                     painter.line_segment([a, a + egui::vec2((largeur_max + 20.0 / z) * z, 0.0)], egui::Stroke::new(4.0, bleu));
                     painter.circle_filled(a, 5.0, bleu);
                 }
-            }
             // page « ajouter une feuille »
             let survol_ajout = resp.hover_pos().is_some_and(|q| page_ajout.contains(q));
             let gris = if survol_ajout { bleu } else { Color32::from_gray(120) };
@@ -862,16 +857,14 @@ impl Application {
                 ui.label(RichText::new("Cliquer une feuille ou une vue placée pour la régler.").weak());
             }
         }
-        if let Some(q) = projet_modifie {
-            if let Err(e) = self.appliquer_projet(q) {
+        if let Some(q) = projet_modifie
+            && let Err(e) = self.appliquer_projet(q) {
                 self.error = Some(e);
             }
-        }
-        if let Some(c) = commande {
-            if let Err(e) = self.executer_bim(c) {
+        if let Some(c) = commande
+            && let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
             }
-        }
         if let Some(id) = ouvrir.as_deref().and_then(|o| o.strip_prefix("nomenclature:")) {
             self.ouvrir_nomenclature(id);
         } else if let Some(o) = ouvrir {

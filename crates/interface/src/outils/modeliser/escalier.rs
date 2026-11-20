@@ -144,7 +144,7 @@ impl Application {
                                 ui.add_sized([champ, 20.0], egui::DragValue::new(&mut self.dessin2d.esc_decalage_haut).speed(10.0).dimensions()).on_hover_text("Décalage de l'arrivée par rapport au niveau");
                             }
                         } else {
-                            let texte = self.dessin2d.esc_bas.as_deref().map_or(nom_plan.clone(), |id| nom(id));
+                            let texte = self.dessin2d.esc_bas.as_deref().map_or(nom_plan.clone(), &nom);
                             egui::ComboBox::from_id_salt("esc_bas").width(largeur).wrap().selected_text(texte).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.dessin2d.esc_bas, None, format!("Niveau du plan ({nom_plan})"));
                                 for (id, n) in &niveaux {
@@ -548,6 +548,17 @@ impl Application {
     }
 }
 
+pub(crate) fn choix_sous_face_escalier(ui: &mut egui::Ui, id: &str, valeur: &mut modele::elements::escalier::SousFace) -> bool {
+    use modele::elements::escalier::SousFace;
+    let avant = *valeur;
+    egui::ComboBox::from_id_salt(id).selected_text(valeur.nom()).show_ui(ui, |ui| {
+        for option in SousFace::CHOIX {
+            ui.selectable_value(valeur, option, option.nom());
+        }
+    }).response.on_hover_text("Lissée : dessous incliné sous les marches, horizontal sous les paliers.");
+    *valeur != avant
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -621,15 +632,4 @@ mod tests {
             d.x > 1.0 && d.y > 1.0
         }));
     }
-}
-
-pub(crate) fn choix_sous_face_escalier(ui: &mut egui::Ui, id: &str, valeur: &mut modele::elements::escalier::SousFace) -> bool {
-    use modele::elements::escalier::SousFace;
-    let avant = *valeur;
-    egui::ComboBox::from_id_salt(id).selected_text(valeur.nom()).show_ui(ui, |ui| {
-        for option in SousFace::CHOIX {
-            ui.selectable_value(valeur, option, option.nom());
-        }
-    }).response.on_hover_text("Lissée : dessous incliné sous les marches, horizontal sous les paliers.");
-    *valeur != avant
 }

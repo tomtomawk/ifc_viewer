@@ -227,8 +227,8 @@ impl Transformation for Projet {
             }
         }
         for v in &mut self.vues {
-            if set.contains(&v.id) {
-                if let GenreVue::Coupe { debut, fin, .. } = &mut v.genre {
+            if set.contains(&v.id)
+                && let GenreVue::Coupe { debut, fin, .. } = &mut v.genre {
                     *debut = point(*debut);
                     *fin = point(*fin);
                     if miroir {
@@ -236,7 +236,6 @@ impl Transformation for Projet {
                         std::mem::swap(debut, fin);
                     }
                 }
-            }
         }
         for e in self.escaliers.iter_mut().filter(|e| set.contains(&e.id)) {
             for q in &mut e.trace {

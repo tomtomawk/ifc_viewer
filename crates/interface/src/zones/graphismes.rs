@@ -239,12 +239,11 @@ impl Application {
                             ui.add(egui::DragValue::new(&mut l.glissement).speed(0.05).max_decimals(2));
                             ui.add(egui::DragValue::new(&mut l.origine[0]).speed(0.05).max_decimals(2));
                             ui.add(egui::DragValue::new(&mut l.origine[1]).speed(0.05).max_decimals(2));
-                            if let Some(texte) = self.tirets_saisis.1.get_mut(k) {
-                                if ui.add(egui::TextEdit::singleline(texte).desired_width(110.0).hint_text("continu")).changed() {
+                            if let Some(texte) = self.tirets_saisis.1.get_mut(k)
+                                && ui.add(egui::TextEdit::singleline(texte).desired_width(110.0).hint_text("continu")).changed() {
                                     let v: Option<Vec<f64>> = texte.replace(',', ".").split_whitespace().map(|x| x.parse::<f64>().ok().filter(|x| x.is_finite() && *x != 0.0)).collect();
                                     if let Some(v) = v { l.tirets = v; }
                                 }
-                            }
                             if ui.add_enabled(k > 0, egui::Button::new("Retirer").small()).on_hover_text("Retirer la famille").clicked() {
                                 retirer = Some(k);
                             }

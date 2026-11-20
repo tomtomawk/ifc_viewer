@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const PROTOCOLE: u32 = 3;
 pub fn protocole_lisible(v: u32) -> bool {
-    matches!(v, 1 | 2 | 3)
+    matches!(v, 1..=3)
 }
 use commandes::objets::{Objets, objets};
 #[cfg(test)]
@@ -137,11 +137,10 @@ impl Index {
             if matches!(
                 k.split('/').next().unwrap_or(""),
                 "materiaux" | "motifs" | "familles_cartouches" | "familles_etiquettes" | "types_traits"
-            ) {
-                if let Some(nom) = v.get("nom").and_then(Value::as_str) {
+            )
+                && let Some(nom) = v.get("nom").and_then(Value::as_str) {
                     ids.entry(nom).or_default().insert(k);
                 }
-            }
         }
         fn refs(v: &Value, ids: &BTreeMap<&str, BTreeSet<&str>>, out: &mut BTreeSet<String>) {
             match v {
@@ -184,11 +183,10 @@ impl Index {
             for (cle, v, id) in entrees {
                 let mut r = BTreeSet::new();
                 refs(v, &ids, &mut r);
-                if let Some(id) = id {
-                    if let Some(cles) = ids.get(id.as_str()) {
+                if let Some(id) = id
+                    && let Some(cles) = ids.get(id.as_str()) {
                         r.extend(cles.iter().map(|k| (*k).to_string()));
                     }
-                }
                 for cible in r {
                     i.utilisateurs.entry(cible).or_default().insert(cle.clone());
                 }
@@ -508,11 +506,10 @@ pub fn appliquer(
             }
         }
     }
-    if erreurs.is_empty() {
-        if let Err(e) = projet(&out) {
+    if erreurs.is_empty()
+        && let Err(e) = projet(&out) {
             erreurs.push(conflit("validation".into(), &e));
         }
-    }
     if erreurs.is_empty() {
         Ok(out)
     } else {

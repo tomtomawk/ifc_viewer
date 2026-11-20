@@ -713,11 +713,10 @@ impl FamilleModelee {
             }
             // plans libres : à leur position dessinée
             for (k, p) in plans.iter().enumerate() {
-                if let Ajout::Ajoutee = s.ajouter(unite(k, p.position)) {
-                    if !p.fixe && p.hote.is_none() && self.contraintes.iter().all(|c| !c.plans().contains(&p.nom.as_str())) {
+                if let Ajout::Ajoutee = s.ajouter(unite(k, p.position))
+                    && !p.fixe && p.hote.is_none() && self.contraintes.iter().all(|c| !c.plans().contains(&p.nom.as_str())) {
                         r.libres.push(p.nom.clone());
                     }
-                }
             }
             for (pivot, l) in &s.lignes {
                 r.positions.insert(plans[*pivot].nom.clone(), l.rhs);

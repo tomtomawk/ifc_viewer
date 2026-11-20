@@ -106,11 +106,9 @@ fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
         largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: Vec::new() };
     let mut famille = FamilleCartouche::default();
     famille.nom = "Cartouche test".into();
-    let formes = vec![
-        AnnotationForme::Cercle { centre: [10.0, 10.0], rayon: 4.0 },
+    let formes = [AnnotationForme::Cercle { centre: [10.0, 10.0], rayon: 4.0 },
         AnnotationForme::Zone { contour: vec![[20.0, 10.0], [25.0, 10.0], [25.0, 15.0]] },
-        AnnotationForme::Cote { debut: PointCote::Fixe { point: [20.0, 10.0] }, fin: PointCote::Fixe { point: [25.0, 10.0] }, decalage: 10.0 },
-    ];
+        AnnotationForme::Cote { debut: PointCote::Fixe { point: [20.0, 10.0] }, fin: PointCote::Fixe { point: [25.0, 10.0] }, decalage: 10.0 }];
     use modele::famille::modelee::{Element2DFamille, VueEsquisse};
     famille.document_famille.famille.elements_2d.extend(formes.iter().cloned().map(|forme| Element2DFamille::fixe(VueEsquisse::Plan, forme, 2.5)));
     p.feuilles.push(f.clone());

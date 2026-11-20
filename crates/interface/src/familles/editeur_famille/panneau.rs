@@ -387,12 +387,11 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
         if let Some(k) = supprimer {
             ed.erreur = ed.supprimer(&SelectionFamille::Volume(k)).err();
         }
-        if let SelectionFamille::Volume(k) = ed.selection.clone() {
-            if let Some(v) = ed.famille.volumes.get_mut(k) {
+        if let SelectionFamille::Volume(k) = ed.selection.clone()
+            && let Some(v) = ed.famille.volumes.get_mut(k) {
                 ui.separator();
                 volume_ui(ui, v, &ed.famille.plans, &ed.famille.parametres, k);
             }
-        }
     });
 
     egui::CollapsingHeader::new(RichText::new("Formes à profil").strong()).default_open(true).show(ui, |ui| {
@@ -411,12 +410,11 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
         if let Some(k) = supprimer {
             ed.erreur = ed.supprimer(&SelectionFamille::Extrusion(k)).err();
         }
-        if let SelectionFamille::Extrusion(k) = ed.selection.clone() {
-            if let Some(e) = ed.famille.extrusions.get_mut(k) {
+        if let SelectionFamille::Extrusion(k) = ed.selection.clone()
+            && let Some(e) = ed.famille.extrusions.get_mut(k) {
                 ui.separator();
                 extrusion_ui(ui, e, &ed.famille.plans, &ed.famille.parametres, k);
             }
-        }
     });
 
     egui::CollapsingHeader::new(RichText::new("Éléments 2D").strong()).default_open(true).show(ui, |ui| {
@@ -444,9 +442,8 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
                 }
             });
         }
-        if let Some((k, m)) = changer_remplissage {
-            if let Some(r) = ed.famille.elements_2d[k].remplissage_mut() { *r = m; }
-        }
+        if let Some((k, m)) = changer_remplissage
+            && let Some(r) = ed.famille.elements_2d[k].remplissage_mut() { *r = m; }
         if let Some(k) = supprimer {
             ed.erreur = ed.supprimer(&SelectionFamille::Element2D(k)).err();
         }

@@ -52,9 +52,8 @@ impl Application {
         };
         let mut action = None;
         resp.context_menu(|ui| {
-            if let Some(o) = self.derniere_commande {
-                if ui.button(format!("Répéter : {} (Entrée)", o.nom())).clicked() { action = Some(ActionMenu::Repeter(o)); }
-            }
+            if let Some(o) = self.derniere_commande
+                && ui.button(format!("Répéter : {} (Entrée)", o.nom())).clicked() { action = Some(ActionMenu::Repeter(o)); }
             if ui.button("Annuler (Ctrl+Z)").clicked() { action = Some(ActionMenu::Annuler); }
             if ui.button("Rétablir (Ctrl+Maj+Z)").clicked() { action = Some(ActionMenu::Retablir); }
             if selection.is_empty() {

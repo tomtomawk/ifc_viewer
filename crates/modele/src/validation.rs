@@ -112,14 +112,13 @@ impl Projet {
             if self.type_mur(&m.type_mur).is_none() || self.bas_haut(m).is_none() {
                 return Err(format!("{} : type ou niveau absent.", m.nom));
             }
-            if let Some(a) = &m.assemblage {
-                if !self
+            if let Some(a) = &m.assemblage
+                && !self
                     .assemblage(a)
                     .is_some_and(|a| a.couches.contains(&m.id))
                 {
                     return Err("Couche sans assemblage.".into());
                 }
-            }
         }
         for t in &self.types_ouvertures {
             if let Some(f) = &t.famille {
@@ -143,11 +142,10 @@ impl Projet {
             if !o.valeurs.values().all(|v| v.is_finite()) || !self.parametres_partages.values().all(|v| v.is_finite()) {
                 return Err("Ouverture : valeur de paramètre non finie.".into());
             }
-            if let Some(t) = &o.type_ouverture {
-                if !self.types_ouvertures.iter().any(|x| &x.id == t) {
+            if let Some(t) = &o.type_ouverture
+                && !self.types_ouvertures.iter().any(|x| &x.id == t) {
                     return Err("Type d'ouverture absent.".into());
                 }
-            }
             if let Some(m) = &o.representation {
                 solides::maillage(m)?;
             }

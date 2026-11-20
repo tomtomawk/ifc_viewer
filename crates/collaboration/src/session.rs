@@ -561,9 +561,9 @@ impl Session {
             }
         }
         for c in &t.changements {
-            if c.avant.is_none() {
-                if let Some(id) = c.cle.strip_prefix("annotations/") {
-                    if let Some(etat) = self.copie.base.textes.get(id) {
+            if c.avant.is_none()
+                && let Some(id) = c.cle.strip_prefix("annotations/")
+                    && let Some(etat) = self.copie.base.textes.get(id) {
                         // Restauration métier explicite ; les mises à jour tardives restent dans
                         // le document Yrs et ne peuvent jamais restaurer l'existence à elles seules.
                         use yrs::{ReadTxn, StateVector, Transact};
@@ -573,8 +573,6 @@ impl Session {
                                 .encode_state_as_update_v1(&StateVector::default()),
                         );
                     }
-                }
-            }
         }
         let sauvegarde = self.copie.clone();
         self.copie.attente.push(t.clone());

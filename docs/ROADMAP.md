@@ -15,7 +15,7 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| A1b | Résorber les avertissements clippy (environ 270 au 17/11/2026, dont 140 `if` imbriqués et 52 types complexes) et 3 erreurs (`approx_constant` dans des tests de `formats`), puis rendre clippy bloquant dans la CI | P2 | `.github/workflows/ci.yml`, tâche `debug` |
+| A1b | Résorber les avertissements clippy restants (133 au 20/11/2026 après correction automatique : 49 types complexes, 11 champs assignés après `Default::default()`, 9 fonctions à plus de 7 arguments, 8 comparaisons niées sur des flottants, 8 éléments après un module de test…), puis rendre clippy bloquant dans la CI | P2 | `.github/workflows/ci.yml`, tâche `debug` |
 | T1 | Tests de fichiers malformés : fait pour les cas d'A3 ; restent le balayage aléatoire (fuzzing) d'IFC et de RVT, les fichiers `rvt/{vues,feuilles,nomenclatures,parametres,annexes,zones}.rs` non relus, et `Projet::verifier()` sur un `.modele.json` malformé ; `scene` sans test | P2 | `crates/formats/src/ifc/bornes.rs` |
 | T2 | Les 20 scripts `tools/test-*.py` (clics simulés) ne tournent pas en CI | P2 | `tools/` |
 
@@ -126,7 +126,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
 | U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
 | Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
-| Échap des tracés | Un contour de dalle interrompu demande deux Échap de plus pour être abandonné (« Échap à nouveau pour l'abandonner »), et reste en attente si l'on change d'onglet ou si le pilote lance `outil aucun` (poignées des autres éléments bloquées). Garder, ou abandonner le contour quand l'outil est quitté ? |
+| Échap des tracés | Un contour de dalle interrompu demande deux Échap de plus pour être abandonné (« Échap à nouveau pour l'abandonner »), et reste en attente si le pilote lance `outil aucun` (vérifié ; changement d'onglet non essayé) (poignées des autres éléments bloquées). Garder, ou abandonner le contour quand l'outil est quitté ? |
 | Commits | `AGENTS.md` demande de pousser sur `master` ; la session cloud était configurée pour une branche de travail. Les commits du 20/11/2026 ont été poussés sur `master` selon `AGENTS.md` : à confirmer pour les sessions autonomes suivantes |
 
 ## 10. Études des évolutions

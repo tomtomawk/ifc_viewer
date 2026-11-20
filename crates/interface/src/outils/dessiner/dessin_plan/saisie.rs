@@ -7,37 +7,6 @@ use crate::saisie::saisie_trace::{ajouter_caractere_saisie, effacer_caractere_sa
 #[cfg(test)]
 use crate::saisie::reperage::directions_au_point;
 
-#[cfg(test)]
-mod tests_guides_perpendiculaires {
-    use super::*;
-
-    #[test]
-    fn saisie_alterne_les_champs_sans_perdre_les_valeurs() {
-        let mut texte = String::new();
-        let mut angle = false;
-        for ch in "2,5>45".chars() { ajouter_caractere_saisie(&mut texte, &mut angle, ch); }
-        assert_eq!(texte, "2,5>45");
-        angle = false;
-        ajouter_caractere_saisie(&mut texte, &mut angle, '0');
-        assert_eq!(texte, "2,50>45");
-        effacer_caractere_saisie(&mut texte, false);
-        effacer_caractere_saisie(&mut texte, true);
-        assert_eq!(texte, "2,5>4");
-    }
-
-    #[test]
-    fn reference_sur_segment_incline_et_cercle() {
-        let segment = Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 100.0)]);
-        let p = DVec2::new(30.0, 30.0);
-        let directions = directions_au_point(p, &[segment]);
-        assert_eq!(directions.len(), 1);
-        assert!((directions[0].perp().dot(DVec2::ONE)).abs() < 1e-9);
-        let cercle = Geom::Cercle { centre: DVec2::ZERO, rayon: 100.0 };
-        let directions = directions_au_point(DVec2::new(100.0, 0.0), &[cercle]);
-        assert_eq!(directions, vec![DVec2::Y]);
-    }
-}
-
 impl Application {
     /// Point retenu pour le curseur `c` : accrochage, sinon ortho (Maj) ou repérage
     /// polaire (tous les 15°) depuis le point précédent, sinon le point libre.
@@ -83,7 +52,7 @@ impl Application {
         // cotation : le tracé ne sert qu'à recueillir les points ; Entrée ou clic droit
         // avant le dernier point abandonne la cote en cours
         if self.outil_cotation().is_some() {
-            if !formes.is_empty() { if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); } }
+            if !formes.is_empty() && let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
             return;
         }
         if formes.is_empty() {
@@ -502,9 +471,8 @@ impl Application {
             self.error = Some(e);
         }
         self.bim.texte_saisi = None;
-        if valider && self.transfo.outil == Some(crate::zones::ruban::Outil::Scinder) && self.transfo.element.is_some() {
-            if !self.valider_coupe_surface() { return; }
-        }
+        if valider && self.transfo.outil == Some(crate::zones::ruban::Outil::Scinder) && self.transfo.element.is_some()
+            && !self.valider_coupe_surface() { return; }
         if valider && !self.dessin2d.saisie.is_empty() && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.raccord.is_some()) {
             self.valider_saisie_dessin();
             if self.dessin2d.message.is_some() { return; }
@@ -812,4 +780,35 @@ impl Application {
         self.enregistrer_formes(formes);
     }
 
+}
+
+#[cfg(test)]
+mod tests_guides_perpendiculaires {
+    use super::*;
+
+    #[test]
+    fn saisie_alterne_les_champs_sans_perdre_les_valeurs() {
+        let mut texte = String::new();
+        let mut angle = false;
+        for ch in "2,5>45".chars() { ajouter_caractere_saisie(&mut texte, &mut angle, ch); }
+        assert_eq!(texte, "2,5>45");
+        angle = false;
+        ajouter_caractere_saisie(&mut texte, &mut angle, '0');
+        assert_eq!(texte, "2,50>45");
+        effacer_caractere_saisie(&mut texte, false);
+        effacer_caractere_saisie(&mut texte, true);
+        assert_eq!(texte, "2,5>4");
+    }
+
+    #[test]
+    fn reference_sur_segment_incline_et_cercle() {
+        let segment = Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 100.0)]);
+        let p = DVec2::new(30.0, 30.0);
+        let directions = directions_au_point(p, &[segment]);
+        assert_eq!(directions.len(), 1);
+        assert!((directions[0].perp().dot(DVec2::ONE)).abs() < 1e-9);
+        let cercle = Geom::Cercle { centre: DVec2::ZERO, rayon: 100.0 };
+        let directions = directions_au_point(DVec2::new(100.0, 0.0), &[cercle]);
+        assert_eq!(directions, vec![DVec2::Y]);
+    }
 }

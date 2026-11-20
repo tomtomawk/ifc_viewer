@@ -277,7 +277,7 @@ impl Application {
             return Some(if dedans { -dist } else { dist });
         }
         let couche = projet.assemblage(id).and_then(|a| a.couches.first().cloned()).unwrap_or(id.to_string());
-        if let Some(Axe::Arc { debut, centre, direct, .. }) = projet.murs.iter().find(|m| m.id == couche).map(|m| m.axe.clone()) {
+        if let Some(Axe::Arc { debut, centre, direct, .. }) = projet.murs.iter().find(|m| m.id == couche).map(|m| m.axe) {
             let r = (debut[0] - centre[0]).hypot(debut[1] - centre[1]);
             let rp = (p[0] - centre[0]).hypot(p[1] - centre[1]);
             return Some(if direct { r - rp } else { rp - r });
@@ -693,11 +693,10 @@ impl Application {
                     }
                 }
             }
-            if let Some((a, b, z)) = self.axe_mur(id) {
-                if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) {
+            if let Some((a, b, z)) = self.axe_mur(id)
+                && let (Some(x), Some(y)) = (self.ecran_plan(rect, a, z), self.ecran_plan(rect, b, z)) {
                     painter.add(egui::Shape::dashed_line(&[x, y], egui::Stroke::new(epaisseur, couleur), 8.0, 4.0));
                 }
-            }
         };
         // centre (Tourner, réseau polaire) : croix cerclée, orange au survol (clic : le déplacer)
         let dessiner_centre = |app: &Self| -> Option<egui::Pos2> {
@@ -808,8 +807,8 @@ impl Application {
                         d = d.signum() * unite.vers_mm(v.abs());
                     }
                     // dalle : contour décalé en fantôme
-                    if let Some((projet, _)) = &self.natif {
-                        if let Some(dalle) = projet.dalles.iter().find(|x| x.id == id) {
+                    if let Some((projet, _)) = &self.natif
+                        && let Some(dalle) = projet.dalles.iter().find(|x| x.id == id) {
                             let z = projet.niveau(&dalle.niveau).map_or(0.0, |n| n.altitude) + dalle.decalage;
                             if let Some(g) = dalle.contours.first().and_then(|c| commandes::decaler_polygone(c, d)) {
                                 let pts: Vec<egui::Pos2> = g.iter().chain(g.first()).filter_map(|v| self.ecran_plan(rect, *v, z)).collect();
@@ -820,7 +819,6 @@ impl Application {
                             }
                             return;
                         }
-                    }
                     let Some((a, b, z)) = self.axe_mur(&id) else { return };
                     trait_axe(&id, bleu, 2.0);
                     let _ = distance_signee(p, a, b);

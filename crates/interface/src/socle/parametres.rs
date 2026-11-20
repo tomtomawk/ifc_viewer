@@ -132,18 +132,16 @@ impl Application {
                             "gabarit"=>{
                                 ui.heading("Gabarit de départ");ui.add_space(10.0);
                                 ui.label(p.brouillon.gabarit.as_ref().map_or("Gabarit embarqué".into(),|c|c.display().to_string()));
-                                if ui.button("Choisir un gabarit…").clicked(){
-                                    if let Some(c)=rfd::FileDialog::new().set_title("Gabarit").add_filter("Gabarit",&["json"]).pick_file(){
+                                if ui.button("Choisir un gabarit…").clicked()
+                                    && let Some(c)=rfd::FileDialog::new().set_title("Gabarit").add_filter("Gabarit",&["json"]).pick_file(){
                                         match modele::gabarit::Gabarit::charger(&c){Ok(_)=>{p.brouillon.gabarit=Some(c);p.erreur=None;},Err(e)=>p.erreur=Some(e)}
                                     }
-                                }
                                 if ui.button("Utiliser le gabarit par défaut").clicked(){p.brouillon.gabarit=None;}
-                                if ui.button("Enregistrer une copie du gabarit…").clicked(){
-                                    if let Some(c)=rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit",&["json"]).set_file_name("agence.gabarit.json").save_file(){
+                                if ui.button("Enregistrer une copie du gabarit…").clicked()
+                                    && let Some(c)=rfd::FileDialog::new().set_title("Copie du gabarit").add_filter("Gabarit",&["json"]).set_file_name("agence.gabarit.json").save_file(){
                                         let contenu=match &p.brouillon.gabarit {Some(src)=>std::fs::read(src).map_err(|e|e.to_string()),None=>Ok(modele::gabarit::texte_defaut().as_bytes().to_vec())};
                                         if let Err(e)=contenu.and_then(|t|echanges::enregistrement::ecrire_atomique(&c,&t)){p.erreur=Some(e);}
                                     }
-                                }
                             }
                             _=>{}
                         }
@@ -225,12 +223,11 @@ impl Application {
             for (index,e) in i.events.iter().enumerate() {
                 if let egui::Event::Key{key,pressed:true,repeat,modifiers,..}=e {
                     // touche maintenue : seules les commandes du soleil se répètent (U, I)
-                    if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")&&(!*repeat||c.id.starts_with("soleil_"))) {
-                        if (c.id != "selection_suivante" || tab_vue)
+                    if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")&&(!*repeat||c.id.starts_with("soleil_")))
+                        && (c.id != "selection_suivante" || tab_vue)
                             && (c.categorie=="Fichiers"||(!focus&&(!trace||point_topo)&&!self.vol.actif&&(self.scene.is_some()||self.mode_famille()||c.id=="annuler"||c.id=="retablir"))) {
                             actions.push(c.id);consommer.push(index);
                         }
-                    }
                 }
             }
         });
@@ -367,12 +364,11 @@ impl Application {
                 _ => self.fit_all(),
             },
             "masquer" => {
-                if !self.masquer_elements_vue() {
-                    if let Some(sel) = self.selected {
+                if !self.masquer_elements_vue()
+                    && let Some(sel) = self.selected {
                         let o = self.objects_under(sel);
                         self.hide(o);
                     }
-                }
             }
             "isoler" => {
                 if let Some(sel) = self.selected {

@@ -67,8 +67,8 @@ pub fn coupe(scene: &Scene, visible: &[bool], affichage: Affichage, plan: Vec4, 
             let (boucles, ouvertes) = chainer(&segs);
             let en_3d = |p: [f64; 2]| o + e1 * p[0] + e2 * p[1];
             let primitive = |forme, couleur, epaisseur, role| Primitive { forme, style: Style { couleur, epaisseur }, role, element: Some(ob.id) };
-            if !boucles.is_empty() {
-                if let Some(couches) = scene.couches_coupe.get(&ob.id) {
+            if !boucles.is_empty()
+                && let Some(couches) = scene.couches_coupe.get(&ob.id) {
                     let surface = primitive(Forme::Surface(boucles.iter().map(|b| b.iter().map(|p| en_3d(*p)).collect()).collect()), fond, 0.0, Role::Poche);
                     let triangles = surface.mailler(n, echelle).triangles;
                     let mut detail = Vec::new();
@@ -123,7 +123,6 @@ pub fn coupe(scene: &Scene, visible: &[bool], affichage: Affichage, plan: Vec4, 
                     }
                     if !detail.is_empty() { return detail; }
                 }
-            }
             if !boucles.is_empty() {
                 // style Réaliste : couleur de l'élément (rendu, sinon affichage)
                 let fond = match poche {

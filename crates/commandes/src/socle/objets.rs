@@ -14,8 +14,8 @@ pub fn objets(p: &Projet) -> Result<Objets, String> {
     };
     let mut out = Objets::new();
     for (collection, v) in root {
-        if let Value::Array(liste) = &v {
-            if collection_identifiee(&collection) {
+        if let Value::Array(liste) = &v
+            && collection_identifiee(&collection) {
                 let mut ordre = Vec::new();
                 for o in liste {
                     let id = o["id"]
@@ -40,7 +40,6 @@ pub fn objets(p: &Projet) -> Result<Objets, String> {
                 }
                 continue;
             }
-        }
         // Les cartes de relations sont atomiques : détecte aussi ajout/suppression d'arête.
         out.insert(format!("@/{collection}"), v);
     }

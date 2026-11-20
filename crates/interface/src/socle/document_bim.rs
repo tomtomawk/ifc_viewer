@@ -10,15 +10,14 @@ impl Application {
 
     pub(crate) fn parcourir_historique_n(&mut self, retablir: bool, nombre: usize) {
         // onglet Famille : un document à part, avec sa propre pile
-        if self.famille_active {
-            if let Some(ed) = self.famille.as_mut() {
+        if self.famille_active
+            && let Some(ed) = self.famille.as_mut() {
                 match ed.parcourir_historique(retablir, nombre) {
                     Ok(()) => self.status = format!("Famille : {nombre} modification(s) {}.", if retablir { "rétablie(s)" } else { "annulée(s)" }),
                     Err(e) => self.error = Some(e),
                 }
                 return;
             }
-        }
         if self.collaboration.is_some() {
             if nombre != 1 { self.error = Some("En collaboration, annulez une transaction à la fois.".into()); return; }
             let resultat = self.collaboration.as_mut().unwrap().annuler(retablir).and_then(|p|self.appliquer_projet_interne(p,true));
@@ -272,11 +271,10 @@ impl Application {
             }
             let survol = ui.ctx().pointer_hover_pos().is_some_and(|h| h.distance(q) < 11.0);
             icone_cadenas(ui.painter(), egui::Rect::from_center_size(q, egui::vec2(18.0, 18.0)), true, survol);
-            if clic.is_none() {
-                if let Some(cle) = self.cle_native(id) {
+            if clic.is_none()
+                && let Some(cle) = self.cle_native(id) {
                     self.cadenas_ecran.push((cle, q));
                 }
-            }
             if clic.is_some_and(|h| h.distance(q) < 11.0) {
                 cible = self.cle_native(id);
             }
@@ -372,11 +370,10 @@ impl Application {
         if !ids.is_empty() {
             return ids;
         }
-        if let Some(id) = self.selected.and_then(|id| self.cle_native(id)) {
-            if !ids.contains(&id) {
+        if let Some(id) = self.selected.and_then(|id| self.cle_native(id))
+            && !ids.contains(&id) {
                 ids.push(id);
             }
-        }
         ids
     }
 }

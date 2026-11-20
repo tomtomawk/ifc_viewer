@@ -465,11 +465,10 @@ impl Application {
         let painter = ui.painter().with_clip_rect(rect);
         for g in &projet.quadrillages {
             if masques.contains(&g.id) { continue; }
-            if self.bim.selection.contains(&g.id) {
-                if let (Some(a), Some(b)) = (self.ecran_plan(rect, g.debut, z), self.ecran_plan(rect, g.fin, z)) {
+            if self.bim.selection.contains(&g.id)
+                && let (Some(a), Some(b)) = (self.ecran_plan(rect, g.debut, z), self.ecran_plan(rect, g.fin, z)) {
                     painter.line_segment([a, b], egui::Stroke::new(2.0, Color32::from_rgb(230, 120, 20)));
                 }
-            }
         }
         for v in &projet.vues {
             if masques.contains(&v.id) { continue; }
@@ -567,11 +566,10 @@ impl Application {
         if change && !ids.is_empty() && !outil && self.onglet_ruban != OngletRuban::Modifier {
             self.onglet_avant_selection = Some(self.onglet_ruban);
             self.onglet_ruban = OngletRuban::Modifier;
-        } else if change && ids.is_empty() && !outil && self.onglet_ruban == OngletRuban::Modifier {
-            if let Some(o) = self.onglet_avant_selection.take() {
+        } else if change && ids.is_empty() && !outil && self.onglet_ruban == OngletRuban::Modifier
+            && let Some(o) = self.onglet_avant_selection.take() {
                 self.onglet_ruban = o;
             }
-        }
         if self.onglet_ruban != OngletRuban::Modifier {
             self.onglet_avant_selection = None;
         }
@@ -765,9 +763,8 @@ impl Application {
         self.visibility_dirty = true;
         self.coupe_dirty = true;
         self.error = None;
-        if let Some((p, chemin)) = &self.natif {
-            if let Err(e) = echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
-        }
+        if let Some((p, chemin)) = &self.natif
+            && let Err(e) = echanges::enregistrement::recuperer_plus_tard(p, chemin) { self.error = Some(e); }
         noyau::chrono::chrono("application : listes et récupération", &mut t_etape);
         Ok(())
     }
@@ -862,13 +859,12 @@ impl Application {
         for e in [ea, eb] {
             painter.circle_filled(e, 3.5, couleur);
         }
-        if self.orientation_nord_en_cours {
-            if let Some(curseur) = ui.ctx().pointer_hover_pos() {
+        if self.orientation_nord_en_cours
+            && let Some(curseur) = ui.ctx().pointer_hover_pos() {
                 let (fin, dir) = if curseur.distance(ea) < curseur.distance(eb) { (ea, -d) } else { (eb, d) };
                 let n = egui::vec2(-dir.y, dir.x);
                 painter.add(egui::Shape::convex_polygon(vec![fin + dir * 11.0, fin - dir * 5.0 + n * 5.0, fin - dir * 5.0 - n * 5.0], couleur, egui::Stroke::NONE));
             }
-        }
     }
 
     /// Trait d'annotation le plus proche du curseur, dans le repère local de la scène.

@@ -28,7 +28,7 @@ pub fn trianguler_contours(mut contours: Vec<Vec<[f64; 2]>>, aire_min: f64) -> V
     let aires: Vec<_> = contours.iter().map(|c| aire(c).abs()).collect();
     let profondeur: Vec<usize> = (0..n).map(|i| (0..n).filter(|&j| j != i && aires[j] > aires[i] && dedans(contours[i][0], &contours[j])).count()).collect();
     let mut out = Vec::new();
-    for i in (0..n).filter(|&i| profondeur[i] % 2 == 0) {
+    for i in (0..n).filter(|&i| profondeur[i].is_multiple_of(2)) {
         let trous = (0..n).filter(|&j| profondeur[j] == profondeur[i] + 1 && dedans(contours[j][0], &contours[i]));
         let mut coords = Vec::new();
         let mut indices_trous = Vec::new();

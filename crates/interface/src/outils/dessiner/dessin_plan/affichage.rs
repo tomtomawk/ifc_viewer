@@ -249,8 +249,8 @@ impl Application {
                     e.segment = None;
                     e.sommet = Some((c, i));
                     e.glisse = Some(GlisseContour::Sommet(c, i));
-                } else if let (Some((_, c, i, _)), Some(q)) = (arete, q) {
-                    if let Some(origine) = self.depuis_ecran(rect, q) {
+                } else if let (Some((_, c, i, _)), Some(q)) = (arete, q)
+                    && let Some(origine) = self.depuis_ecran(rect, q) {
                         let a = DVec2::from_array(self.dessin2d.dalle[c][i]);
                         let b = DVec2::from_array(self.dessin2d.dalle[c][(i + 1) % self.dessin2d.dalle[c].len()]);
                         let e = self.dessin2d.edition_contour.as_mut().unwrap();
@@ -259,12 +259,11 @@ impl Application {
                         e.sommet = None;
                         e.glisse = Some(GlisseContour::Segment { contour: c, segment: i, origine, a, b });
                     }
-                }
             }
             let glisse = self.dessin2d.edition_contour.as_ref().and_then(|e| e.glisse);
             let curseur = resp.interact_pointer_pos().or(resp.hover_pos());
-            if let (Some(glisse), Some(q)) = (glisse, curseur) {
-                if let Some(p) = self.depuis_ecran(rect, q) {
+            if let (Some(glisse), Some(q)) = (glisse, curseur)
+                && let Some(p) = self.depuis_ecran(rect, q) {
                     match glisse {
                         GlisseContour::Sommet(c, i) => {
                             // La poignée suit le curseur librement : elle ne s'accroche
@@ -279,7 +278,6 @@ impl Application {
                         }
                     }
                 }
-            }
             if resp.drag_stopped() {
                 // Les deux extrémités d'un tracé ouvert réunies ferment le contour,
                 // sans conserver deux sommets identiques ni créer de segment nul.
@@ -311,8 +309,8 @@ impl Application {
                     self.dessin2d.trace.as_mut().unwrap().points = vec![p];
                     self.dessin2d.message = None; self.dessin2d.information = None;
                     return;
-                } else if let Some((_, c, i, q)) = arete.filter(|_| sommet.is_none() && !topologie_fixe) {
-                    if let Some(p) = self.depuis_ecran(rect, q) {
+                } else if let Some((_, c, i, q)) = arete.filter(|_| sommet.is_none() && !topologie_fixe)
+                    && let Some(p) = self.depuis_ecran(rect, q) {
                         // sommet inséré : un arc est coupé en deux arcs du même cercle
                         let n = self.dessin2d.dalle[c].len();
                         let (a, b) = (DVec2::from_array(self.dessin2d.dalle[c][i]), DVec2::from_array(self.dessin2d.dalle[c][(i + 1) % n]));
@@ -323,7 +321,6 @@ impl Application {
                         self.dessin2d.definir_courbures(c, k);
                         self.dessin2d.dalle[c].insert(i + 1, p.to_array());
                     }
-                }
             } else if resp.clicked() {
                 // Propriétés et ruban suivent la sélection dès l'image suivante
                 ui.ctx().request_repaint();
@@ -450,8 +447,8 @@ impl Application {
             let points: Vec<_> = (0..=128).filter_map(|i| self.vers_ecran(rect, centre + DVec2::from_angle(std::f64::consts::TAU * i as f64 / 128.0) * rayon)).collect();
             if points.len() == 129 { painter.add(egui::Shape::dashed_line(&points, egui::Stroke::new(1.0, vert), 6.0, 4.0)); }
         }
-        if let Some((p, accroche)) = self.dessin2d.point {
-            if let Some(e) = self.vers_ecran(rect, p) {
+        if let Some((p, accroche)) = self.dessin2d.point
+            && let Some(e) = self.vers_ecran(rect, p) {
                 // réticule
                 if !self.selection_traces_active() {
                     crate::socle::aides::reticule(&painter, e, 28.0);
@@ -469,23 +466,21 @@ impl Application {
                     Some(Usage::Poutre) => self.apercu_poutres(&painter, rect, &apercu),
                     _ => {}
                 }
-                if trace.perimetre && trace.outil==OutilDessin::Cercle {
-                    if let Some(c)=trace.points.first().and_then(|c|self.vers_ecran(rect,*c)) {
+                if trace.perimetre && trace.outil==OutilDessin::Cercle
+                    && let Some(c)=trace.points.first().and_then(|c|self.vers_ecran(rect,*c)) {
                         painter.add(egui::Shape::dashed_line(&[c,e],egui::Stroke::new(1.0,bleu.gamma_multiply(0.6)),5.0,4.0));
                     }
-                }
                 if self.outil_cotation().is_some() { self.apercu_cotation(&painter, rect, p); }
                 for l in apercu.into_iter().filter(|_| self.outil_cotation().is_none()) {
                     let pts: Vec<egui::Pos2> = l.iter().filter_map(|q| self.vers_ecran(rect, *q)).collect();
                     painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, bleu)));
                 }
                 // repérage polaire / ortho : ligne de construction en pointillés
-                if self.dessin2d.reperage.guides.is_empty() && let (Some(prec), Accroche::Polaire(_) | Accroche::Ortho) = (trace.precedent(), accroche) {
-                    if let Some(a) = self.vers_ecran(rect, prec) {
+                if self.dessin2d.reperage.guides.is_empty() && let (Some(prec), Accroche::Polaire(_) | Accroche::Ortho) = (trace.precedent(), accroche)
+                    && let Some(a) = self.vers_ecran(rect, prec) {
                         let dir = (e - a).normalized();
                         painter.add(egui::Shape::dashed_line(&[a - dir * 4000.0, a + dir * 4000.0], egui::Stroke::new(1.0, vert), 6.0, 4.0));
                     }
-                }
                 // marque d'accrochage : marqueur commun à toutes les vues
                 crate::saisie::moteur_accrochage::peindre_marqueur(&painter, e, accroche);
                 // étiquettes : accrochage, longueur et angle depuis le point précédent
@@ -521,7 +516,6 @@ impl Application {
                     painter.galley(cadre.min + egui::vec2(5.0, 2.0), texte, Color32::WHITE);
                 }
             }
-        }
         // contours déjà fermés de l'élément horizontal en cours (parties et trémies)
         if self.dessin2d.edition_contour.is_some() || self.usage_dessin().is_some_and(|(u, _)| matches!(u, Usage::Surface | Usage::LimitePropriete | Usage::Cadrage)) {
             for (i, c) in self.dessin2d.dalle.iter().enumerate() {

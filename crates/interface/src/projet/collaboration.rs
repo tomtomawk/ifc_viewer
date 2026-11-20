@@ -143,11 +143,10 @@ impl Application {
             .collect()
     }
     pub(crate) fn demander_synchro(&mut self) {
-        if let Some(c) = &mut self.collaboration {
-            if let Err(e) = c.synchroniser(None, false) {
+        if let Some(c) = &mut self.collaboration
+            && let Err(e) = c.synchroniser(None, false) {
                 self.error = Some(e);
             }
-        }
     }
     pub(crate) fn menu_collaboration(&mut self, ui: &mut egui::Ui) {
         let cles = self.cles_collaboration();

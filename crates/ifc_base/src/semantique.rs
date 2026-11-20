@@ -321,11 +321,10 @@ impl IfcModel {
                 out.push(("Matériaux".into(), mats.join(" | ")));
             }
         }
-        if e.is("IFCBUILDINGSTOREY") {
-            if let Some(z) = e.arg(9).as_f64() {
+        if e.is("IFCBUILDINGSTOREY")
+            && let Some(z) = e.arg(9).as_f64() {
                 out.push(("Élévation".into(), format!("{} m", crate::step::format_real(z * self.length_scale))));
             }
-        }
         out
     }
 

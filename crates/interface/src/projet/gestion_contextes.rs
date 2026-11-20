@@ -169,11 +169,10 @@ impl Application {
                                 } else {
                                     ui.strong(jeu);
                                     if ui.small_button("Renommer").clicked() { etat.renommage_jeu = Some((jeu.clone(), jeu.clone())); }
-                                    if let Some(retenue) = entrees.iter().find(|e| &e.jeu == jeu && e.retenue) {
-                                        if ui.small_button("Adopter la retenue…").on_hover_text("Fin de l'étude : la variante retenue rejoint le modèle principal, les autres variantes du jeu et leurs éléments sont supprimés").clicked() {
+                                    if let Some(retenue) = entrees.iter().find(|e| &e.jeu == jeu && e.retenue)
+                                        && ui.small_button("Adopter la retenue…").on_hover_text("Fin de l'étude : la variante retenue rejoint le modèle principal, les autres variantes du jeu et leurs éléments sont supprimés").clicked() {
                                             etat.adoption = Some(retenue.cle.clone());
                                         }
-                                    }
                                     if ui.small_button("+ variante").on_hover_text("Ajouter une variante à ce jeu").clicked() {
                                         let n = entrees.iter().filter(|e| &e.jeu == jeu).count() + 1;
                                         action = Some(Action::Ajouter(format!("Variante {n}"), jeu.clone()));
@@ -193,11 +192,10 @@ impl Application {
                         egui::Grid::new(("grille_contextes", jeu)).num_columns(5).spacing([8.0, 4.0]).show(ui, |ui| {
                             for (rang, e) in entrees.iter().filter(|e| &e.jeu == jeu).enumerate() {
                                 ui.horizontal(|ui| {
-                                    if liste == ListeCreation::Variante {
-                                        if pictogramme(ui, Picto::Etoile, e.retenue, true).on_hover_text("Variante retenue : affichée dans toutes les vues qui n'en choisissent pas une autre").clicked() && !e.retenue {
+                                    if liste == ListeCreation::Variante
+                                        && pictogramme(ui, Picto::Etoile, e.retenue, true).on_hover_text("Variante retenue : affichée dans toutes les vues qui n'en choisissent pas une autre").clicked() && !e.retenue {
                                             action = Some(Action::Retenir(e.cle.clone()));
                                         }
-                                    }
                                     ui.radio_value(&mut creation, Some(e.cle.clone()), "").on_hover_text("Les prochaines créations vont dans cette entrée");
                                     let (affiche, filtre) = match liste {
                                         ListeCreation::Phase => (filtres.phase.as_ref() == Some(&e.cle), &mut filtres.phase),

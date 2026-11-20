@@ -561,11 +561,10 @@ impl Projet {
         };
         let (bas, haut) = p.bornes(self)?;
         for (valeur, choix, nom) in [(&p.phase, &self.phases, "Phase"), (&p.sous_projet, &self.sous_projets, "Sous-projet")] {
-            if let Some(v) = valeur {
-                if v.trim().is_empty() || (!choix.is_empty() && !choix.contains(v)) {
+            if let Some(v) = valeur
+                && (v.trim().is_empty() || (!choix.is_empty() && !choix.contains(v))) {
                     return Err(format!("{nom} introuvable."));
                 }
-            }
         }
         if p.variante.as_ref().is_some_and(|id| !self.variantes.iter().any(|v| &v.id == id)) {
             return Err("Variante introuvable.".into());

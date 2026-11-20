@@ -196,11 +196,10 @@ fn faces(murs: &[Vec<DVec2>]) -> Vec<Vec<DVec2>> {
         let k = ((p.x / cellule).floor() as i64, (p.y / cellule).floor() as i64);
         for dx in -1..=1 {
             for dy in -1..=1 {
-                if let Some(l) = grille.get(&(k.0 + dx, k.1 + dy)) {
-                    if let Some(&i) = l.iter().find(|&&i| sommets[i].distance(p) < 2.0 * EPS) {
+                if let Some(l) = grille.get(&(k.0 + dx, k.1 + dy))
+                    && let Some(&i) = l.iter().find(|&&i| sommets[i].distance(p) < 2.0 * EPS) {
                         return i;
                     }
-                }
             }
         }
         sommets.push(p);

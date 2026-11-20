@@ -481,14 +481,13 @@ impl Application {
             && document != self.document_actif && self.documents.contains_key(&document) {
             self.changer_document(document);
         }
-        if self.famille.as_ref().map(|e| e.document_famille.ordre) != Some(ordre) {
-            if let Some(k) = self.familles_inactives.iter().position(|e| e.document_famille.ordre == ordre) {
+        if self.famille.as_ref().map(|e| e.document_famille.ordre) != Some(ordre)
+            && let Some(k) = self.familles_inactives.iter().position(|e| e.document_famille.ordre == ordre) {
                 let ed = self.familles_inactives.remove(k);
                 if let Some(courante) = self.famille.replace(ed) {
                     self.familles_inactives.push(courante);
                 }
             }
-        }
         self.famille_active = self.famille.is_some();
     }
 
@@ -541,7 +540,7 @@ impl Application {
                 }
                 if annuler { ed.choisir_outil(OutilFamille::Selection); ed.message = None; }
             }
-            if let Some(m) = &ed.message { if rect.is_positive() { crate::socle::messages::consigne_vue(ui, rect, bas, m); } }
+            if let Some(m) = &ed.message && rect.is_positive() { crate::socle::messages::consigne_vue(ui, rect, bas, m); }
             image
         }).inner;
         self.rendre_vue_plane_famille(ui, image);

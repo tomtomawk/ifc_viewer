@@ -124,11 +124,10 @@ pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
         let cle = ((q.x / TOL).round() as i64, (q.y / TOL).round() as i64);
         for dx in -1..=1 {
             for dy in -1..=1 {
-                if let Some(&k) = index.get(&(cle.0 + dx, cle.1 + dy)) {
-                    if sommets[k].distance(q) < TOL {
+                if let Some(&k) = index.get(&(cle.0 + dx, cle.1 + dy))
+                    && sommets[k].distance(q) < TOL {
                         return k;
                     }
-                }
             }
         }
         sommets.push(q);

@@ -132,14 +132,13 @@ impl Application {
                 d.active = derniere;
             }
         }
-        if self.vues_ouvertes.len() > 1 {
-            if let Some(&derniere) = self.vues_ouvertes.last() {
+        if self.vues_ouvertes.len() > 1
+            && let Some(&derniere) = self.vues_ouvertes.last() {
                 self.memoriser_vue();
                 self.restaurer_vue(derniere);
                 self.vues_ouvertes.retain(|&vue| vue == derniere);
                 self.etats_vues.retain(|&vue, _| vue == derniere);
             }
-        }
     }
 
     pub(crate) fn onglets_vues(&mut self, ui: &mut egui::Ui) {
@@ -279,12 +278,11 @@ impl Application {
         if reduire {
             self.garder_derniere_vue_par_document();
         }
-        if let Some((id, vue)) = activer {
-            if est_famille(id) && let Some(ordre) = vue {
+        if let Some((id, vue)) = activer
+            && est_famille(id) && let Some(ordre) = vue {
                 if id == ONGLET_FAMILLE_PLANE { self.activer_famille(ordre); }
                 else { self.activer_vue_onglet_famille(ordre, ONGLET_FAMILLE - id); }
             }
-        }
         if let Some((id, vue)) = activer.filter(|o| !est_famille(o.0)) {
             self.famille_active = false;
             self.changer_document(id);

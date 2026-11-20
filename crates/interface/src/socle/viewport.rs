@@ -162,13 +162,11 @@ impl Application {
             };
 
             if mode_trace { self.fenetre_selection = None; }
-            if !mode_trace && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary) {
-                if let Some(debut) = ui.input(|i| i.pointer.press_origin()) {
-                    if pick(self, debut).is_none() {
+            if !mode_trace && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary)
+                && let Some(debut) = ui.input(|i| i.pointer.press_origin())
+                    && pick(self, debut).is_none() {
                         self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
                     }
-                }
-            }
             let rectangle_actif = self.fenetre_selection.is_some();
             // présélection au survol (cycle Tab) : recalculée quand la souris bouge
             let appui = ui.input(|i| i.pointer.any_down());
@@ -183,11 +181,10 @@ impl Application {
                 None => {}
             }
             // Orbite autour du point visé (vue 3D seulement).
-            if !mode_trace && !rectangle_actif && resp.drag_started_by(PointerButton::Middle) && ui.input(|i| i.modifiers.shift) && self.vue_3d() {
-                if let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
+            if !mode_trace && !rectangle_actif && resp.drag_started_by(PointerButton::Middle) && ui.input(|i| i.modifiers.shift) && self.vue_3d()
+                && let Some((_, p)) = resp.interact_pointer_pos().and_then(|pp| pick(self, pp)) {
                     self.camera.set_pivot(p);
                 }
-            }
             let shift = ui.input(|i| i.modifiers.shift);
             if !mode_trace && !rectangle_actif { self.voler(ui, &resp); } else { self.vol.actif = false; }
             for b in [PointerButton::Primary, PointerButton::Secondary, PointerButton::Middle] {
@@ -215,14 +212,12 @@ impl Application {
 
             if rectangle_actif {
                 let curseur = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
-                if let Some(p) = curseur {
-                    if let Some(f) = &mut self.fenetre_selection { f.fin = p.clamp(rect.min, rect.max); }
-                }
+                if let Some(p) = curseur
+                    && let Some(f) = &mut self.fenetre_selection { f.fin = p.clamp(rect.min, rect.max); }
                 let annuler = ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary);
                 if annuler { self.fenetre_selection = None; }
-                else if resp.drag_stopped_by(PointerButton::Primary) {
-                    if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
-                }
+                else if resp.drag_stopped_by(PointerButton::Primary)
+                    && let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
             } else if mode_attache {
                 // clic droit : retire le dernier mur choisi, sinon quitte l'outil (comme Échap)
                 if resp.clicked_by(PointerButton::Secondary) && !self.reculer_attache_toiture() { self.ruban_edition.annuler(); }
@@ -443,7 +438,7 @@ impl Application {
                 } else {
                     if ui.input(|i| i.modifiers.ctrl || i.modifiers.command) && self.natif.is_none() {
                         let mut ids = self.selection_multiple.clone();
-                        if ids.is_empty() { if let Some(sel) = self.selected { ids.push(sel); } }
+                        if ids.is_empty() && let Some(sel) = self.selected { ids.push(sel); }
                         if let Some(id) = id { if let Some(pos) = ids.iter().position(|x| *x == id) { ids.remove(pos); } else { ids.push(id); } }
                         self.select(ids.first().copied(), true);
                         self.selection_multiple = ids;
@@ -509,12 +504,11 @@ impl Application {
                 let point = resp.hover_pos().and_then(|q| self.point_tracage(q, rect, ui.input(|i| i.modifiers.shift), self.bim.depart_structure, alt));
                 if let Some((p, accroche)) = point {
                     if let Some(q) = self.ecran_plan(rect, p, alt) { marqueur(&painter, q, accroche); }
-                    if let Some(a) = self.bim.depart_structure {
-                        if let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
+                    if let Some(a) = self.bim.depart_structure
+                        && let (Some(x), Some(y)) = (self.ecran_plan(rect, a, alt), self.ecran_plan(rect, p, alt)) {
                             painter.line_segment([x, y], egui::Stroke::new(2.0, couleur));
                             painter.text(x.lerp(y, 0.5) + egui::vec2(0.0, -16.0), egui::Align2::CENTER_CENTER, modele::unite::unite().afficher((p[0]-a[0]).hypot(p[1]-a[1])), egui::FontId::proportional(13.0), couleur);
                         }
-                    }
                 }
             }
         }

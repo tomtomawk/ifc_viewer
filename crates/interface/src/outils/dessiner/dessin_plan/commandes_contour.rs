@@ -290,7 +290,7 @@ impl Application {
         let vert = Color32::from_rgb(20, 160, 60);
         let tirets = |pts: &[egui::Pos2], couleur: Color32| { painter.add(egui::Shape::dashed_line(pts, egui::Stroke::new(1.5, couleur), 6.0, 4.0)); };
         let u = modele::unite::unite();
-        let longueur = |l: f64| format!("{}", u.afficher(l.round()));
+        let longueur = |l: f64| u.afficher(l.round()).to_string();
         let mut valeur: Option<String> = None;
         // lignes de construction depuis le départ (ou le centre)
         if let Some(d) = e.depart && let Some(ed) = self.vers_ecran(rect, d) {

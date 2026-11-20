@@ -444,21 +444,19 @@ impl EditeurFamille {
         let Some(forme) = self.famille.extrusions.get_mut(k) else { return };
         if i == 0 || i > forme.profil.len() { return; }
         forme.profil.insert(i, forme.profil[i - 1].clone());
-        if let OperationForme::Guidage { guidage: modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
-            if !profil_fin.is_empty() && i <= profil_fin.len() {
+        if let OperationForme::Guidage { guidage: modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation
+            && !profil_fin.is_empty() && i <= profil_fin.len() {
                 let (a, b) = (profil_fin[i - 1], profil_fin[i % profil_fin.len()]);
                 profil_fin.insert(i, [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5]);
             }
-        }
     }
 
     fn supprimer_sommet_forme(&mut self, k: usize, i: usize) -> bool {
         let Some(forme) = self.famille.extrusions.get_mut(k) else { return false };
         if forme.profil.len() <= 3 || i >= forme.profil.len() { return false; }
         forme.profil.remove(i);
-        if let OperationForme::Guidage { guidage: modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation {
-            if i < profil_fin.len() { profil_fin.remove(i); }
-        }
+        if let OperationForme::Guidage { guidage: modele::famille::modelee::FormeGuidee::Raccordement { profil_fin, .. } | modele::famille::modelee::FormeGuidee::RaccordementChemin { profil_fin, .. } } = &mut forme.operation
+            && i < profil_fin.len() { profil_fin.remove(i); }
         true
     }
 

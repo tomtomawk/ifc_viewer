@@ -81,9 +81,8 @@ impl Terrain {
                 let s = [(b-a).perp_dot(p-a), (c-b).perp_dot(p-b), (a-c).perp_dot(p-c)];
                 let eps = 1e-8 * (b-a).length().max((c-b).length()).max((a-c).length()).max(1.0);
                 if s.iter().all(|x| *x > eps) || s.iter().all(|x| *x < -eps) { face = Some(i); break; }
-                if s.iter().all(|x| *x >= -eps) || s.iter().all(|x| *x <= eps) {
-                    if let Some(k) = s.iter().position(|x| x.abs() <= eps) { arete = Some((t[k], t[(k + 1) % 3])); }
-                }
+                if (s.iter().all(|x| *x >= -eps) || s.iter().all(|x| *x <= eps))
+                    && let Some(k) = s.iter().position(|x| x.abs() <= eps) { arete = Some((t[k], t[(k + 1) % 3])); }
             }
             let n = sommets.len();
             sommets.push(DVec3::from_array(point));

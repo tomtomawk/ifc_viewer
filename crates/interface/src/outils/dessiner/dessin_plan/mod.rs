@@ -771,8 +771,6 @@ impl Application {
                 ui.end_row();
             }
         });
-        if reglable && arete.is_none() {
-        }
         ui.separator();
         self.pente_defaut = pente_defaut;
         if redresser {
@@ -969,11 +967,10 @@ impl Application {
             self.poignee_axe.as_ref().and_then(|(id, ..)| self.natif.as_ref()?.0.barres.iter().find(|b| b.id == *id).map(|b| b.niveau.clone()))
         };
         let cle = format!("{usage:?}|{}|{altitude}|{niveau_poutre:?}|{exclu:?}|{selection}|{visibilite}|{plan_coupe:?}|{orientation:?}", vue.as_deref().unwrap_or(""));
-        if let Some((r, k, g)) = &self.dessin2d.geoms {
-            if *r == self.bim.revision && *k == cle {
+        if let Some((r, k, g)) = &self.dessin2d.geoms
+            && *r == self.bim.revision && *k == cle {
                 return g.clone();
             }
-        }
         let Some((p, _)) = &self.natif else { return Vec::new() };
         let plan = vue.as_ref().and_then(|id| p.vues.iter().find(|v| &v.id == id)).and_then(|v| match &v.genre {
             modele::GenreVue::Plan { niveau, .. } => Some(niveau.clone()),
@@ -1077,8 +1074,8 @@ impl Application {
         }
         // Le fond de plan est visible : ses contours projetés participent aussi aux
         // accrochages, sans rendre ses éléments sélectionnables ou modifiables.
-        if let Some(source)=vue.as_ref().and_then(|id|p.vues.iter().find(|v|&v.id==id)).and_then(|v|v.fond_plan.as_ref()).and_then(|id|p.vues.iter().find(|v|&v.id==id)) {
-            if let Some(scene)=&self.scene {
+        if let Some(source)=vue.as_ref().and_then(|id|p.vues.iter().find(|v|&v.id==id)).and_then(|v|v.fond_plan.as_ref()).and_then(|id|p.vues.iter().find(|v|&v.id==id))
+            && let Some(scene)=&self.scene {
                 let point=|v:glam::DVec3| (v+scene.origin).truncate()*1000.0;
                 for prim in self.primitives_fond_plan() {
                     match prim.forme {
@@ -1094,7 +1091,6 @@ impl Application {
                     if let Some(f)=a.forme.forme_2d() {g.extend(f.geoms());}
                 }
             }
-        }
         self.dessin2d.geoms = Some((self.bim.revision, cle, g.clone()));
         g
     }

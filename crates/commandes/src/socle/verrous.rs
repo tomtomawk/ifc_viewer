@@ -80,15 +80,14 @@ pub fn verifier(avant: &Projet, apres: &Projet) -> Result<(), String> {
     for (cle, v) in &a {
         if let Some(nom) = cle.strip_prefix("@/") {
             // relations par objet (contexte, implantation…) : seule la ligne de l'élément compte
-            if nom != "verrous" && carte_objet(nom) {
-                if let Some(m) = v.as_object() {
+            if nom != "verrous" && carte_objet(nom)
+                && let Some(m) = v.as_object() {
                     for id in ids.iter().filter(|id| m.contains_key(id.as_str())) {
                         if b.get(cle).and_then(|x| x.get(id.as_str())) != m.get(id.as_str()) {
                             touches.insert(id.clone());
                         }
                     }
                 }
-            }
             continue;
         }
         if cle.starts_with('@') {

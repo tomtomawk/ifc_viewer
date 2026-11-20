@@ -52,9 +52,9 @@ pub(crate) fn libelle_collections(a: &serde_json::Value, b: &serde_json::Value, 
             let (source, autre) = if nb < na { (va, vb) } else { (vb, va) };
             // objets de l'autre état par identifiant (une recherche linéaire par objet
             // coûtait 78 ms pour 1 920 murs)
-            let index: HashMap<String, &serde_json::Value> = autre.into_iter().flat_map(|v| v.iter()).filter_map(|o| Some((o.get(cle)?.to_string(), o))).collect();
+            let index: HashMap<String, &serde_json::Value> = autre.iter().flat_map(|v| v.iter()).filter_map(|o| Some((o.get(cle)?.to_string(), o))).collect();
             let noms: Vec<&str> = source
-                .into_iter()
+                .iter()
                 .flat_map(|v| v.iter())
                 .filter(|objet| {
                     let Some(id) = objet.get(cle) else {

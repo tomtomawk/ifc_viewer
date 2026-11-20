@@ -222,11 +222,9 @@ impl Application {
         if let Some(id) = hit
             .and_then(|i| s.objects.get(i as usize))
             .and_then(|o| self.cle_native(self.cible_clic(o.id)))
-        {
-            if let Some(c) = candidat(id) {
+            && let Some(c) = candidat(id) {
                 return Some(c);
             }
-        }
         if !self.point_dans_cadrage(rect, q) {
             return None;
         }
@@ -398,11 +396,10 @@ impl Application {
             (None, _, Some((id, l))) => segment(l[0], l[1], p.altitude_ajustable(id).unwrap_or(0.0), orange, true),
             _ => {}
         }
-        if let Some((id, _)) = &e.survol {
-            if e.reference.is_some() && e.reference.as_ref() != Some(id) {
+        if let Some((id, _)) = &e.survol
+            && e.reference.is_some() && e.reference.as_ref() != Some(id) {
                 ligne(id, bleu, false);
             }
-        }
         match &e.apercu {
             Some(Ok(a)) => {
                 if let Some((_, x, y, z)) = a.angle {

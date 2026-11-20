@@ -763,7 +763,7 @@ impl RubanEdition {
         let rangs = [false, true].iter().map(|e| types.iter().filter(|t| t.elevation == *e).count()).max().unwrap_or(1);
         let largeur_liste = selecteur::largeur_liste(ui, types.iter().map(|t| t.aide.as_str()), 90.0, 2, 120.0);
         selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE_DOUBLE, |ui| {
-            if let Some(e) = selecteur::onglets(ui, &[false, true], courant.elevation, 120.0, |e| sorte(e).into(), "", |p, r, e, c| icone_vue(p, r, e, c)) {
+            if let Some(e) = selecteur::onglets(ui, &[false, true], courant.elevation, 120.0, |e| sorte(e).into(), "", icone_vue) {
                 choix = types.iter().position(|t| t.elevation == e);
             }
             for (i, t) in types.iter().enumerate().filter(|(_, t)| t.elevation == courant.elevation) {

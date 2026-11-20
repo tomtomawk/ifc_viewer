@@ -154,11 +154,10 @@ impl Application {
         } else {
             ui.horizontal(contenu);
         }
-        if let Some(c) = commande {
-            if let Err(e) = self.executer_bim(c) {
+        if let Some(c) = commande
+            && let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
             }
-        }
         if let Some(m) = mur.filter(|_| dissocier || associer.is_some()) {
             let mut p = self.natif.as_ref().unwrap().0.clone();
             let r = match &associer {
@@ -172,11 +171,10 @@ impl Application {
         if let Some(sel) = selection {
             self.select(Some(sel), true);
         }
-        if let (Some(id), Some(cotes)) = (escalier, garde_corps) {
-            if let Err(e) = self.garde_corps_escalier(&id, &cotes) {
+        if let (Some(id), Some(cotes)) = (escalier, garde_corps)
+            && let Err(e) = self.garde_corps_escalier(&id, &cotes) {
                 self.error = Some(e);
             }
-        }
     }
 
     /// Priorité de jonction, ouverte depuis le bouton Jonctions du ruban (Modifier).
@@ -339,11 +337,10 @@ impl Application {
             }
         });
         self.bim.documentation = ouvert;
-        if let Some(c) = commande {
-            if let Err(e) = self.executer_bim(c) {
+        if let Some(c) = commande
+            && let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
             }
-        }
         if let Some(k) = export {
             let Some(path) = rfd::FileDialog::new().set_file_name("nomenclature.csv").add_filter("csv", &["csv"]).save_file() else {
                 return;
