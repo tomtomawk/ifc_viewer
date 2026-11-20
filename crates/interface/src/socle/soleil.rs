@@ -214,9 +214,25 @@ impl Application {
         Ok(nom)
     }
 
+    /// Après une annulation ou un rétablissement : la vue active reprend les réglages de
+    /// rendu du projet, ou, s'il n'en porte plus pour elle, ceux qu'elle avait à son
+    /// ouverture (sinon l'état de l'application réinscrirait le réglage annulé).
+    pub(crate) fn resynchroniser_rendu_vue(&mut self) {
+        let Some(id) = self.id_vue_rendu() else { return };
+        let enregistre = self.natif.as_ref().and_then(|(p, _)| p.rendus_vues.get(&id).cloned());
+        let ouverture = self.rendu_ouverture.as_ref().filter(|(v, _)| *v == id).map(|(_, r)| r.clone());
+        if let Some(r) = enregistre.or(ouverture) {
+            self.appliquer_rendu(&id, r);
+        }
+    }
+
     /// Applique les réglages de rendu enregistrés de la vue `id` (ouverture de la vue).
     pub(crate) fn appliquer_rendu_vue(&mut self, id: &str) {
         let Some(r) = self.natif.as_ref().and_then(|(p, _)| p.rendus_vues.get(id).cloned()) else { return };
+        self.appliquer_rendu(id, r);
+    }
+
+    fn appliquer_rendu(&mut self, id: &str, r: soleil::RenduVue) {
         if let Some(s) = r.style.as_deref().and_then(|n| StyleVisuel::TOUS.into_iter().find(|s| s.nom() == n)) {
             self.style = s;
         }

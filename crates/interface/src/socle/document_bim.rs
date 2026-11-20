@@ -36,6 +36,8 @@ impl Application {
                 .and_then(|_| historique.confirmer_n(retablir, nombre));
             self.historique = historique;
             if resultat.is_ok() {
+                // soleil, ciel, style de la vue : ceux du projet rétabli (A13)
+                self.resynchroniser_rendu_vue();
                 if let Some((projet, _)) = &self.natif {
                     let ids = projet.identifiants();
                     self.bim.selection.retain(|id| ids.contains(id));
