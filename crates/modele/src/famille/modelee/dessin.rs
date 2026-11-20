@@ -125,10 +125,17 @@ impl FamilleModelee {
     /// Formes tracées de la vue `vue` (lignes, polylignes avec leurs types de trait,
     /// splines, cercles, arcs), sans remplissage (`regions_resolues` le donne à part).
     pub fn traits_2d_affiches(&self, r: &Resolution, vue: VueEsquisse, detail: NiveauDetail) -> Vec<AnnotationForme> {
-        self.elements_2d_affiches(r, vue, detail).into_iter().filter(|e| e.forme.forme_2d().is_some()).map(|mut e| {
+        let mut out: Vec<AnnotationForme> = self.elements_2d_affiches(r, vue, detail).into_iter().filter(|e| e.forme.forme_2d().is_some()).map(|mut e| {
             if let AnnotationForme::Polyligne { remplissage, .. } = &mut e.forme { *remplissage = None; }
             e.forme
-        }).collect()
+        }).collect();
+        // traits du plan des maillages
+        if vue == VueEsquisse::Plan {
+            out.extend(self.traits_maillages_plan(r, detail).into_iter().map(|l| AnnotationForme::Polyligne {
+                points: l.into_iter().map(|(h, v)| [h, v]).collect(), fermee: false, courbures: Vec::new(), remplissage: None, traits: Vec::new(),
+            }));
+        }
+        out
     }
 
     /// Régions 2D remplies de la vue `vue` : contour fermé développé (h, v) et remplissage.

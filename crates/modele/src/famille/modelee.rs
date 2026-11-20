@@ -19,6 +19,8 @@ pub use guidage::FormeGuidee;
 mod dessin;
 mod orientation;
 mod visibilite;
+mod maillage;
+pub use maillage::MaillageFamille;
 pub use orientation::{intersection, tourner, PlanTourne, Repere, SupportForme};
 pub use dessin::{Element2DFamille, points_ancrables_mut};
 pub use visibilite::{Affichage, NiveauDetail, TypeVue, VisibiliteElement, PARTOUT};
@@ -395,6 +397,9 @@ pub struct FamilleModelee {
     pub volumes: Vec<Volume>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extrusions: Vec<FormeProfil>,
+    /// Maillages dans la boîte du type (géométrie libre et traits du plan).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub maillages: Vec<MaillageFamille>,
     /// Cotes de mesure (angle, diamètre, altimétrie) : annotations de l'éditeur, non
     /// pilotantes, dont les points suivent les plans de référence.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -600,7 +605,7 @@ impl FamilleModelee {
         let plan = |nom: &str, axe| PlanRef { nom: nom.into(), axe, position: 0.0, fixe: true, hote: None };
         Self { categorie, section_profil: None, elements_2d: Vec::new(), plans_tournes: Vec::new(), parametres: Vec::new(),
             plans: vec![plan("Origine X", AxePlan::X), plan("Origine Y", AxePlan::Y), plan("Origine Z", AxePlan::Z)],
-            contraintes: Vec::new(), volumes: Vec::new(), extrusions: Vec::new(), cotes_mesure: Vec::new(), couleur: couleur_defaut(), genre }
+            contraintes: Vec::new(), volumes: Vec::new(), extrusions: Vec::new(), maillages: Vec::new(), cotes_mesure: Vec::new(), couleur: couleur_defaut(), genre }
     }
 
     pub fn plan(&self, nom: &str) -> Option<&PlanRef> {
@@ -808,6 +813,7 @@ impl FamilleModelee {
                 materiau_nom: e.materiau_parametre.as_ref().and_then(|n| r.materiaux.get(n)).filter(|m| !m.is_empty()).cloned(),
             });
         }
+        out.extend(self.solides_maillages(r));
         out
     }
 
@@ -815,6 +821,9 @@ impl FamilleModelee {
     /// calculables, volumes non plats.
     pub fn valider(&self, largeur: f64, hauteur: f64, epaisseur: f64) -> Result<(), String> {
         self.valider_elements_2d()?;
+        for m in &self.maillages {
+            m.valider()?;
+        }
         let mut noms = std::collections::HashSet::new();
         for p in self.noms_plans() {
             if p.trim().is_empty() || !noms.insert(p) {
@@ -968,6 +977,7 @@ impl FamilleModelee {
                 volume("Vitrage", false, Materiau::Vitrage, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 21.0), ("Cadre ext", -21.0)], [("Dormant bas", 0.0), ("Dormant haut", 0.0)]),
             ],
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
+            maillages: Vec::new(),
             extrusions: vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
                 support: None,
@@ -1072,6 +1082,7 @@ impl FamilleModelee {
                 volume("Traverse haute", false, Materiau::Menuiserie, [("Dormant gauche", 0.0), ("Dormant droit", 0.0)], [("Cadre int", 0.0), ("Cadre ext", 0.0)], [("Dormant haut", 0.0), ("Haut", 0.0)]),
                 volume("Vantail", false, Materiau::Panneau, [("Dormant gauche", 2.0), ("Dormant droit", -2.0)], [("Cadre int", 0.0), ("Cadre int", 40.0)], [("Bas", 10.0), ("Dormant haut", -2.0)]),
             ],
+            maillages: Vec::new(),
             extrusions: Vec::new(),
             elements_2d: vec![
                 // vantail ouvert à 90° vers l'intérieur et arc de débattement

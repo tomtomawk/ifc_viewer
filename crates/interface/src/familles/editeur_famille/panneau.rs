@@ -434,6 +434,30 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
             }
     });
 
+    if !ed.famille.maillages.is_empty() {
+        egui::CollapsingHeader::new(RichText::new("Maillages").strong()).default_open(true).show(ui, |ui| {
+            // géométrie libre dans la boîte du type : visibilité et suppression, pas d'édition
+            let mut supprimer = None;
+            for (k, m) in ed.famille.maillages.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    let detail = if m.triangles.is_empty() { format!("{} traits en plan", m.traits_plan.len()) } else { format!("{} triangles", m.triangles.len()) };
+                    ui.label(format!("{} · {detail}", m.nom)).on_hover_text("Maillage dans la boîte du type (Largeur, Epaisseur, Hauteur) : suit les dimensions du type, ne s'édite pas sommet par sommet");
+                    if ui.small_button("−").on_hover_text("Supprimer le maillage").clicked() {
+                        supprimer = Some(k);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut m.visibilite.plan, "Plan");
+                    ui.checkbox(&mut m.visibilite.coupe, "Coupe");
+                    ui.checkbox(&mut m.visibilite.vue_3d, "3D");
+                });
+            }
+            if let Some(k) = supprimer {
+                ed.famille.maillages.remove(k);
+            }
+        });
+    }
+
     egui::CollapsingHeader::new(RichText::new("Éléments 2D").strong()).default_open(true).show(ui, |ui| {
         let mut supprimer = None;
         let mut changer_remplissage = None;

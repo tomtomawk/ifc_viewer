@@ -78,6 +78,7 @@ Objectif : une famille a un document, un éditeur et un format communs quelle qu
 | F5 | Validation des familles (ancien lot 7) : outils et leurs poignées, JSON courants, paramètres, résolution des champs, exports, profils, règle de rendu du plan ; 38 tests Revit ; recette visuelle avec plusieurs projets et familles | P1 | `crates/modele/src/famille/`, `crates/interface/src/familles/` |
 | F10 | Outils communs projet / familles, reste à relever (état non vérifié le 20/11/2026) : texte et libellés (placement, poignées, contenu, hauteur, champs dynamiques et aperçu ; ouvrir au projet les fonctions propres aux familles) ; inventaire des lignes, cercles, splines, rectangles et cotations avant de retirer les variantes, sans confondre gestes graphiques et règles métier | P2 | `crates/interface/src/familles/editeur_famille/`, `crates/interface/src/outils/` |
 | F6 | Formes guidées, reste : chemin tracé hors du plan de la vue (D), raccordement sur chemin fermé, outil « Tracer le chemin » non essayé à l'écran | P3 | `docs/EDITION.md`, `docs/MODELE.md` |
+| F11 | Maillages de famille : variation de forme par occurrence (l'ancien élément Arbre tirait une grappe différente pour chaque arbre ; un maillage appartient au type, tous les arbres d'un type sont identiques) ; import d'un maillage (OBJ, IFC) dans l'éditeur de familles | P3 | `crates/modele/src/famille/modelee/maillage.rs` |
 | F8 | Escaliers et garde-corps paramétriques par famille | P3 | `docs/EDITION.md` |
 
 ## 6. Structure du code

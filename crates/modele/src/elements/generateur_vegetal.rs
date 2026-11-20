@@ -49,9 +49,9 @@ pub const MATERIAU_FEUILLAGE: &str = "Feuillage";
 pub const MATERIAU_ECORCE: &str = "Écorce";
 
 /// Générateur pseudo-aléatoire déterministe (tiré de l'identifiant).
-struct Alea(u64);
+pub(crate) struct Alea(u64);
 impl Alea {
-    fn de(texte: &str) -> Self {
+    pub(crate) fn de(texte: &str) -> Self {
         let mut h: u64 = 0xcbf29ce484222325;
         for b in texte.bytes() {
             h = (h ^ b as u64).wrapping_mul(0x100000001b3);
@@ -59,19 +59,19 @@ impl Alea {
         Alea(h | 1)
     }
     /// Uniforme dans [0, 1[.
-    fn f(&mut self) -> f64 {
+    pub(crate) fn f(&mut self) -> f64 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;
         self.0 ^= self.0 << 17;
         (self.0 >> 11) as f64 / (1u64 << 53) as f64
     }
-    fn entre(&mut self, a: f64, b: f64) -> f64 {
+    pub(crate) fn entre(&mut self, a: f64, b: f64) -> f64 {
         a + (b - a) * self.f()
     }
 }
 
 /// Cylindre à `n` pans, de `bas` à `haut` (rayons r0 en bas, r1 en haut), sans fond.
-fn tronc(bas: DVec3, haut: f64, r0: f64, r1: f64, n: usize) -> Vec<[DVec3; 3]> {
+pub(crate) fn tronc(bas: DVec3, haut: f64, r0: f64, r1: f64, n: usize) -> Vec<[DVec3; 3]> {
     let mut out = Vec::new();
     for k in 0..n {
         let (a, b) = (k as f64 / n as f64 * std::f64::consts::TAU, (k + 1) as f64 / n as f64 * std::f64::consts::TAU);

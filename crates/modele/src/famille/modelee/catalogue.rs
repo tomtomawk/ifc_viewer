@@ -178,6 +178,7 @@ impl FamilleModelee {
                 v
             },
             // appui en pente : profil esquissé en coupe, extrudé sur la largeur
+            maillages: Vec::new(),
             extrusions: vec![FormeProfil { visibilite: Default::default(),
                 operation: OperationForme::Extrusion,
                 support: None,
@@ -327,6 +328,7 @@ impl FamilleModelee {
                 sans_plan(volume("Tige extérieure", M, [("Dormant droit", -72.0), ("Dormant droit", -58.0)], [("Vantail ext", 8.0), ("Vantail ext", 45.0)], [("Poignée", -7.0), ("Poignée", 7.0)])),
                 sans_plan(volume("Béquille extérieure", M, [("Dormant droit", -190.0), ("Dormant droit", -55.0)], [("Vantail ext", 45.0), ("Vantail ext", 60.0)], [("Poignée", -9.0), ("Poignée", 9.0)])),
             ],
+            maillages: Vec::new(),
             extrusions: Vec::new(),
             elements_2d: vec![
                 // plan : vantail ouvert à 90° (contour de son épaisseur, sans fond) et

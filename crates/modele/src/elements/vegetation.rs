@@ -1,5 +1,6 @@
-//! Végétation par familles (catégorie `Vegetation`) : géométrie graphique éditable
-//! (révolutions du houppier et du tronc, cercle en plan) et géométrie de rendu du style
+//! Végétation par familles (catégorie `Vegetation`) : géométrie graphique en maillages de
+//! famille (houppier en grappe et tronc, symbole de plan par essence :
+//! `dessin_vegetal`) mis à l'échelle du type, et géométrie de rendu du style
 //! Réaliste désignée par le paramètre texte `Rendu` de la famille (`arbre:feuillu`…), tirée
 //! d'un générateur intégré et ajustée à l'encombrement de la géométrie graphique.
 //!
@@ -43,86 +44,54 @@ pub fn rendu_reference(reference: &str, min: DVec3, max: DVec3, graine: &str) ->
     Some(remplacement_vegetal(essence, pied, max.z - min.z, d, graine))
 }
 
-/// Proportions d'une essence : hauteur du fût (fraction de la hauteur) et forme du
-/// houppier (vrai : ellipse ; faux : cône).
-fn forme(e: Essence) -> (f64, bool) {
-    match e {
-        Essence::Feuillu => (0.35, true),
-        Essence::Conifere => (0.12, false),
-        Essence::Fastigie => (0.1, true),
-    }
-}
-
 /// Famille d'un arbre (catégorie Végétation) : Largeur = diamètre du houppier, Hauteur =
-/// hauteur totale. Houppier et tronc en révolution autour de l'axe vertical, matériaux
-/// « Feuillage » et « Écorce » par paramètres, cercle du houppier en plan, référence de
-/// rendu de l'essence.
+/// hauteur totale. Trois maillages dans la boîte du type : houppier (matériau
+/// « Feuillage ») et tronc (« Écorce »), masqués en plan, et symbole de plan de l'essence ;
+/// référence de rendu de l'essence.
 pub fn famille_vegetal(e: Essence) -> FamilleModelee {
     use AxePlan::*;
-    let (fut, ellipse) = forme(e);
     let plan = |nom: &str, axe, fixe| PlanRef { nom: nom.into(), axe, position: 0.0, fixe, hote: None };
-    let dist = |a: &str, b: &str, v: String| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v, priorite: 9, ligne: None };
-    let face = |plan: &str| Face { plan: plan.into(), decalage: 0.0 };
-    let pt = |h: &str, v: &str| PointEsquisse { h: face(h), v: face(v) };
-    // hauteurs relatives dans le houppier (du fût au sommet)
-    let z = |t: f64| format!("{HAUTEUR}*{:.4}", fut + (1.0 - fut) * t);
+    let dist = |a: &str, b: &str, v: &str| Contrainte::Distance { a: a.into(), b: b.into(), valeur: v.into(), priorite: 9, ligne: None };
     let mut f = FamilleModelee::vide(CategorieFamille::Vegetation);
     f.plans = vec![
         plan("Centre", X, true), plan("Gauche", X, false), plan("Droite", X, false),
-        plan("R50", X, false), plan("R87", X, false), plan("Tronc", X, false),
         plan("Milieu", Y, true),
         PlanRef { nom: "Extérieur".into(), axe: Y, position: 0.0, fixe: false, hote: Some(Hote::Exterieur) },
         PlanRef { nom: "Intérieur".into(), axe: Y, position: 0.0, fixe: false, hote: Some(Hote::Interieur) },
-        plan("Bas", Z, true), plan("Haut", Z, false), plan("Fut", Z, false),
-        plan("Z07", Z, false), plan("Z25", Z, false), plan("Z50", Z, false), plan("Z75", Z, false), plan("Z93", Z, false),
+        plan("Bas", Z, true), plan("Haut", Z, false),
     ];
     f.contraintes = vec![
         Contrainte::Egalite { a: "Gauche".into(), m: "Centre".into(), b: "Droite".into(), priorite: 9, ligne: None },
-        dist("Gauche", "Droite", LARGEUR.into()),
-        dist("Centre", "R50", format!("{LARGEUR}*0.25")),
-        dist("Centre", "R87", format!("{LARGEUR}*0.433")),
-        dist("Centre", "Tronc", format!("{LARGEUR}*0.035")),
-        dist("Bas", "Haut", HAUTEUR.into()),
-        dist("Bas", "Fut", z(0.0)),
-        dist("Bas", "Z07", z(0.067)), dist("Bas", "Z25", z(0.25)), dist("Bas", "Z50", z(0.5)),
-        dist("Bas", "Z75", z(0.75)), dist("Bas", "Z93", z(0.933)),
+        dist("Gauche", "Droite", LARGEUR),
+        dist("Bas", "Haut", HAUTEUR),
     ];
     f.parametres = vec![
         Parametre { nom: PARAMETRE_RENDU.into(), formule: reference_essence(e).into(), portee: Portee::Type, genre: GenreParametre::Texte },
         Parametre { nom: MATERIAU_FEUILLAGE.into(), formule: MATERIAU_FEUILLAGE.into(), portee: Portee::Type, genre: GenreParametre::Materiau },
         Parametre { nom: MATERIAU_ECORCE.into(), formule: MATERIAU_ECORCE.into(), portee: Portee::Type, genre: GenreParametre::Materiau },
     ];
-    // demi-profils (côté droit de l'axe), plan d'élévation : h = X, v = Z
-    let houppier = if ellipse {
-        vec![pt("Centre", "Haut"), pt("R50", "Z93"), pt("R87", "Z75"), pt("Droite", "Z50"), pt("R87", "Z25"), pt("R50", "Z07"), pt("Centre", "Fut")]
-    } else {
-        vec![pt("Centre", "Haut"), pt("Droite", "Fut"), pt("Centre", "Fut")]
-    };
-    let tronc = vec![pt("Centre", "Bas"), pt("Tronc", "Bas"), pt("Tronc", "Z50"), pt("Centre", "Z50")];
-    // en plan, le cercle du houppier remplace la vue des solides
-    let vis = VisibiliteElement { plan: false, ..Default::default() };
-    let forme_rev = |nom: &str, profil, materiau: &str| FormeProfil {
-        operation: OperationForme::Revolution { revolution: Revolution { axe: [[0.0, 0.0], [0.0, 100.0]], debut: 0.0, angle: 360.0 } },
-        support: None,
-        nom: nom.into(),
-        vide: false,
-        materiau: Materiau::Menuiserie,
-        vue: VueEsquisse::Elevation,
-        profil,
-        profondeur: [face("Intérieur"), face("Extérieur")],
-        visible: None,
-        visibilite: vis,
-        materiau_parametre: Some(materiau.into()),
-    };
-    f.extrusions = vec![forme_rev("Houppier", houppier, MATERIAU_FEUILLAGE), forme_rev("Tronc", tronc, MATERIAU_ECORCE)];
-    // cercle du houppier : quatre quarts d'arc ancrés aux plans (courbure tan(90°/4))
-    let mut cercle = Element2DFamille::polyligne(VueEsquisse::Plan, vec![pt("Droite", "Milieu"), pt("Centre", "Extérieur"), pt("Gauche", "Milieu"), pt("Centre", "Intérieur")], true);
-    if let crate::documentation::AnnotationForme::Polyligne { courbures, .. } = &mut cercle.forme {
-        *courbures = vec![std::f64::consts::FRAC_PI_8.tan(); 4];
-    }
-    f.elements_2d = vec![cercle];
+    // en plan, le symbole remplace la vue des solides
+    let sans_plan = VisibiliteElement { plan: false, ..Default::default() };
+    let (tronc, houppier) = crate::elements::dessin_vegetal::maillage_boite(e);
+    let solide = |nom: &str, tris: Vec<[DVec3; 3]>, materiau: &str| MaillageFamille { materiau_parametre: Some(materiau.into()), visibilite: sans_plan, ..indexer(nom, &tris) };
+    f.maillages = vec![
+        solide("Houppier", houppier, MATERIAU_FEUILLAGE),
+        solide("Tronc", tronc, MATERIAU_ECORCE),
+        MaillageFamille { nom: "Symbole".into(), traits_plan: crate::elements::dessin_vegetal::symbole_plan(e), ..Default::default() },
+    ];
     f.couleur = e.couleur();
     f
+}
+
+/// Maillage indexé de triangles (sommets confondus fusionnés).
+fn indexer(nom: &str, tris: &[[DVec3; 3]]) -> MaillageFamille {
+    let mut index = std::collections::HashMap::new();
+    let mut sommets: Vec<[f32; 3]> = Vec::new();
+    let triangles = tris.iter().map(|t| t.map(|p| {
+        let s = [p.x as f32, p.y as f32, p.z as f32];
+        *index.entry(s.map(f32::to_bits)).or_insert_with(|| { sommets.push(s); sommets.len() as u32 - 1 })
+    })).collect();
+    MaillageFamille { nom: nom.into(), sommets, triangles, ..Default::default() }
 }
 
 /// Type par défaut (code) d'une essence : dimensions usuelles, famille `famille_vegetal`.
@@ -136,7 +105,7 @@ pub fn type_vegetal(e: Essence) -> TypeComposant {
 mod tests {
     use super::*;
 
-    /// Familles valides, solides de révolution non vides à la taille du type, rendu de la
+    /// Familles valides, maillages non vides à la taille du type, rendu de la
     /// référence ajusté à l'encombrement, références inconnues refusées.
     #[test]
     fn familles_vegetales() {
@@ -150,7 +119,9 @@ mod tests {
             assert!(!tris.is_empty());
             let (min, max) = tris.iter().flatten().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), p| (a.min(*p), b.max(*p)));
             assert!((max.z - min.z - t.hauteur).abs() < 1.0, "{e:?} hauteur {}", max.z - min.z);
-            assert!((max.x - min.x - t.largeur).abs() < t.largeur * 0.02, "{e:?} houppier {}", max.x - min.x);
+            assert!(max.x - min.x <= t.largeur + 1.0 && max.x - min.x > t.largeur * 0.8, "{e:?} houppier {}", max.x - min.x);
+            // symbole de plan : contour, tronc, croix
+            assert_eq!(t.modele.traits_maillages_plan(&r, NiveauDetail::Moyen).len(), 4);
             let rendu = rendu_reference(t.modele.reference_rendu().unwrap(), min, max, "a").unwrap();
             assert!(!rendu.feuillage.is_empty() && !rendu.bois.is_empty());
             // même géométrie pour la même graine

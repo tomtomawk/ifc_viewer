@@ -85,6 +85,7 @@ pub fn famille_table() -> FamilleModelee {
             pied("Pied 3", (g, 0.0), (e, 0.0)),
             pied("Pied 4", (d, 0.0), (e, 0.0)),
         ],
+        maillages: Vec::new(),
         extrusions: Vec::new(),
         elements_2d: vec![Element2DFamille::polyligne(VueEsquisse::Plan, vec![pt(g, 0.0, i, 0.0), pt(d, 0.0, i, 0.0), pt(d, 0.0, e, 0.0), pt(g, 0.0, e, 0.0), pt(g, 0.0, i, 0.0)], false)],
         cotes_mesure: Vec::new(),

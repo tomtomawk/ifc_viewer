@@ -403,7 +403,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                 let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
                 rendu.push(Some(rendu_materiau(&m, couleur, &mut table_apparences)));
                 motifs.push(Some([0, 0, 0, 2]));
-                visibilite.push(modele::famille::modelee::PARTOUT);
+                // vues 3D seulement : ni coupée ni vue dans les plans et les coupes
+                visibilite.push(modele::famille::modelee::VisibiliteElement { plan: false, coupe: false, ..Default::default() }.masque());
                 noms.push(Some(nom.into()));
                 parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
             }

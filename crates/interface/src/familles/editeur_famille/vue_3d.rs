@@ -41,7 +41,9 @@ impl Application {
         let ecran = Ecran3D { camera: &camera, rect };
         if ed.outil == OutilFamille::Selection && !ed.choix_face && let Some(pos) = response.interact_pointer_pos().filter(|_| response.clicked_by(PointerButton::Primary)) {
             let (origine, direction) = ecran.rayon(pos);
-            let selection = ed.solide_touche(&r, origine, direction).map(|(_, k, _)| if k < ed.famille.volumes.len() { SelectionFamille::Volume(k) } else { SelectionFamille::Extrusion(k - ed.famille.volumes.len()) });
+            // solides : volumes, formes à profil puis maillages (non sélectionnables à l'écran)
+            let (nv, ne) = (ed.famille.volumes.len(), ed.famille.extrusions.len());
+            let selection = ed.solide_touche(&r, origine, direction).and_then(|(_, k, _)| if k < nv { Some(SelectionFamille::Volume(k)) } else if k < nv + ne { Some(SelectionFamille::Extrusion(k - nv)) } else { None });
             ed.selectionner(selection.into_iter().collect());
         }
         let prims = ed.saisie_3d(ui, &response, &ecran, &r);
