@@ -598,6 +598,8 @@ pub struct Application {
     boite_active: bool,
     /// Tracé de la coupe à recalculer.
     coupe_dirty: bool,
+    /// Coupe de chaque objet du plan affiché, reprise pour les objets inchangés.
+    cache_coupe: moteur2d::CacheCoupe,
     /// Niveaux de la scène (voir `niveaux`), relevés à son installation.
     liste_niveaux: Vec<(Id, String, f32)>,
     /// Matériaux de la scène et éléments qui les portent (onglet Matériaux).
@@ -824,6 +826,7 @@ impl Application {
             boite: None,
             boite_active: false,
             coupe_dirty: true,
+            cache_coupe: Default::default(),
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
             materiau_edite: None,

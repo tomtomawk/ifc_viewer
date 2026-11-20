@@ -199,9 +199,22 @@ impl Raccords {
         let cellule = 0.5;
         let mut grille: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
         let case = |p: DVec3| (p / cellule).floor().as_i64vec3().to_array();
+        // tolérance de `prolongement` : un trait est inscrit dans toutes les cases à moins
+        // d'elle (la recherche ne lit que la case du bout)
+        const TOL: f64 = 1e-5;
         for (k, ([a, b], _)) in segments.iter().enumerate() {
-            // cases traversées (pas d'une demi-case) et leurs voisines
             let n = ((*b - *a).length() / (cellule * 0.5)).ceil().min(100_000.0) as usize + 1;
+            // trait aligné sur les axes (cas courant) : les cases de son emprise élargie de
+            // la tolérance, exactement
+            let (c0, c1) = (case(a.min(*b) - DVec3::splat(TOL)), case(a.max(*b) + DVec3::splat(TOL)));
+            let dims = [0, 1, 2].map(|i| (c1[i] - c0[i] + 1).max(1) as usize);
+            if dims.iter().product::<usize>() <= 2 * (n + 1) {
+                for x in c0[0]..=c1[0] { for y in c0[1]..=c1[1] { for z in c0[2]..=c1[2] {
+                    grille.entry([x, y, z]).or_default().push(k);
+                } } }
+                continue;
+            }
+            // trait oblique : cases traversées (pas d'une demi-case) et leurs voisines
             let mut vues = std::collections::HashSet::new();
             for i in 0..=n {
                 let c = case(a.lerp(*b, i as f64 / n as f64));
@@ -363,6 +376,9 @@ impl Dessin {
                 let u = (b - a).normalize_or_zero();
                 let (a2, b2) = (a - u * raccords.prolongement(a, b, h), b + u * raccords.prolongement(b, a, h));
                 let ([xa, ya], [xb, yb]) = (self.papier(a2), self.papier(b2));
+                // segment plus court que la précision écrite (bout de hachure coupé dans
+                // un angle) : omis
+                if (xa - xb).abs() < 5e-4 && (ya - yb).abs() < 5e-4 { continue; }
                 let _ = write!(d, "M{xa:.3} {ya:.3}L{xb:.3} {yb:.3}");
             }
             let _ = writeln!(s, r#"<path d="{d}" fill="none" stroke="{couleur}" stroke-width="{epaisseur:.3}" stroke-linecap="butt"{opacite}{element}/>"#);
@@ -377,6 +393,7 @@ impl Dessin {
                 let mut d = String::new();
                 for [a, b] in seg {
                     let ([xa, ya], [xb, yb]) = (self.papier(*a), self.papier(*b));
+                    if (xa - xb).abs() < 5e-4 && (ya - yb).abs() < 5e-4 { continue; }
                     let _ = write!(d, "M{xa:.3} {ya:.3}L{xb:.3} {yb:.3}");
                 }
                 let _ = writeln!(s, r#"<path d="{d}" fill="none" stroke="{couleur}" stroke-width="{epaisseur:.3}"{opacite}{element}/>"#);

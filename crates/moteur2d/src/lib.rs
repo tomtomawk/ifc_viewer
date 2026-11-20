@@ -16,7 +16,7 @@ pub use plans::{aretes_plage_haute, dans_plage_haute, fond_plan, limite_haute_pl
 
 pub mod dao;
 mod coupe;
-pub use coupe::coupe;
+pub use coupe::{coupe, coupe_avec_cache, CacheCoupe};
 mod vue;
 pub use vue::{cadrer_primitives, sommets, sommets_boite, vu};
 use noyau::motif::{GrilleMotif, Motif, hachures_plan};

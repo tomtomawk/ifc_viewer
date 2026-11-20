@@ -77,7 +77,10 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
             gmax = gmax.max(*v);
         }
     }
-    let origin = if gmin.x <= gmax.x { (gmin + gmax) * 0.5 } else { DVec3::ZERO };
+    // origine : centre de l'emprise arrondi à 100 m, stable d'une édition à l'autre (les
+    // sommets d'un objet inchangé restent identiques : cache de la coupe), assez proche
+    // pour garder la précision des f32
+    let origin = if gmin.x <= gmax.x { ((gmin + gmax) * 0.005).round() * 100.0 } else { DVec3::ZERO };
 
     let mut opaque: Vec<Vertex> = Vec::new();
     let mut transp: Vec<Vertex> = Vec::new();

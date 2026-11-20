@@ -9,7 +9,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage` (`com
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `lib.rs` | `Poche`, `TRAIT_FIN_MM`, `PAS_HACHURE_MM`, `decouper`, `section` ; ré-exports |
-| `coupe.rs` | `coupe` (poché, hachures, contours ; fusion des matériaux) |
+| `coupe.rs` | `coupe`, `coupe_avec_cache` et `CacheCoupe` (poché, hachures, contours ; coupe de chaque objet reprise tant que son empreinte ne change pas ; fusion des matériaux) |
 | `vue.rs` | `vu` (arêtes vues et cachées), `sommets`, `sommets_boite` (sommets GPU des coupes), `cadrer_primitives` |
 | `motifs.rs` | motif d'isolant (`ligne_isolation`) |
 | `dao.rs` | `Trace`, `OutilDessin`, `accrocher`, `lire_saisie`… |

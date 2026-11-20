@@ -444,3 +444,43 @@ fn coupe_et_vu_filtrent_les_elements_de_famille() {
     assert!(vues(a(NiveauDetail::Faible, TypeVue::Coupe)) > 0);
     assert!(vues(a(NiveauDetail::Eleve, TypeVue::Plan)) > 0);
 }
+
+/// P1 : coupe reprise du cache après le déplacement d'un mur : même résultat qu'une
+/// coupe complète, seuls les objets modifiés sont recoupés ; un changement d'échelle
+/// vide le cache.
+#[test]
+fn coupe_avec_cache_identique_et_partielle() {
+    use modele::creation::ParametresMur;
+    use modele::Projet;
+    let mut p = Projet::depuis_gabarit("Cache", &modele::gabarit::Gabarit::defaut());
+    for k in 0..6 {
+        let y = k as f64 * 3000.0;
+        p.ajouter_mur([0.0, y], [8000.0, y], &ParametresMur::default()).unwrap();
+    }
+    let chemin = std::path::Path::new("cache.modele.json");
+    let decrire = |prims: &[Primitive]| { let mut v: Vec<String> = prims.iter().map(|x| format!("{:?}", x.element)).collect(); v.sort(); v };
+    let s = maillage::depuis_natif(&p, chemin).unwrap();
+    let plan = Vec3::NEG_Z.extend((1.0 - s.origin.z) as f32);
+    let vis = vec![true; s.objects.len()];
+    let mut cache = super::CacheCoupe::default();
+    let a = super::coupe_avec_cache(&s, &vis, TOUT, plan, 100.0, Poche::Hachure, &mut cache);
+    assert_eq!(cache.recoupes, s.objects.len() - s.objects.iter().filter(|o| &*o.class == "IFCANNOTATION").count());
+    assert_eq!(decrire(&a), decrire(&super::coupe(&s, &vis, TOUT, plan, 100.0, Poche::Hachure)));
+    // même scène : rien n'est recoupé
+    let b = super::coupe_avec_cache(&s, &vis, TOUT, plan, 100.0, Poche::Hachure, &mut cache);
+    assert_eq!(cache.recoupes, 0);
+    assert_eq!(a.len(), b.len());
+    // un mur déplacé loin des autres : lui seul est recoupé
+    let mut q = p.clone();
+    if let modele::Axe::Droit { debut, fin } = &mut q.murs[5].axe { debut[1] += 5000.0; fin[1] += 5000.0; }
+    let s2 = maillage::depuis_natif(&q, chemin).unwrap();
+    // l'emprise a changé, l'origine (arrondie à 100 m) non
+    assert_eq!(s2.origin, s.origin);
+    let vis = vec![true; s2.objects.len()];
+    let c = super::coupe_avec_cache(&s2, &vis, TOUT, plan, 100.0, Poche::Hachure, &mut cache);
+    assert!(cache.recoupes >= 1 && cache.recoupes <= 2, "{} recoupés", cache.recoupes);
+    assert_eq!(decrire(&c), decrire(&super::coupe(&s2, &vis, TOUT, plan, 100.0, Poche::Hachure)));
+    // autre échelle : tout est recoupé
+    super::coupe_avec_cache(&s, &vec![true; s.objects.len()], TOUT, plan, 50.0, Poche::Hachure, &mut cache);
+    assert!(cache.recoupes >= 6);
+}

@@ -105,9 +105,12 @@ impl Application {
         let mut t_etape = std::time::Instant::now();
         // élévation : vue depuis sa ligne, rien n'est coupé (pas de poché)
         let elevation = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Élévation" && v.plan_coupe.is_some());
+        let (affichage, poche) = (self.affichage(), self.poche_style());
         let (mut tris, mut traits) = match (&self.scene, self.plan_coupe().filter(|_| !elevation)) {
             (Some(s), Some(p)) => {
-                let prims = moteur2d::coupe(s, &self.visible, self.affichage(), p, self.echelle, self.poche_style());
+                // objets inchangés depuis la dernière coupe : repris du cache (P1)
+                let prims = moteur2d::coupe_avec_cache(s, &self.visible, affichage, p, self.echelle, poche, &mut self.cache_coupe);
+                noyau::chrono::chrono_lent(&format!("coupe : coupe des objets ({} recoupés)", self.cache_coupe.recoupes), &mut t_etape);
                 moteur2d::sommets(&|e| s.object_of.get(&e).copied(), &prims, p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
             }
             _ => Default::default(),

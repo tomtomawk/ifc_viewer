@@ -675,6 +675,7 @@ impl Application {
         self.avant_saisie = None;
         self.vues_ouvertes.clear();
         self.etats_vues.clear();
+        self.cache_coupe = Default::default();
         self.abandonner_chargement();
         self.scene = None;
         self.rvt = None;
