@@ -76,13 +76,16 @@ impl Application {
         if let Some(composant) = p.composants.iter().find(|c| &c.id == id) {
             use crate::outils::modeliser::bim::widgets::{choix_type_composant, dupliquer_type_composant};
             let mut choisi = composant.type_composant.clone();
-            let choix = choix_type_composant(ui, &mut choisi, &p.types_composants);
+            // types de même nature (végétal ou non) que celui du composant
+            let vegetal = p.types_composants.iter().any(|t| t.id == choisi && t.vegetal());
+            let types: Vec<modele::TypeComposant> = p.types_composants.iter().filter(|t| t.vegetal() == vegetal).cloned().collect();
+            let choix = choix_type_composant(ui, &mut choisi, &types, vegetal);
             ui.separator();
             let mut q = p.clone();
             if let Some(source) = choix.dupliquer.and_then(|t| p.types_composants.iter().find(|x| x.id == t)) {
                 choisi = dupliquer_type_composant(&mut q, source);
             } else if choix.modifier.is_some() || choix.nouvelle {
-                self.ouvrir_editeur_composant(choix.modifier);
+                self.ouvrir_editeur_composant(choix.modifier, vegetal);
                 return None;
             } else if !choix.change {
                 return None;

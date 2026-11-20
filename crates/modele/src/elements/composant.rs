@@ -19,7 +19,7 @@ pub struct TypeComposant {
     pub modele: FamilleModelee,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Composant {
     pub id: String,
     pub nom: String,
@@ -90,6 +90,24 @@ pub fn famille_table() -> FamilleModelee {
         cotes_mesure: Vec::new(),
         couleur: [196, 160, 112],
         genre: crate::GenreOuverture::Libre,
+    }
+}
+
+/// Types livrés avec le code (table, végétaux) : proposés par les outils et ajoutés au
+/// projet à leur premier placement.
+pub fn types_par_defaut() -> Vec<TypeComposant> {
+    std::iter::once(type_table()).chain(crate::elements::arbre::Essence::TOUTES.into_iter().map(crate::elements::vegetation::type_vegetal)).collect()
+}
+
+/// Type livré avec le code portant cet identifiant.
+pub fn type_par_defaut(id: &str) -> Option<TypeComposant> {
+    types_par_defaut().into_iter().find(|t| t.id == id)
+}
+
+impl TypeComposant {
+    /// Famille de la catégorie Végétation (placée par l'outil Arbre).
+    pub fn vegetal(&self) -> bool {
+        self.modele.categorie == crate::famille::modelee::CategorieFamille::Vegetation
     }
 }
 

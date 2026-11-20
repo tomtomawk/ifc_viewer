@@ -27,8 +27,8 @@ pub(crate) struct EtatBim {
     pub(crate) depart_quadrillage: Option<[f64; 2]>,
     /// Composant à placer (type vide : type par défaut) et nom des pièces créées.
     pub(crate) composant: modele::Composant,
-    /// Arbre à placer (essence, hauteur, houppier, décalage).
-    pub(crate) arbre: modele::elements::arbre::Arbre,
+    /// Végétal à placer par l'outil Arbre : composant d'une famille Végétation.
+    pub(crate) vegetal: modele::Composant,
     pub(crate) altitude_limite: Option<f64>,
     pub(crate) nom_piece: String,
     /// Famille d'étiquette des pièces créées ; vide : standard.
@@ -76,7 +76,7 @@ impl Default for EtatBim {
             depart_structure: None,
             depart_quadrillage: None,
             composant: modele::Composant { id: String::new(), nom: String::new(), type_composant: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 },
-            arbre: modele::elements::arbre::Arbre { id: String::new(), nom: String::new(), niveau: String::new(), position: [0.0; 2], decalage: 0.0, essence: Default::default(), hauteur: 10_000.0, diametre: 7_000.0, asset: None },
+            vegetal: modele::Composant { type_composant: modele::elements::vegetation::type_vegetal(Default::default()).id, ..Default::default() },
             nom_piece: "Pièce".into(),
             altitude_limite: None,
             etiquette_piece: String::new(),
@@ -151,14 +151,15 @@ impl Application {
             self.error = Some(e);
         }
     }
-    /// Place le composant de l'outil au point `position`, au niveau de la vue.
+    /// Place le végétal de l'outil Arbre au point `position`, au niveau de la vue ; un type
+    /// livré avec le code entre au projet au premier placement.
     pub(crate) fn placer_arbre(&mut self, position: [f64; 2]) -> Result<(), String> {
-        let mut a = self.bim.arbre.clone();
-        a.id.clear();
-        a.nom.clear();
-        a.position = position;
-        a.niveau = self.niveau_vue_native().ok_or("Arbre : aucun niveau.")?;
-        self.executer_bim(commandes::Commande::Arbre { arbre: a })?;
+        let mut c = self.bim.vegetal.clone();
+        c.id.clear();
+        c.nom.clear();
+        c.position = position;
+        c.niveau = self.niveau_vue_native().ok_or("Arbre : aucun niveau.")?;
+        self.executer_bim(commandes::Commande::Composant { composant: c })?;
         Ok(())
     }
 

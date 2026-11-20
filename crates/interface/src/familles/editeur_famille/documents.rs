@@ -3,7 +3,7 @@ use super::*;
 
 impl Application {
     pub(crate) fn nouvelle_famille(&mut self) {
-        self.ouvrir_editeur_composant(None);
+        self.ouvrir_editeur_composant(None, false);
         if let Some(ed) = self.famille.as_mut() {
             ed.document_famille.autonome = true;
             ed.nom = "Nouvelle famille".into();
@@ -79,8 +79,8 @@ impl Application {
                     match argument {
                         "porte"=>self.ouvrir_editeur_famille_type(None,GenreOuverture::Porte),
                         "fenetre"=>self.ouvrir_editeur_famille_type(None,GenreOuverture::Fenetre),
-                        "composant"=>self.ouvrir_editeur_composant(None),
-                        a if a.starts_with("composant ")=>self.ouvrir_editeur_composant(Some(a[10..].trim().into())),
+                        "composant"=>self.ouvrir_editeur_composant(None, false),
+                        a if a.starts_with("composant ")=>self.ouvrir_editeur_composant(Some(a[10..].trim().into()), false),
                         "profil"=>self.ouvrir_profil(None),
                         "cartouche"=>self.editer_cartouche(None, None),
                         "etiquette"=>self.editer_famille_etiquette(None, None),
@@ -278,19 +278,22 @@ impl Application {
         }
     }
 
-    /// Éditeur sur un type de composant (None : nouvelle famille, sur la base de la table).
-    /// Une famille de composant a la catégorie « libre » ; l'épaisseur y est la profondeur.
-    pub(crate) fn ouvrir_editeur_composant(&mut self, t: Option<String>) {
+    /// Éditeur sur un type de composant (None : nouvelle famille, sur la base de la table,
+    /// ou d'un arbre feuillu si `vegetal`). Une famille de composant a le genre « libre » ;
+    /// l'épaisseur y est la profondeur.
+    pub(crate) fn ouvrir_editeur_composant(&mut self, t: Option<String>, vegetal: bool) {
         if let Some(ordre) = t.as_ref().and_then(|id| self.famille.iter().chain(&self.familles_inactives).find(|e| e.type_id.as_ref() == Some(id)).map(|e| e.document_famille.ordre)) {
             self.activer_famille(ordre);
             return;
         }
-        let defaut = modele::elements::composant::type_table();
         let (dans_projet, tc) = match t.as_ref().and_then(|id| self.natif.as_ref().and_then(|(p, _)| p.types_composants.iter().find(|x| &x.id == id))) {
             Some(x) => (true, x.clone()),
-            // le type par défaut n'entre dans le projet qu'à son premier placement ou enregistrement
-            None if t.as_deref() == Some(defaut.id.as_str()) => (false, defaut),
-            None => (false, modele::TypeComposant { id: String::new(), nom: "Nouveau composant".into(), ..defaut }),
+            None => match t.as_deref().and_then(modele::elements::composant::type_par_defaut) {
+                // type livré avec le code : n'entre au projet qu'à son premier placement ou enregistrement
+                Some(x) => (false, x),
+                None if vegetal => (false, modele::TypeComposant { id: String::new(), nom: "Nouveau végétal".into(), ..modele::elements::vegetation::type_vegetal(Default::default()) }),
+                None => (false, modele::TypeComposant { id: String::new(), nom: "Nouveau composant".into(), ..modele::elements::composant::type_table() }),
+            },
         };
         self.editeur_famille(None, None, tc.largeur, tc.hauteur, tc.profondeur, GenreOuverture::Fenetre);
         if let Some(ed) = self.famille.as_mut() {
@@ -298,7 +301,9 @@ impl Application {
             ed.nom = tc.nom;
             ed.famille = tc.modele;
             ed.famille.genre = GenreOuverture::Libre;
-            ed.famille.categorie = modele::famille::modelee::CategorieFamille::Composant;
+            if ed.famille.categorie != modele::famille::modelee::CategorieFamille::Vegetation {
+                ed.famille.categorie = modele::famille::modelee::CategorieFamille::Composant;
+            }
             if dans_projet { ed.marquer_enregistree(); } else { ed.reference.0 = String::new(); }
             ed.historique_neuf();
         }
@@ -370,13 +375,14 @@ impl Application {
             // famille de composant : son type (créé ou mis à jour), donc tous ses composants
             let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
             let t = modele::TypeComposant { id, nom: ed.nom.trim().into(), largeur: ed.largeur, profondeur: ed.epaisseur, hauteur: ed.hauteur, modele: ed.famille.clone() };
+            let t_vegetal = t.vegetal();
             let id = self.executer_bim(commandes::Commande::TypeComposant { type_composant: t })?.into_iter().next().unwrap_or_default();
             if let Some(ed) = self.famille.as_mut() {
                 ed.type_id = Some(id.clone());
                 ed.document_famille.document = self.document_actif; ed.document_famille.autonome = false;
                 ed.marquer_enregistree();
             }
-            self.bim.composant.type_composant = id.clone();
+            if t_vegetal { self.bim.vegetal.type_composant = id.clone() } else { self.bim.composant.type_composant = id.clone() }
             self.status = "Famille de composant chargée dans le projet.".into();
             return Ok(id);
         }

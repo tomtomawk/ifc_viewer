@@ -60,7 +60,7 @@ impl Application {
         } else { None };
         // arbre : placé comme une pièce (point au niveau de la vue)
         let arbre = placement == Some(false) && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Arbre);
-        let altitude_placement = self.altitude_vue_native() + if placement == Some(true) { self.bim.composant.decalage } else if arbre { self.bim.arbre.decalage } else { 0.0 };
+        let altitude_placement = self.altitude_vue_native() + if placement == Some(true) { self.bim.composant.decalage } else if arbre { self.bim.vegetal.decalage } else { 0.0 };
         let altitude_structure = structure.and_then(|_| {
             let p = &self.natif.as_ref()?.0;
             Some(p.niveau(&self.bim.barre.niveau)?.altitude + self.bim.barre.debut[2])
@@ -553,10 +553,12 @@ impl Application {
                 if let Some(q) = self.ecran_plan(rect, p, altitude_placement) { marqueur(&painter, q, accroche); }
                 if arbre {
                     // aperçu : cercle du houppier
-                    let a = &self.bim.arbre;
+                    let id = &self.bim.vegetal.type_composant;
+                    let largeur = self.natif.as_ref().and_then(|(x, _)| x.types_composants.iter().find(|t| &t.id == id).map(|t| t.largeur)).or_else(|| modele::elements::composant::type_par_defaut(id).map(|t| t.largeur));
+                    let rayon = largeur.unwrap_or(7000.0) / 2.0;
                     let pts: Vec<egui::Pos2> = (0..36).filter_map(|k| {
                         let ang = k as f64 / 36.0 * std::f64::consts::TAU;
-                        self.ecran_plan(rect, [p[0] + ang.cos() * a.diametre / 2.0, p[1] + ang.sin() * a.diametre / 2.0], altitude_placement)
+                        self.ecran_plan(rect, [p[0] + ang.cos() * rayon, p[1] + ang.sin() * rayon], altitude_placement)
                     }).collect();
                     if pts.len() == 36 {
                         painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.5, Color32::from_rgb(60, 140, 60))));

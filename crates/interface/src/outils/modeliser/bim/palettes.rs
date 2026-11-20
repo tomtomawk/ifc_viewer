@@ -9,76 +9,54 @@ use crate::zones::ruban::Outil;
 use commandes::Commande;
 
 impl Application {
-    /// Composant : type à placer (table par défaut ou famille du projet).
+    /// Composant : type à placer (table par défaut ou famille du projet, hors végétation).
     pub(crate) fn selecteur_composant(&mut self, ui: &mut egui::Ui) {
-        let Some((p, _)) = &self.natif else { return };
-        let mut types = p.types_composants.clone();
-        let defaut = modele::elements::composant::type_table();
-        if !types.iter().any(|t| t.id == defaut.id) {
-            types.insert(0, defaut);
+        self.selecteur_type_composant(ui, false);
+    }
+
+    /// Types proposés par l'outil Composant (`vegetal` faux) ou Arbre (vrai) : ceux du
+    /// projet, puis les types livrés avec le code qui n'y sont pas encore.
+    pub(crate) fn types_outil_composant(&self, vegetal: bool) -> Vec<modele::TypeComposant> {
+        let mut types: Vec<modele::TypeComposant> = self.natif.as_ref().map(|(p, _)| p.types_composants.iter().filter(|t| t.vegetal() == vegetal).cloned().collect()).unwrap_or_default();
+        for t in modele::elements::composant::types_par_defaut().into_iter().filter(|t| t.vegetal() == vegetal) {
+            if !types.iter().any(|x| x.id == t.id) { types.push(t); }
         }
-        let c = &mut self.bim.composant;
+        types
+    }
+
+    fn selecteur_type_composant(&mut self, ui: &mut egui::Ui, vegetal: bool) {
+        let types = self.types_outil_composant(vegetal);
+        let Some((p, _)) = &self.natif else { return };
+        let c = if vegetal { &mut self.bim.vegetal } else { &mut self.bim.composant };
         if !types.iter().any(|t| t.id == c.type_composant) {
             c.type_composant = types[0].id.clone();
         }
-        let choix = choix_type_composant(ui, &mut c.type_composant, &types);
+        let choix = choix_type_composant(ui, &mut c.type_composant, &types, vegetal);
         if let Some(source) = choix.dupliquer.and_then(|id| types.iter().find(|t| t.id == id)) {
             let mut q = p.clone();
             let id = dupliquer_type_composant(&mut q, source);
             match self.appliquer_projet(q) {
-                Ok(()) => self.bim.composant.type_composant = id,
+                Ok(()) => if vegetal { self.bim.vegetal.type_composant = id } else { self.bim.composant.type_composant = id },
                 Err(e) => self.error = Some(e),
             }
         } else if choix.modifier.is_some() || choix.nouvelle {
-            self.ouvrir_editeur_composant(choix.modifier);
+            self.ouvrir_editeur_composant(choix.modifier, vegetal);
         }
     }
 
     pub(crate) fn parametres_composant(&mut self, ui: &mut egui::Ui) {
         titre_parametres(ui, "Composant");
-        let c = &mut self.bim.composant;
-        egui::Grid::new("outil_composant").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-            ui.label("Rotation");
-            ui.add(egui::DragValue::new(&mut c.rotation).speed(1.0).suffix(" °"));
-            ui.end_row();
-            ui.label("Décalage");
-            ui.add(egui::DragValue::new(&mut c.decalage).speed(10.0).dimensions());
-            ui.end_row();
-        });
+        parametres_placement(ui, "outil_composant", &mut self.bim.composant);
     }
 
-    /// Arbre : essence (elle règle la hauteur et le houppier par défaut).
+    /// Arbre : famille de la catégorie Végétation (ses dimensions sont celles du type).
     pub(crate) fn selecteur_arbre(&mut self, ui: &mut egui::Ui) {
-        use modele::elements::arbre::Essence;
-        let a = &mut self.bim.arbre;
-        let avant = a.essence;
-        let lignes: Vec<crate::zones::ruban::selecteur::Ligne> = Essence::TOUTES.iter().map(|e| crate::zones::ruban::selecteur::Ligne {
-            nom: e.nom(), courant: *e == a.essence, etiquette: None, sous_titre: None, detail: None, actions: &[],
-        }).collect();
-        let titre = format!("Arbre · {}", a.essence.nom());
-        let vignette = |pe: &egui::Painter, r: egui::Rect, _: usize, c: Color32| crate::zones::ruban::vignettes::arbre(pe, r, c);
-        if let Some(k) = crate::zones::ruban::selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence : elle règle la hauteur et le houppier par défaut."), &lignes, None, Some(&vignette)).ligne {
-            a.essence = Essence::TOUTES[k];
-        }
-        if a.essence != avant {
-            (a.hauteur, a.diametre) = a.essence.dimensions();
-        }
+        self.selecteur_type_composant(ui, true);
     }
 
     pub(crate) fn parametres_arbre(&mut self, ui: &mut egui::Ui) {
         titre_parametres(ui, "Arbre");
-        let a = &mut self.bim.arbre;
-        egui::Grid::new("outil_arbre").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-            ui.label("Hauteur");
-            ui.add(egui::DragValue::new(&mut a.hauteur).speed(50.0).range(500.0..=60_000.0).dimensions());
-            ui.end_row();
-            ui.label("Houppier").on_hover_text("Diamètre du houppier");
-            ui.add(egui::DragValue::new(&mut a.diametre).speed(50.0).range(300.0..=40_000.0).dimensions());
-            ui.end_row();
-            ui.label("Décalage").on_hover_text("Hauteur du pied par rapport au niveau de la vue");
-            ui.add(egui::DragValue::new(&mut a.decalage).speed(10.0).dimensions());
-            ui.end_row();
-        });
+        parametres_placement(ui, "outil_arbre", &mut self.bim.vegetal);
     }
 
     /// Pièce : famille d'étiquette.
@@ -153,4 +131,16 @@ impl Application {
             self.error = Some(e);
         }
     }
+}
+
+/// Rotation et décalage du composant à placer.
+fn parametres_placement(ui: &mut egui::Ui, id: &str, c: &mut modele::Composant) {
+    egui::Grid::new(id).num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+        ui.label("Rotation");
+        ui.add(egui::DragValue::new(&mut c.rotation).speed(1.0).suffix(" °"));
+        ui.end_row();
+        ui.label("Décalage").on_hover_text("Hauteur par rapport au niveau de la vue");
+        ui.add(egui::DragValue::new(&mut c.decalage).speed(10.0).dimensions());
+        ui.end_row();
+    });
 }

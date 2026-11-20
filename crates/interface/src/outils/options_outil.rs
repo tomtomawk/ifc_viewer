@@ -28,10 +28,10 @@ impl Application {
                 dim(ui, "Décalage", &mut c.decalage);
             }
             Outil::Arbre => {
-                let a = &mut self.bim.arbre;
-                dim(ui, "Hauteur", &mut a.hauteur);
-                dim(ui, "Houppier", &mut a.diametre);
-                dim(ui, "Décalage", &mut a.decalage);
+                let c = &mut self.bim.vegetal;
+                ui.label("Rotation");
+                ui.add(egui::DragValue::new(&mut c.rotation).speed(1.0).suffix(" °"));
+                dim(ui, "Décalage", &mut c.decalage);
             }
             Outil::Piece => {
                 ui.label("Nom");

@@ -215,7 +215,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   fenêtre (dimensions du type), terrain, arbre (essence), composant. Tous ces
   sélecteurs ont le même aspect (en-tête « catégorie · nom », liste surgissante,
   vignette du type ; `zones/ruban/selecteur.rs`). Composant : Modifier (famille dans
-  l'éditeur), Dupliquer, « + Nouvelle famille de composant… » ; poutre : Dupliquer. Plusieurs éléments sélectionnés : un sélecteur par
+  l'éditeur), Dupliquer, « + Nouvelle famille de composant… » ; un composant végétal
+  (famille de la catégorie Végétation) ne propose que les types végétaux ; poutre : Dupliquer. Plusieurs éléments sélectionnés : un sélecteur par
   sorte d'élément présente (murs, murs composés, éléments horizontaux, portes et
   fenêtres, ouvertures libres, composants, terrains, garde-corps, arbres), même si
   la sélection en mélange plusieurs ; « Types variés » quand les types diffèrent, et
@@ -717,8 +718,7 @@ propre suivi) et les commandes du pilote restent synchrones.
 Le bandeau de dessin montre les réglages de l'outil actif : formes de tracé (mur,
 dalle, polyligne…), options de Modifier, et pour les autres outils les mêmes valeurs que
 Propriétés sur une ligne (cotes, altimétrie, hauteur du texte ou de l'étiquette, repère du
-quadrillage, dimensions du poteau, rotation et décalage du composant, dimensions de
-l'arbre, nom de la pièce, type de trait de la spline ou du cercle).
+quadrillage, dimensions du poteau, rotation et décalage du composant ou de l'arbre, nom de la pièce, type de trait de la spline ou du cercle).
 Les messages s'affichent en haut de la vue, sous le bandeau de dessin. Une information
 disparaît après 3 s. Une erreur reste affichée jusqu'à sa fermeture (×) ou jusqu'à
 l'erreur suivante, même si les commandes suivantes réussissent ; une information

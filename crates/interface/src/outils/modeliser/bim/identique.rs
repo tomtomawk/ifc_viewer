@@ -75,10 +75,16 @@ impl Application {
                 .definir_texte_option(Outil::GardeCorps, 2, g.remplissage.nom());
             self.ruban_edition.activer_outil(Outil::GardeCorps);
         } else if let Some(c) = p.composants.iter().find(|c| &c.id == id) {
-            self.bim.composant = c.clone();
-            self.ruban_edition.activer_outil(Outil::Composant);
+            if p.types_composants.iter().any(|t| t.id == c.type_composant && t.vegetal()) {
+                self.bim.vegetal = c.clone();
+                self.ruban_edition.activer_outil(Outil::Arbre);
+            } else {
+                self.bim.composant = c.clone();
+                self.ruban_edition.activer_outil(Outil::Composant);
+            }
         } else if let Some(a) = p.arbres.iter().find(|a| &a.id == id) {
-            self.bim.arbre = a.clone();
+            self.bim.vegetal.type_composant = modele::elements::vegetation::type_vegetal(a.essence).id;
+            self.bim.vegetal.decalage = a.decalage;
             self.ruban_edition.activer_outil(Outil::Arbre);
         } else if let Some(piece) = p.pieces.iter().find(|piece| &piece.id == id) {
             self.bim.nom_piece = piece.nom.clone();

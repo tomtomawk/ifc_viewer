@@ -255,7 +255,9 @@ l'éventuel motif de refus, pour contrôler la saisie graphique sans modifier le
 
 `ecran <x> <y>` donne la position écran d'un point du plan (mm) à l'altitude du niveau
 de la vue. `composant_outil [JSON]` lit ou règle le composant à placer
-(`type_composant`, `rotation`, `decalage`) et liste les types ; Espace (`touche Space`)
+(`type_composant`, `rotation`, `decalage`) et liste les types (ceux du projet, puis les
+types livrés avec le code : table et végétaux, ajoutés au projet au premier placement) ;
+l'outil `arbre` place un composant de la catégorie Végétation ; Espace (`touche Space`)
 tourne l'aperçu de 90°. L'outil `piece` crée une pièce au clic dans un espace fermé
 par des murs (refus si le contour n'est pas fermé).
 

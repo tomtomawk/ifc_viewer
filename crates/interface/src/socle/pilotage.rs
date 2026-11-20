@@ -55,8 +55,9 @@ impl Application {
                     if let Some(d) = v.get("decalage").and_then(Value::as_f64) { c.decalage = d; }
                 }
                 let mut types: Vec<Value> = self.natif.as_ref().map(|(p, _)| p.types_composants.iter().map(|t| json!({"id": t.id, "nom": t.nom})).collect()).unwrap_or_default();
-                let defaut = modele::elements::composant::type_table();
-                if !types.iter().any(|t| t["id"] == defaut.id.as_str()) { types.insert(0, json!({"id": defaut.id, "nom": defaut.nom})); }
+                for defaut in modele::elements::composant::types_par_defaut() {
+                    if !types.iter().any(|t| t["id"] == defaut.id.as_str()) { types.push(json!({"id": defaut.id, "nom": defaut.nom})); }
+                }
                 Ok(json!({"composant": self.bim.composant, "types": types}))
             })());
         }

@@ -143,6 +143,11 @@ impl ExecutionModeliser for Projet {
                         self.types_composants.push(defaut.clone());
                     }
                     composant.type_composant = defaut.id;
+                } else if !self.types_composants.iter().any(|t| t.id == composant.type_composant)
+                    && let Some(t) = modele::elements::composant::type_par_defaut(&composant.type_composant)
+                {
+                    // type livré avec le code (végétaux) : entre au projet au premier placement
+                    self.types_composants.push(t);
                 }
                 let t = self.types_composants.iter().find(|t| t.id == composant.type_composant).ok_or("Type de composant introuvable.")?;
                 if composant.nom.trim().is_empty() {

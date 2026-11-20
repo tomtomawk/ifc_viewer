@@ -189,7 +189,7 @@ impl Application {
         use CibleFamille as C;
         match self.cible_famille() {
             Some(C::Catalogue(F::Ouverture(id, genre))) => self.ouvrir_editeur_famille_type(Some(id), genre),
-            Some(C::Catalogue(F::Composant(id))) => self.ouvrir_editeur_composant(Some(id)),
+            Some(C::Catalogue(F::Composant(id))) => self.ouvrir_editeur_composant(Some(id), false),
             Some(C::Catalogue(F::Profil(id))) => self.ouvrir_profil(Some(&id)),
             Some(C::Catalogue(F::Etiquette(id))) => self.editer_famille_etiquette(Some(id), None),
             Some(C::Catalogue(F::Cartouche(id))) => self.editer_cartouche_catalogue(&id),

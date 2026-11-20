@@ -32,14 +32,18 @@ pub(crate) struct ChoixComposant {
 
 /// Sélecteur standard du type de composant : vignette aux proportions du type, Modifier
 /// (famille dans l'éditeur) et Dupliquer au survol, « + Nouvelle famille… ».
-pub(crate) fn choix_type_composant(ui: &mut egui::Ui, choix: &mut String, types: &[modele::TypeComposant]) -> ChoixComposant {
+/// `vegetal` : sélecteur de l'outil Arbre (familles Végétation).
+pub(crate) fn choix_type_composant(ui: &mut egui::Ui, choix: &mut String, types: &[modele::TypeComposant], vegetal: bool) -> ChoixComposant {
     use crate::zones::ruban::selecteur;
     let actions: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci"), (selecteur::ActionType::Modifier, "Modifier la famille dans l'éditeur ; « Charger dans le projet » met à jour tous ses composants")];
     let details: Vec<String> = types.iter().map(|t| format!("{} × {}", modele::unite::unite().afficher(t.largeur), modele::unite::unite().afficher(t.profondeur))).collect();
     let lignes: Vec<selecteur::Ligne> = types.iter().zip(&details).map(|(t, d)| selecteur::Ligne { nom: &t.nom, courant: &t.id == choix, etiquette: None, sous_titre: None, detail: Some(d.clone()), actions }).collect();
-    let titre = format!("Composant · {}", types.iter().find(|t| &t.id == choix).map_or("Choisir un type", |t| t.nom.as_str()));
-    let vignette = |pe: &egui::Painter, r: egui::Rect, k: usize, c: Color32| crate::zones::ruban::vignettes::composant(pe, r, types[k].largeur, types[k].profondeur, c);
-    let c = selecteur::simple(ui, &titre, None, &format!("{titre}\nType du composant."), &lignes, Some("Nouvelle famille de composant…"), Some(&vignette));
+    let (objet, ajout) = if vegetal { ("Arbre", "Nouvelle famille de végétal…") } else { ("Composant", "Nouvelle famille de composant…") };
+    let titre = format!("{objet} · {}", types.iter().find(|t| &t.id == choix).map_or("Choisir un type", |t| t.nom.as_str()));
+    let composant = |pe: &egui::Painter, r: egui::Rect, k: usize, c: Color32| crate::zones::ruban::vignettes::composant(pe, r, types[k].largeur, types[k].profondeur, c);
+    let arbre = |pe: &egui::Painter, r: egui::Rect, _: usize, c: Color32| crate::zones::ruban::vignettes::arbre(pe, r, c);
+    let vignette: &dyn Fn(&egui::Painter, egui::Rect, usize, Color32) = if vegetal { &arbre } else { &composant };
+    let c = selecteur::simple(ui, &titre, None, &format!("{titre}\nType du {}.", objet.to_lowercase()), &lignes, Some(ajout), Some(vignette));
     let mut r = ChoixComposant { nouvelle: c.ajout, ..Default::default() };
     match c.action {
         Some((k, selecteur::ActionType::Modifier)) => r.modifier = Some(types[k].id.clone()),
