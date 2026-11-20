@@ -67,8 +67,13 @@ impl Application {
     }
 
     /// Consigne, point accroché et aperçu de la ligne en cours.
-    pub(crate) fn apercu_quadrillage(&self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+    pub(crate) fn apercu_quadrillage(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
+        // repère pris : le réglage montre le suivant libre, celui qui sera créé (pas pendant
+        // la frappe dans le champ)
         let nom = self.repere_libre();
+        if !self.saisie_active && nom != self.ruban_edition.texte_option(Outil::Quadrillage, 0) {
+            self.ruban_edition.definir_texte_option(Outil::Quadrillage, 0, &nom);
+        }
         let consigne = match self.bim.depart_quadrillage {
             None => format!("Quadrillage « {nom} » : cliquer le départ de la ligne · Échap ou clic droit : quitter"),
             Some(_) => format!("Quadrillage « {nom} » : cliquer l'arrivée · Maj : orthogonal · Échap ou clic droit : reprendre le départ"),

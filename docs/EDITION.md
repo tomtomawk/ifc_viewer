@@ -702,6 +702,11 @@ propre suivi) et les commandes du pilote restent synchrones.
 
 ## Messages et journal
 
+Le bandeau de dessin montre les réglages de l'outil actif : formes de tracé (mur,
+dalle, polyligne…), options de Modifier, et pour les autres outils les mêmes valeurs que
+Propriétés sur une ligne (cotes, altimétrie, hauteur du texte ou de l'étiquette, repère du
+quadrillage, dimensions du poteau, rotation et décalage du composant, dimensions de
+l'arbre, nom de la pièce, type de trait de la spline ou du cercle).
 Les messages s'affichent en haut de la vue, sous le bandeau de dessin. Une information
 disparaît après 3 s. Une erreur reste affichée jusqu'à sa fermeture (×) ou jusqu'à
 l'erreur suivante, même si les commandes suivantes réussissent ; une information

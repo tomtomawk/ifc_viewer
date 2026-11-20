@@ -241,6 +241,22 @@ Type des prochains éléments horizontaux."), Some(&vignette));
     }
 
     fn options_outil(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) {
+        egui::Grid::new(("parametres_outil", outil)).num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| self.champs_outil(ui, outil, projet, true));
+    }
+
+    /// Champs de l'outil dans le bandeau de dessin : les mêmes que dans Propriétés, sur une
+    /// ligne. Faux si l'outil n'en a pas.
+    pub fn options_bandeau(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>) -> bool {
+        if champs(outil).is_empty() {
+            return false;
+        }
+        self.champs_outil(ui, outil, projet, false);
+        true
+    }
+
+    /// Libellé et réglage de chaque champ (grille de Propriétés ou ligne du bandeau :
+    /// `end_row` n'a d'effet que dans une grille).
+    fn champs_outil(&mut self, ui: &mut egui::Ui, outil: Outil, projet: Option<&modele::Projet>, grille: bool) {
         let fenetre = matches!(self.valeurs.get(&(Outil::Ouverture, 0)), Some(Valeur::Texte(t)) if t == "Fenêtre" || t == "Libre");
         let garde_corps_type = outil == Outil::GardeCorps && self.type_garde_corps.as_ref()
             .is_some_and(|id| projet.is_some_and(|p| p.types_garde_corps.iter().any(|t| &t.id == id)));
@@ -253,7 +269,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
             .filter(|(k, _)| outil != Outil::Escalier || *k != 1)
             .collect();
         let mut changement_ouverture = false;
-        egui::Grid::new(("parametres_outil", outil)).num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+        {
             for (k, champ) in &champs {
                 match champ {
                     Champ::Choix(nom, choix) => {
@@ -279,7 +295,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                         }
                     }
                     Champ::Case(nom) => {
-                        ui.label("");
+                        if grille { ui.label(""); }
                         let v = self.valeurs.entry((outil, *k)).or_insert_with(|| Valeur::Texte("non".into()));
                         if let Valeur::Texte(v) = v {
                             let mut coche = v == "oui";
@@ -296,7 +312,7 @@ Type des prochains éléments horizontaux."), Some(&vignette));
                 }
                 ui.end_row();
             }
-        });
+        }
         if changement_ouverture { self.ouverture_type_identique = None; }
     }
 }

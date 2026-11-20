@@ -688,14 +688,16 @@ impl Application {
         let actif = self.ruban_edition.outil().is_some() || edition;
         let options_dessin = !edition && self.usage_dessin().is_some_and(|(u, o)| u != Usage::Annotation || (o == OutilDessin::Polyligne && self.outil_cotation().is_none()));
         let options_modifier = !edition && self.a_options_modifier();
+        // autres outils (cotes, texte, placements, spline, cercle) : leurs réglages
+        let options_outil = !edition && !options_dessin && !options_modifier && self.a_options_outil();
         if self.natif.is_none() || (!actif && !options_modifier) {
             self.dessin2d.bas_barre = 0.0;
             return;
         }
         use crate::outils::bandeau::{bandeau, Action, Fin};
         let fin = if actif { Fin::COMPLETE } else { Fin::AUCUNE };
-        let retour = if edition || options_dessin || options_modifier {
-            let mut options = |ui: &mut egui::Ui| if edition || options_dessin { self.options_trace(ui); } else { self.options_modifier(ui, false); };
+        let retour = if edition || options_dessin || options_modifier || options_outil {
+            let mut options = |ui: &mut egui::Ui| if edition || options_dessin { self.options_trace(ui); } else if options_modifier { self.options_modifier(ui, false); } else { self.options_outil(ui); };
             bandeau(ui, rect, "commande", fin, Some(&mut options))
         } else {
             bandeau(ui, rect, "commande", fin, None)
