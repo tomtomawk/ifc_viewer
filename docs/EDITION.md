@@ -113,8 +113,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   la modification forme une seule étape d'historique. Échap abandonne la saisie et
   rétablit l'ancienne valeur (sans quitter l'outil en cours).
 - **Modéliser → Niveau** liste les niveaux (nom et altitude modifiables) ;
-  « Ajouter un niveau » crée « Niveau n » au-dessus du plus haut, à la hauteur du
-  dernier étage (3 m s'il n'y a qu'un niveau). **Quadrillage** : dans une vue en plan,
+  « Ajouter un niveau » crée « R+n » au-dessus du plus haut, à la hauteur du
+  dernier étage (3 m s'il n'y a qu'un niveau). Dans une coupe ou une élévation, la
+  ligne du futur niveau suit le curseur (accrochages, cote arrondie au centimètre) et
+  un clic le crée à cette altitude ; l'outil reste actif, Échap ou clic droit le quittent. **Quadrillage** : dans une vue en plan,
   un axe droit se trace en deux clics (accrochages, Maj : orthogonal) avec le repère
   du réglage, ou le suivant libre ; le repère suivant est proposé (A → B, 1 → 2) et
   l'outil reste actif ; Échap ou clic droit reprennent le départ, puis quittent.

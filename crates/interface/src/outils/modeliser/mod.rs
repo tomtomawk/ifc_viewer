@@ -6,3 +6,4 @@ pub(crate) mod escalier;
 pub(crate) mod poutres;
 pub(crate) mod liens;
 pub(crate) mod quadrillage;
+pub(crate) mod niveau;

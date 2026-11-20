@@ -68,7 +68,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
 | M18 | Épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
-| U2 | Revue des parcours du 20/11/2026, reste : le Niveau ne se place pas dans la vue (bouton « Ajouter un niveau » dans Propriétés) ; attendu : clic en coupe ou élévation à l'altitude voulue | P1 | `outils/modeliser/bim/palettes.rs` ; `docs/MODIFICATION.md` §1 « tout se fait graphiquement » |
 | U11 | Réglages retirés car jamais lus (U3, 20/11/2026), à réaliser s'ils sont voulus : Texte (ligne de repère avec flèche, alignement gauche / centre / droite), Étiquette (contenu : type, repère, matériau), Cote (mode orthogonal, décalage papier), Zone (motif, pas), Quadrillage en arc, Déplacer contraint horizontal / vertical (Maj contraint déjà aux axes) | P3 | `zones/ruban/mod.rs` (`champs`) ; question au §9 |
 | U4 | Revue des parcours : options au bandeau seulement pour les tracés et Modifier ; Cote, Altimétrie, Poteau, Composant, Arbre, Pièce, Spline, Cercle n'ont leurs réglages que dans Propriétés | P2 | `outils/dessiner/dessin_plan/saisie.rs` (`barre_commande`) |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |

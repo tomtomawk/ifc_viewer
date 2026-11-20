@@ -102,7 +102,9 @@ impl Application {
         });
     }
 
-    /// Niveau : liste des niveaux (nom, altitude) et ajout d'un niveau.
+    /// Niveau : liste des niveaux (nom, altitude) et ajout d'un niveau au-dessus du plus
+    /// haut ; dans une coupe ou une élévation, le niveau se place aussi au clic
+    /// (`outils/modeliser/niveau.rs`).
     pub(crate) fn parametres_niveau(&mut self, ui: &mut egui::Ui) {
         titre_parametres(ui, "Niveau");
         let Some((p, _)) = &self.natif else { return };
@@ -130,7 +132,7 @@ impl Application {
             _ => 3000.0,
         };
         let altitude = alts.last().map_or(0.0, |h| h + etage);
-        let nom = if p.niveaux.is_empty() { "RDC".to_string() } else { (1..).map(|k| format!("R+{k}")).find(|n| !p.niveaux.iter().any(|x| &x.nom == n)).unwrap_or_default() };
+        let nom = crate::outils::modeliser::niveau::nom_niveau_suivant(p);
         if ui.button("Ajouter un niveau").on_hover_text(format!("« {nom} » à {}", modele::unite::unite().afficher(altitude))).clicked() {
             commande = Some(Commande::Niveau { nom, altitude });
         }
