@@ -121,17 +121,17 @@ def run(exe):
             assert len(commande("documents")["documents"]) == 2
             commande("collaborer", str(root / "Projet partagé.bimpartage"))
             attendre(charge)
-            c = commande("collaboration_etat")
+            c = commande("collaboration_etat", "complet")
             assert c["copie"]["base"]
             mid = commande("projet_natif")["projet"]["murs"][0]["id"]
             commande("collaboration_reserver", [mid])
-            attendre(lambda: not commande("collaboration_etat")["synchronisation"])
-            assert any(b["actif"] for b in commande("collaboration_etat")["copie"]["base"]["baux"].values())
+            attendre(lambda: not commande("collaboration_etat", "complet")["synchronisation"])
+            assert any(b["actif"] for b in commande("collaboration_etat", "complet")["copie"]["base"]["baux"].values())
             commande("collaboration_liberer", [mid])
-            attendre(lambda: not commande("collaboration_etat")["synchronisation"])
-            assert not any(b["actif"] for b in commande("collaboration_etat")["copie"]["base"]["baux"].values())
+            attendre(lambda: not commande("collaboration_etat", "complet")["synchronisation"])
+            assert not any(b["actif"] for b in commande("collaboration_etat", "complet")["copie"]["base"]["baux"].values())
             commande("collaboration_instantane")
-            attendre(lambda: not commande("collaboration_etat")["synchronisation"])
+            attendre(lambda: not commande("collaboration_etat", "complet")["synchronisation"])
             # Deux vrais clients concurrents : archiver puis réappliquer une proposition.
             with socket.socket() as s:
                 s.bind(("127.0.0.1",0))
@@ -158,32 +158,32 @@ def run(exe):
             for dx in [50,100]:
                 commande2("editer",{"action":"deplacer","ids":[murs_locaux[-1]],"delta":[dx,0,0]})
             commande("collaboration_sync")
-            attendre(lambda:not commande("collaboration_etat")["synchronisation"])
+            attendre(lambda:not commande("collaboration_etat", "complet")["synchronisation"])
             commande2("collaboration_sync")
-            attendre(lambda:not commande2("collaboration_etat")["synchronisation"])
-            assert not commande2("collaboration_etat")["copie"]["conflits"]
+            attendre(lambda:not commande2("collaboration_etat", "complet")["synchronisation"])
+            assert not commande2("collaboration_etat", "complet")["copie"]["conflits"]
             assert len(commande2("projet_natif")["projet"]["murs"])==avant+6
             commande("collaboration_sync")
-            attendre(lambda:not commande("collaboration_etat")["synchronisation"])
+            attendre(lambda:not commande("collaboration_etat", "complet")["synchronisation"])
             assert len(commande("projet_natif")["projet"]["murs"])==avant+6
             niveau=commande("projet_natif")["projet"]["niveaux"][0]
             for altitude,choix in [(111,"acceptee"),(333,"locale")]:
                 commande("editer",{"action":"modifier_niveau","id":niveau["id"],"nom":niveau["nom"],"altitude":altitude})
                 commande2("editer",{"action":"modifier_niveau","id":niveau["id"],"nom":niveau["nom"],"altitude":altitude+111})
                 commande("collaboration_sync")
-                attendre(lambda:not commande("collaboration_etat")["synchronisation"])
+                attendre(lambda:not commande("collaboration_etat", "complet")["synchronisation"])
                 commande2("collaboration_sync")
-                attendre(lambda:not commande2("collaboration_etat")["synchronisation"])
-                conflits=commande2("collaboration_etat")["copie"]["conflits"]
+                attendre(lambda:not commande2("collaboration_etat", "complet")["synchronisation"])
+                conflits=commande2("collaboration_etat", "complet")["copie"]["conflits"]
                 assert conflits,"Conflit numérique attendu entre deux copies"
                 assert commande2("projet_natif")["projet"]["niveaux"][0]["altitude"]==altitude+111,"La vue doit garder la proposition locale"
                 for tid in conflits:
                     commande2("collaboration_resoudre",{"transaction":tid,"choix":choix})
-                assert not commande2("collaboration_etat")["copie"]["conflits"]
+                assert not commande2("collaboration_etat", "complet")["copie"]["conflits"]
                 commande2("collaboration_sync")
-                attendre(lambda:not commande2("collaboration_etat")["synchronisation"])
+                attendre(lambda:not commande2("collaboration_etat", "complet")["synchronisation"])
                 commande("collaboration_sync")
-                attendre(lambda:not commande("collaboration_etat")["synchronisation"])
+                attendre(lambda:not commande("collaboration_etat", "complet")["synchronisation"])
                 attendu=altitude if choix=="acceptee" else altitude+111
                 assert commande("projet_natif")["projet"]["niveaux"][0]["altitude"]==attendu
             commande2("quitter","abandonner")

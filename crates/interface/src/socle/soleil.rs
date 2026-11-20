@@ -39,13 +39,21 @@ impl Application {
     }
 
     /// Enregistre les réglages de rendu de la vue active dans le projet s'ils ont changé
-    /// (une étape d'annulation).
+    /// (une étape d'annulation). Une vue sans réglages enregistrés n'en reçoit qu'après un
+    /// changement par l'utilisateur.
     pub(crate) fn enregistrer_rendu_vue(&mut self) {
         if self.saisie_active || self.partage_en_cours { return; }
         let Some(id) = self.id_vue_rendu() else { return };
         let rendu = self.rendu_vue_courant();
+        // première image de la vue : son rendu est retenu, rien n'est écrit (ouvrir un
+        // projet ou une vue ne le modifie pas)
+        if self.rendu_ouverture.as_ref().is_none_or(|(v, _)| *v != id) {
+            self.rendu_ouverture = Some((id, rendu));
+            return;
+        }
+        let inchange = self.rendu_ouverture.as_ref().is_some_and(|(_, r)| *r == rendu);
         let Some((projet, _)) = &mut self.natif else { return };
-        if projet.rendus_vues.get(&id) == Some(&rendu) {
+        if projet.rendus_vues.get(&id) == Some(&rendu) || (inchange && !projet.rendus_vues.contains_key(&id)) {
             return;
         }
         let avant = projet.clone();

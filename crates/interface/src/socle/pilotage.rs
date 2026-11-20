@@ -26,6 +26,8 @@ impl Application {
                     use moteur2d::dao::OutilDessin as D;
                     let forme=match argument {"ligne"|"selection"=>D::Ligne,"rectangle"=>D::Rectangle,"arc"=>D::Arc,"cercle"=>D::Cercle,_=>return Err("mur_trace ligne|rectangle|arc|cercle|selection".into())};
                     self.activer_outil_pilote("mur")?;
+                    // début de commande traité tout de suite : le mode choisi ci-dessous survit
+                    self.changer_commande();
                     self.ruban_edition.forme_mur=forme;
                     self.ruban_edition.suivre_trait=argument=="selection";
                     self.terminer_edition_axe();

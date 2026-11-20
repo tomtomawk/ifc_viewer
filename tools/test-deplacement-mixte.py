@@ -87,7 +87,8 @@ def run(exe):
                 assert commande("famille_document")["fichier"]["famille"] == avant
                 glisser((740, 511), (760, 490))
                 apres = commande("famille_document")["fichier"]["famille"]
-                assert apres["elements_2d"][0]["forme"]["centre"][0] > 20
+                # le gabarit de composant a déjà un élément 2D (symbole) : viser le cercle tracé
+                assert [e for e in apres["elements_2d"] if e["forme"]["forme"] == "cercle"][0]["forme"]["centre"][0] > 20
                 assert apres["volumes"][0]["min"][0]["decalage"] > avant["volumes"][0]["min"][0]["decalage"] + 20
                 commande("annuler")
                 assert commande("famille_document")["fichier"]["famille"] == avant

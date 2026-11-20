@@ -150,15 +150,12 @@ impl Application {
         self.bim.selection.clear();
     }
 
-    /// Clavier du dessin 2D, lu avant les raccourcis : chiffres et `@ < , ; . -` dans la
-    /// ligne de commande, F fermer, Entrée ou Espace valider (vide : terminer),
-    /// Retour arrière, Échap (saisie, puis tracé en cours, puis outil).
-    pub(crate) fn clavier_dessin(&mut self, ctx: &egui::Context) {
+    /// Changement de commande (outil du ruban) : la précédente s'arrête et son tracé en
+    /// cours est abandonné ; les modes propres à un outil sont remis à zéro. Appelé à chaque
+    /// image, et par le pilote juste après avoir activé un outil (ses réglages suivants,
+    /// comme « Suivre un trait », ne doivent pas être remis à zéro à l'image d'après).
+    pub(crate) fn changer_commande(&mut self) {
         let cle = self.ruban_edition.outil();
-        let segments = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) { self.dessin2d.trace.as_ref().map_or(0, |t| t.points.len().saturating_sub(1)).max(self.dessin2d.edition_contour.as_ref().filter(|e| e.creation == Some(Usage::Escalier)).map_or(0, |_| self.dessin2d.dalle.first().map_or(0, |c| c.len().saturating_sub(1)))) } else { 0 };
-        let courante = self.dessin2d.justification_escalier;
-        self.dessin2d.just_segments.truncate(segments);
-        while self.dessin2d.just_segments.len() < segments { self.dessin2d.just_segments.push(courante); }
         if cle != self.dessin2d.commande_cle || (cle.is_none() && self.dessin2d.historique_depart.is_some()) {
             // nouvelle commande : la précédente s'arrête, son tracé en cours est abandonné
             if cle.is_some() && self.dessin2d.commande_cle.is_some()
@@ -185,6 +182,17 @@ impl Application {
             if cle != Some(crate::zones::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }
             self.dessin2d.historique_depart = cle.map(|_| self.profondeur_historique());
         }
+    }
+
+    /// Clavier du dessin 2D, lu avant les raccourcis : chiffres et `@ < , ; . -` dans la
+    /// ligne de commande, F fermer, Entrée ou Espace valider (vide : terminer),
+    /// Retour arrière, Échap (saisie, puis tracé en cours, puis outil).
+    pub(crate) fn clavier_dessin(&mut self, ctx: &egui::Context) {
+        let segments = if self.usage_dessin().is_some_and(|(u, _)| u == Usage::Escalier) { self.dessin2d.trace.as_ref().map_or(0, |t| t.points.len().saturating_sub(1)).max(self.dessin2d.edition_contour.as_ref().filter(|e| e.creation == Some(Usage::Escalier)).map_or(0, |_| self.dessin2d.dalle.first().map_or(0, |c| c.len().saturating_sub(1)))) } else { 0 };
+        let courante = self.dessin2d.justification_escalier;
+        self.dessin2d.just_segments.truncate(segments);
+        while self.dessin2d.just_segments.len() < segments { self.dessin2d.just_segments.push(courante); }
+        self.changer_commande();
         if self.suivi_trait_actif() {
             let usage = self.usage_dessin().map_or(Usage::Mur, |(u, _)| u);
             if self.dessin2d.dernier_usage != Some(usage) { self.dessin2d.vider_contours(); }

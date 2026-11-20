@@ -637,6 +637,9 @@ pub struct Application {
     saisie_annulee: bool,
     /// Échap a abandonné une saisie à cette image (champs à tampon propre).
     pub(crate) echap_saisie: bool,
+    /// Rendu de la vue active à sa première image (`enregistrer_rendu_vue`) : une vue sans
+    /// réglages propres ne les reçoit que si l'utilisateur les change.
+    pub(crate) rendu_ouverture: Option<(String, modele::soleil::RenduVue)>,
     motif_choisi: Option<String>,
     nom_motif_saisi: String,
     tirets_saisis: (String, Vec<String>),
@@ -830,6 +833,7 @@ impl Application {
             avant_saisie: None,
             saisie_annulee: false,
             echap_saisie: false,
+            rendu_ouverture: None,
             motif_choisi: None,
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),

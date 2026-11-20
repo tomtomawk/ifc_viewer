@@ -130,10 +130,13 @@ def run(exe, captures):
             commande("famille_nouvelle","fenetre")
             f0=commande("famille_document")["fichier"]
             etats={}
+            cadres={}
+            proche=lambda a,b:abs(a["distance"]-b["distance"])<=1e-3*max(1.,b["distance"]) and all(abs(u-v)<=1e-3 for u,v in zip(a["cible"],b["cible"]))
             for vue in ["elevation","plan","coupe"]:
                 commande("famille_navigation",vue)
                 time.sleep(.3)
                 n=commande("famille_navigation")
+                cadres[vue]=n
                 d0=n["distance"]
                 x0,y0,x1,y1=n["rectangle"];x,y=(x0+x1)/2,(y0+y1)/2
                 saisie([{"action":"defiler","x":x+40,"y":y,"dx":0,"dy":200}])
@@ -149,21 +152,21 @@ def run(exe, captures):
                 commande("famille_navigation",vue)
                 actuel=commande("famille_navigation")
                 assert actuel["distance"]==n["distance"] and actuel["cible"]==n["cible"]
+            # F recadre la vue (caméra de la vue plane : distance et cible du cadrage)
             saisie([{"action":"touche","touche":"F"}])
             n=commande("famille_navigation")
-            assert n["zoom"]==1.0 and n["decalage"]==[0.,0.],n
+            assert proche(n,cadres["coupe"]),(n,cadres["coupe"])
             # Le même geste réinitialise aussi le cadrage des vues de menuiserie.
             for vue in ["elevation","plan","coupe"]:
                 commande("famille_navigation",vue)
                 n=commande("famille_navigation")
                 x0,y0,x1,y1=n["rectangle"];x,y=(x0+x1)/2,(y0+y1)/2
                 saisie([{"action":"defiler","x":x,"y":y,"dx":0,"dy":200}])
-                attendre(lambda:commande("famille_navigation")["zoom"]>1.05)
-                time.sleep(.3)
-                time.sleep(.4)
+                attendre(lambda:commande("famille_navigation")["distance"]<cadres[vue]["distance"]/1.05)
+                time.sleep(.7)
                 saisie([{"action":"clic","x":x,"y":y,"bouton":"milieu"},{"action":"clic","x":x,"y":y,"bouton":"milieu"}])
                 n=commande("famille_navigation")
-                assert n["zoom"]==1.0 and n["decalage"]==[0.,0.],n
+                assert proche(n,cadres[vue]),(vue,n,cadres[vue])
             assert commande("famille_document")["fichier"]==f0
             commande("famille_fermer","abandonner")
             commande("quitter","abandonner");p.wait(timeout=15)
