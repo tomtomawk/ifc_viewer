@@ -26,7 +26,8 @@ JSON avec `ok`.
   `collaboration_sync` échange les transactions.
 - `etat` rend `instance` (`pid`, `port`).
 - Mode arrière-plan : `BIMEDIT_ARRIERE_PLAN=1` crée la fenêtre sans l'activer, hors de
-  l'écran et hors de la barre des tâches. Elle reste rendue et pilotable (saisies egui,
+  l'écran (sauf sous Linux : sous X11 une fenêtre hors de l'écran ne reçoit pas les clics
+  simulés) et hors de la barre des tâches. Elle reste rendue et pilotable (saisies egui,
   captures). Les scripts `tools/test*.py` l'activent par défaut ; `BIMEDIT_ARRIERE_PLAN=0`
   pour voir la fenêtre. Passé au pont MCP (bloc `env` de sa configuration), il s'applique
   aux instances que le pont lance.
@@ -230,7 +231,7 @@ Raccourcis existants :
   `poche hachure|plein|vide` ; `echelle denominateur` ; `niveau_detail [faible|moyen|eleve]`
   (lit ou règle le niveau de détail de la vue ouverte, enregistré dans la vue native ;
   réponse `niveau_detail`, `type_vue`).
-- `capture vue|fenetre [LxH] <chemin.png>` ; `taille largeur hauteur` ; `reduire` ; `restaurer`.
+- `capture vue|fenetre [LxH] <chemin.png>` ; `taille largeur hauteur` ; `position x y` (coin de la fenêtre, pixels de l'écran : essais à plusieurs instances) ; `reduire` ; `restaurer`.
 - `quitter [abandonner]` : sortie sans dialogue ; refuse des documents modifiés
   sauf abandon explicite, et refuse les opérations en cours.
 

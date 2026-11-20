@@ -445,6 +445,13 @@ impl Application {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(l, h)));
                 succes(&[])
             }
+            "position" => {
+                // position de la fenêtre (pixels de l'écran) : essais à plusieurs instances
+                let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                let [x, y] = v[..] else { return erreur("usage : position <x> <y>") };
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(x, y)));
+                succes(&[])
+            }
             "reduire" | "restaurer" => {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(commande == "reduire"));
                 succes(&[])

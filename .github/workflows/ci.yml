@@ -67,6 +67,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev
       - run: cargo test --workspace
+      # Essais d'interface par clics simulés (tools/test*.py) sur le binaire debug, sous
+      # Xvfb : écran large pour les essais à deux instances côte à côte
+      - name: Essais d'interface (Xvfb)
+        run: |
+          sudo apt-get install -y xvfb mesa-vulkan-drivers
+          cargo build -p bimedit
+          xvfb-run -a -s "-screen 0 3200x1000x24" python3 tools/essais_interface.py --exe target/debug/bimedit
       # Informatif tant que les avertissements existants ne sont pas résorbés
       # (tâche A1b du suivi) : n'échoue pas, compte les avertissements.
       - name: Clippy (informatif)

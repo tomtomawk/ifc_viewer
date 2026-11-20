@@ -190,6 +190,8 @@ native, les propriétés du projet, les fichiers sans dialogue, les exports, les
 réservations/conflits collaboratifs et la saisie graphique des outils du ruban.
 `python tools/test-pilote.py --exe target/release/bimedit.exe` vérifie le parcours
 sur une instance, un port, un cache collaboratif et des documents temporaires isolés.
+`python tools/essais_interface.py --exe <bimedit>` lance tous les essais `tools/test*.py`
+(sous Linux sans écran : `xvfb-run -a -s "-screen 0 3200x1000x24" …`, comme la CI).
 
 Chaque instance écoute sur `127.0.0.1` (47811, sinon un port libre) des commandes d'une
 ligne précédées de son jeton, et s'inscrit dans le registre des instances : le pont

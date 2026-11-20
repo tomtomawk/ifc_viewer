@@ -46,7 +46,11 @@ def attendre(port,critere):
     raise RuntimeError(f'Délai dépassé : {root}')
 
 def lancer(port,path):
-    with socket.socket() as s:s.bind(('127.0.0.1',port))
+    # port libre (même option que l'écoute du pilote : les connexions de l'instance
+    # précédente en TIME_WAIT ne comptent pas)
+    with socket.socket() as s:
+        if os.name!='nt':s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+        s.bind(('127.0.0.1',port))
     log=open(root/f'{port}-{len(processus)}.log','w',encoding='utf-8');journaux.append(log)
     env=dict(os.environ,BIMEDIT_PORT=str(port), BIMEDIT_ARRIERE_PLAN=os.environ.get("BIMEDIT_ARRIERE_PLAN", "1"),BIMEDIT_CACHE_COLLABORATION=str(cache))
     p=subprocess.Popen([str(exe),str(path)],env=env,stdout=log,stderr=log,creationflags=0x08000000 if os.name=='nt' else 0)
@@ -70,6 +74,9 @@ try:
     assert manifeste['format']=='bimedit-projet-partage'
     assert (root/manifeste['depot']/'controle').is_file()
     b,rb=lancer(ports[1],entree)
+    # côte à côte : une fenêtre recouverte n'est plus redessinée (pas de capture) ;
+    # écran de 3200 px de large sous Xvfb (tools/essais_interface.py)
+    rpc(ports[0],'position 0 0');rpc(ports[1],'position 1600 0')
     local_a=Path(ra['sortie_v0']);local_b=Path(rb['sortie_v0'])
     assert local_a!=local_b and local_a.is_relative_to(cache) and local_b.is_relative_to(cache)
     assert local_a.is_file() and local_b.is_file()

@@ -17,7 +17,13 @@ pub fn lancer(path: Option<PathBuf>) -> eframe::Result<()> {
     // hors de la barre des tâches ; elle reste rendue et pilotable (saisies egui simulées).
     let arriere_plan = arriere_plan();
     if arriere_plan {
-        viewport = viewport.with_active(false).with_position([-20000.0, -20000.0]).with_taskbar(false);
+        viewport = viewport.with_active(false).with_taskbar(false);
+        // hors de l'écran, sauf sous X11 : une fenêtre placée hors de l'écran n'y reçoit
+        // pas les clics simulés (essais sous Xvfb) ; sans gestionnaire de fenêtres qui
+        // l'active, elle ne prend pas le focus de toute façon
+        if !cfg!(target_os = "linux") {
+            viewport = viewport.with_position([-20000.0, -20000.0]);
+        }
     }
     let options = eframe::NativeOptions {
         viewport,

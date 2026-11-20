@@ -62,7 +62,7 @@ impl Application {
                 .with_active(false).with_mouse_passthrough(glissement);
             if let Some(position)=self.volets[i].position {builder=builder.with_position(position);}
             // mode arrière-plan : sans position mémorisée, hors de l'écran comme la fenêtre principale
-            else if crate::socle::fenetre::arriere_plan() {builder=builder.with_position([-20000.0+400.0*i as f32,-20000.0]);}
+            else if crate::socle::fenetre::arriere_plan() && !cfg!(target_os = "linux") {builder=builder.with_position([-20000.0+400.0*i as f32,-20000.0]);}
             ctx.show_viewport_immediate(egui::ViewportId::from_hash_of(("volet_externe",p.nom())),builder,|ui,classe| {
                 let ctx=ui.ctx().clone();
                 // Une fenêtre native n'hérite pas du fond peint par le panneau ancré.
