@@ -1,7 +1,7 @@
 //! Éditeur de hachures dessinées : un onglet montre la hachure sur toute la vue ; seul le
-//! carré central (la tuile) se dessine, le reste, grisé, en répète le dessin. Bandeau :
-//! outils (ligne, polyligne, effacer), côté de la tuile et divisions de sa grille, nom,
-//! Annuler et Valider. Les extrémités s'accrochent aux nœuds de la grille ; à la
+//! carré central (la tuile) se dessine, le reste, grisé, en répète le dessin. Bandeau de
+//! dessin commun : outils (ligne, polyligne, effacer), côté de la tuile et divisions de sa
+//! grille, nom, puis Valider et Annuler ; Ctrl+Z défait le dernier trait. Les extrémités s'accrochent aux nœuds de la grille ; à la
 //! validation, la tuile devient des familles de traits (`modele::motif_tuile`).
 use crate::*;
 use modele::motif_tuile::{TuileMotif, DIVISIONS_MAX};
@@ -225,15 +225,6 @@ impl Application {
             ui.separator();
             ui.label("Nom");
             ui.add(egui::TextEdit::singleline(&mut ed.nom).desired_width(100.0));
-            ui.separator();
-            if ui.add_enabled(!ed.historique.is_empty(), egui::Button::new("Défaire")).on_hover_text("Ctrl+Z").clicked()
-                && let Some(s) = ed.historique.pop() {
-                ed.tuile.segments = s;
-            }
-            if ui.add_enabled(!vide, egui::Button::new("Vider")).on_hover_text("Effacer tout le dessin").clicked() {
-                ed.historique.push(std::mem::take(&mut ed.tuile.segments));
-                ed.depart = None;
-            }
         };
         let retour = bandeau(ui, rect, "hachure", Fin::COMPLETE, Some(&mut options));
         match retour.action {

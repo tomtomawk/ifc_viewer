@@ -832,8 +832,8 @@ occupe toute la vue : seul le carré central (la tuile) se dessine, le reste, gr
 répète le dessin. Bandeau de dessin commun (`outils/bandeau.rs`, comme les autres
 commandes) : Ligne (deux clics), Polyligne (traits enchaînés, clic droit ou Échap pour
 finir), Effacer (clic sur un trait), côté du carré (mm du papier), divisions de la grille
-d'accrochage (modifiables tant que le carré est vide), nom, Défaire (Ctrl+Z), Vider, puis
-Valider et Annuler. Les extrémités s'accrochent aux nœuds
+d'accrochage (modifiables tant que le carré est vide), nom, puis Valider et Annuler ;
+Ctrl+Z défait le dernier trait. Les extrémités s'accrochent aux nœuds
 de la grille ; Valider enregistre le motif dans le projet (familles de traits déduites
 de la tuile, matériaux suivis si le motif est renommé) et ferme l'onglet, comme sa croix
 ou Annuler (sans enregistrer).
