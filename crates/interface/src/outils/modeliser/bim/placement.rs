@@ -1,6 +1,6 @@
-//! Placement par saisie dans la palette de création : abscisse d'une ouverture, contenu d'un
-//! texte, points d'une étiquette ou d'une zone. Paramètres de la palette, après les champs
-//! communs de l'outil.
+//! Placement par saisie dans la palette de création : abscisse d'une ouverture, contenu du
+//! texte en cours, points d'une zone. Paramètres de la palette, après les champs communs de
+//! l'outil. Texte et étiquette se placent dans la vue (`outils/annoter/`).
 
 use super::*;
 use super::widgets::*;
@@ -57,9 +57,12 @@ impl Application {
         });
     }
 
+    /// Étiquette : hauteur ; elle se pose par un clic sur l'élément (`etiquette_vue.rs`).
     pub(crate) fn parametres_etiquette(&mut self, ui: &mut egui::Ui) {
         self.ruban_edition.section_parametres(ui, Outil::Etiquette, self.natif.as_ref().map(|(p, _)| p));
-        self.formulaire_annotation(ui, Outil::Etiquette);
+        if self.vue_native_id().is_none() {
+            ui.label(SANS_VUE);
+        }
     }
 
     pub(crate) fn parametres_zone(&mut self, ui: &mut egui::Ui) {
@@ -94,7 +97,7 @@ impl Application {
                 Outil::Zone => F::Zone { contour: vec![a, [b[0], a[1]], b, [a[0], b[1]]] },
                 _ => F::Ligne { debut: a, fin: b },
             };
-            let mut hauteur = if outil == Outil::Etiquette { self.ruban_edition.nombre_option(Outil::Etiquette, 0) } else { 2.5 };
+            let mut hauteur = 2.5;
             if let Some(modele) = &self.bim.annotation_identique {
                 hauteur = modele.hauteur;
                 match &modele.forme {

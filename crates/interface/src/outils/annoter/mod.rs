@@ -4,3 +4,4 @@ pub(crate) mod types_traits;
 pub(crate) mod cotation;
 pub(crate) mod cotes_aretes;
 pub(crate) mod texte_vue;
+pub(crate) mod etiquette_vue;
