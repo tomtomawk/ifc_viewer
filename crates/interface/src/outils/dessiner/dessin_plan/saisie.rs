@@ -209,7 +209,8 @@ impl Application {
                 self.status = "Commande précédente arrêtée.".into();
             }
             self.dessin2d.commande_cle = cle;
-            self.bim.texte_saisi = None;
+            // un texte ouvert par double-clic active l'outil Texte : il est gardé
+            if cle != Some(crate::zones::ruban::Outil::Texte) { self.bim.texte_saisi = None; }
             // le mode « Suivre un trait » ne passe pas d'un outil à l'autre
             self.ruban_edition.suivre_trait = false;
             if cle != Some(crate::zones::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }

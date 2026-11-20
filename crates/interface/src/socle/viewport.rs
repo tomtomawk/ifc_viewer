@@ -395,6 +395,12 @@ impl Application {
             {
                 // double-clic sur le repère d'une coupe ou d'une élévation : ouvrir la vue
                 self.ouvrir_vue_native(&id);
+            } else if let Some(id) = resp.double_clicked().then(|| resp.interact_pointer_pos()).flatten()
+                .filter(|_| self.vue_native_id().is_some())
+                .and_then(|q| self.texte_sous(rect, q))
+            {
+                // double-clic sur un texte : saisie dans la vue, préremplie
+                self.editer_texte_vue(&id);
             } else if resp.double_clicked() {
                 match resp.interact_pointer_pos().and_then(|p| pick(self, p)) {
                     Some((obj, _)) => self.frame_objects(&[obj]),

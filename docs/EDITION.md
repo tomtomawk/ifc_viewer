@@ -552,7 +552,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Entrée ou Valider le crée (une étape d'annulation), Échap ou le clic droit
   abandonnent ce texte, un clic ailleurs le crée et en commence un autre. L'outil
   reste actif ; un second Échap le quitte. Pendant la saisie, Propriétés montre le
-  même contenu et « Insérer un champ » ({projet}, {vue}). **Étiquette** : un clic
+  même contenu et « Insérer un champ » ({projet}, {vue}). Un double-clic sur un texte
+  existant ouvre le même champ, prérempli ; Entrée remplace son contenu (une étape
+  d'annulation) et revient à la sélection. **Étiquette** : un clic
   sur un mur, un élément horizontal, un poteau, une poutre ou un élément importé pose
   son étiquette (son nom) au point cliqué ; le nom de l'élément visé s'affiche au
   curseur ; l'outil reste actif, Échap ou le clic droit le quittent. Avec un mur sélectionné, une cote référence ses

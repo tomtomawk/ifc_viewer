@@ -72,7 +72,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | U4 | Revue des parcours : options au bandeau seulement pour les tracés et Modifier ; Cote, Altimétrie, Poteau, Composant, Arbre, Pièce, Spline, Cercle n'ont leurs réglages que dans Propriétés | P2 | `outils/dessiner/dessin_plan/saisie.rs` (`barre_commande`) |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
 | U8 | Spline et cercle sans type de trait (le modèle n'en porte pas : `AnnotationForme::Spline`, `Cercle`), à la création comme à la sélection, alors que la polyligne en a un : champ `traits` à ajouter au format, au rendu et au sélecteur (relevé du 20/11/2026, corrigé : la revue disait à tort qu'il existait à la sélection) | P2 | `modele/src/documentation/mod.rs`, `zones/palette_creation.rs` |
-| U10 | Texte : modifier un texte existant dans la vue (double-clic : même champ de saisie que la création) ; dans la fiche d'un texte sélectionné, chaque frappe du contenu est peut-être une étape d'annulation (lu dans le code, non vérifié) | P2 | `outils/annoter/texte_vue.rs`, `zones/fiche_selection.rs` |
 | U9 | Sélecteurs simples (terrain, arbre, composant, pièce, poutre, sélection multiple) : vignettes ; Renommer et Dupliquer pour composant et poutre ; éditeur de type de terrain (couches) depuis le sélecteur | P3 | `zones/ruban/selecteur.rs` (`simple`) |
 
 ## 5. Familles

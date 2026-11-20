@@ -2,7 +2,8 @@
 //! ouvre un champ à cet endroit, à la taille du texte imprimé ; Entrée crée le texte
 //! (une transaction), Maj+Entrée passe à la ligne, Échap ou le clic droit abandonnent ce
 //! texte. L'outil reste actif pour le texte suivant ; un clic ailleurs valide le texte en
-//! cours et en commence un autre.
+//! cours et en commence un autre. Un double-clic sur un texte existant ouvre le même champ,
+//! prérempli ; la validation remplace son contenu et quitte l'outil.
 use crate::*;
 use modele::documentation::{Annotation, AnnotationForme};
 
@@ -14,6 +15,8 @@ pub(crate) struct TexteSaisi {
     pub contenu: String,
     /// Le champ prend le focus à sa première image.
     pub focus: bool,
+    /// Texte existant modifié (double-clic) : identifiant et hauteur gardés.
+    pub existant: Option<(String, f64)>,
 }
 
 impl Application {
@@ -36,7 +39,7 @@ impl Application {
             Some(AnnotationForme::Texte { texte, .. }) => texte.clone(),
             _ => String::new(),
         };
-        self.bim.texte_saisi = Some(TexteSaisi { vue, point, contenu, focus: true });
+        self.bim.texte_saisi = Some(TexteSaisi { vue, point, contenu, focus: true, existant: None });
         Ok(())
     }
 
@@ -47,6 +50,24 @@ impl Application {
             .map_or_else(|| self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Texte, 0), |a| a.hauteur)
     }
 
+    /// Texte de la vue native sous le curseur (son cadre, à 4 px près).
+    pub(crate) fn texte_sous(&self, rect: egui::Rect, q: egui::Pos2) -> Option<String> {
+        let (p, _) = self.natif.as_ref()?;
+        self.rectangles_annotations(rect).into_iter()
+            .filter(|(_, r)| r.expand(4.0).contains(q))
+            .map(|(id, _)| id)
+            .find(|id| p.annotations.iter().any(|a| &a.id == id && matches!(a.forme, AnnotationForme::Texte { .. })))
+    }
+
+    /// Double-clic sur un texte : outil Texte, champ prérempli au point du texte.
+    pub(crate) fn editer_texte_vue(&mut self, id: &str) {
+        let Some(a) = self.natif.as_ref().and_then(|(p, _)| p.annotations.iter().find(|a| a.id == id)).cloned() else { return };
+        let AnnotationForme::Texte { point, texte } = a.forme else { return };
+        self.onglet_ruban = OngletRuban::Annoter;
+        self.ruban_edition.activer_outil(crate::zones::ruban::Outil::Texte);
+        self.bim.texte_saisi = Some(TexteSaisi { vue: a.vue, point, contenu: texte, focus: true, existant: Some((a.id, a.hauteur)) });
+    }
+
     /// Crée le texte en cours de saisie (s'il n'est pas vide). Une seule étape d'annulation.
     pub(crate) fn valider_texte_saisi(&mut self) -> Result<(), String> {
         let Some(t) = self.bim.texte_saisi.take() else { return Ok(()) };
@@ -54,16 +75,22 @@ impl Application {
         if texte.trim().is_empty() {
             return Ok(());
         }
-        let hauteur = self.hauteur_texte_creation();
+        let (id, hauteur) = t.existant.clone().unwrap_or_else(|| (String::new(), self.hauteur_texte_creation()));
         // le champ a le clavier : sans ceci, `appliquer_projet` attendrait la fin de la
         // « saisie » et Échap sur le texte suivant annulerait celui-ci
         let saisie = std::mem::replace(&mut self.saisie_active, false);
         let r = self.executer_bim(commandes::Commande::Annoter {
-            annotation: Annotation { id: String::new(), vue: t.vue, hauteur, forme: AnnotationForme::Texte { point: t.point, texte } },
+            annotation: Annotation { id: id.clone(), vue: t.vue, hauteur, forme: AnnotationForme::Texte { point: t.point, texte } },
         });
         self.saisie_active = saisie;
         r?;
-        self.status = "Texte créé — cliquer pour le suivant ; Ctrl+Z pour annuler.".into();
+        if id.is_empty() {
+            self.status = "Texte créé — cliquer pour le suivant ; Ctrl+Z pour annuler.".into();
+        } else {
+            // modification d'un texte existant : retour à la sélection
+            self.ruban_edition.annuler();
+            self.status = "Texte modifié — Ctrl+Z pour annuler.".into();
+        }
         Ok(())
     }
 
@@ -94,7 +121,7 @@ impl Application {
 
     /// Champ de saisie au point d'insertion, à la taille du texte dans la vue.
     fn champ_texte_saisi(&mut self, ui: &egui::Ui, rect: egui::Rect) {
-        let hauteur = self.hauteur_texte_creation();
+        let hauteur = self.bim.texte_saisi.as_ref().and_then(|t| t.existant.as_ref()).map_or_else(|| self.hauteur_texte_creation(), |e| e.1);
         let echelle = self.natif.as_ref().and_then(|(p, _)| {
             let id = &self.bim.texte_saisi.as_ref()?.vue;
             p.vues.iter().find(|v| &v.id == id).map(|v| v.echelle)
