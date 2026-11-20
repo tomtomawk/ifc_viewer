@@ -101,7 +101,6 @@ pub(crate) enum OutilFamille {
     RaccordementChemin,
     /// Polyligne 2D ancrée aux plans de référence.
     Ligne,
-    Arc,
     Spline,
     Cercle,
     Rectangle,
@@ -131,7 +130,7 @@ impl OutilFamille {
     pub(crate) fn est_transformation(self) -> bool { matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Echelle | Self::Reseau | Self::ReseauPolaire | Self::Aligner) }
     fn outil_dessin(self) -> Option<moteur2d::dao::OutilDessin> {
         use moteur2d::dao::OutilDessin as D;
-        match self { Self::Ligne => Some(D::Polyligne), Self::Arc => Some(D::Arc), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }
+        match self { Self::Ligne => Some(D::Polyligne), Self::Spline => Some(D::Spline), Self::Cercle => Some(D::Cercle), Self::Rectangle => Some(D::Rectangle), _ => None }
     }
     /// Genre de cote de mesure saisi par l'outil.
     fn cote_mesure(self) -> Option<GenreCote> {
@@ -510,9 +509,9 @@ impl EditeurFamille {
         use moteur2d::dao::{EvenementTrace, OutilDessin, Trace};
         use noyau::forme2d::{Forme2D};
         let mut trace = self.trace_polyligne.take().unwrap_or_else(|| Trace::new(OutilDessin::Polyligne));
-        if let Some(Forme2D::Polyligne { fermee, .. }) = trace.appliquer(EvenementTrace::Terminer).into_iter().next() {
+        if let Some(Forme2D::Polyligne { fermee, courbures, .. }) = trace.appliquer(EvenementTrace::Terminer).into_iter().next() {
             let points = std::mem::take(&mut self.esquisse).into_iter().map(|(p, _)| p).collect();
-            self.ajouter_polyligne_ancree(points, fermee);
+            self.ajouter_polyligne_ancree(points, fermee, courbures);
             self.selectionner(vec![self.selection.clone()]);
         }
     }

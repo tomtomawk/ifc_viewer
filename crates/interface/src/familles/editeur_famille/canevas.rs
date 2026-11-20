@@ -685,11 +685,15 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             }
             garder_multiple = true;
         }
-        OutilFamille::Ligne | OutilFamille::Arc | OutilFamille::Spline | OutilFamille::Cercle | OutilFamille::Rectangle => {
+        OutilFamille::Ligne | OutilFamille::Spline | OutilFamille::Cercle | OutilFamille::Rectangle => {
             use moteur2d::dao::{EvenementTrace, Trace};
             use noyau::forme2d::{Forme2D};
             let outil = ed.outil.outil_dessin().expect("outil de dessin");
             let mut trace = ed.trace_polyligne.take().unwrap_or_else(|| Trace::new(outil));
+            // polyligne : segments d'arc par Alt+clic sur leur fin, puis point de passage
+            // (ou rayon tapé), comme dans les vues du projet
+            trace.arcs_permis = ed.outil == OutilFamille::Ligne;
+            let alt = ui.input(|i| i.modifiers.alt);
             let depart = ed.esquisse.last().map(|(_, p)| *p);
             if let Some(q) = curseur.filter(|_| resp.hovered()) {
                 // angle et distance tapés : appliqués par le moteur d'accrochage
@@ -711,7 +715,17 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 crate::socle::messages::consigne_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", ed.saisie_trace.texte));
             }
             let mut point_verrouille = None;
-            let evenement = if valider_saisie || (resp.clicked() && !ed.saisie_trace.texte.is_empty()) {
+            // arc en attente et nombre tapé : rayon, l'arc bombe du côté du curseur
+            let rayon = (valider_saisie && trace.attend_courbure())
+                .then(|| crate::saisie::moteur_accrochage::distance_saisie(&ed.saisie_trace.texte, facteur))
+                .flatten();
+            let evenement = if let Some(rayon) = rayon {
+                let curseur_modele = curseur.map(|q| { let (h, v) = viser(q, depart).0; glam::DVec2::new(h, v) });
+                match curseur_modele.ok_or_else(|| "Rayon : placer le curseur du côté où l'arc doit bomber.".to_string()).and_then(|c| trace.point_de_rayon(rayon, c)) {
+                    Ok(p) => { ed.saisie_trace.texte.clear(); Some(EvenementTrace::Point(p)) }
+                    Err(e) => { ed.message = Some(e); None }
+                }
+            } else if valider_saisie || (resp.clicked() && !ed.saisie_trace.texte.is_empty()) {
                 let precedent = trace.precedent();
                 let curseur_modele = curseur.map(|q| { let (h, v) = viser(q, depart).0; glam::DVec2::new(h, v) });
                 match ed.saisie_trace.point(precedent, curseur_modele, facteur) {
@@ -735,7 +749,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                                 let point = PointEsquisse { h: fh, v: fv };
                                 let (h, v) = ed.famille.point_esquisse(&r, &point);
                                 point_verrouille = Some((point, (h, v)));
-                                Some(EvenementTrace::Point(glam::DVec2::new(h, v)))
+                                let p = glam::DVec2::new(h, v);
+                                Some(if alt && trace.arcs_permis { EvenementTrace::PointArc(p) } else { EvenementTrace::Point(p) })
                             }
                             _ => None,
                         }
@@ -747,9 +762,9 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 if trace.points.len() > avant
                     && let Some(point) = point_verrouille { ed.esquisse.push(point); }
                 if let Some(forme) = formes.into_iter().next() {
-                    if let (OutilFamille::Ligne, Forme2D::Polyligne { fermee, .. }) = (ed.outil, &forme) {
+                    if let (OutilFamille::Ligne, Forme2D::Polyligne { fermee, courbures, .. }) = (ed.outil, &forme) {
                         let points = std::mem::take(&mut ed.esquisse).into_iter().map(|(p, _)| p).collect();
-                        ed.ajouter_polyligne_ancree(points, *fermee);
+                        ed.ajouter_polyligne_ancree(points, *fermee, courbures.clone());
                     } else {
                         ed.esquisse.clear();
                         ed.famille.elements_2d.push(modele::famille::modelee::Element2DFamille::fixe(ed.vue.esquisse(), modele::documentation::AnnotationForme::depuis_forme_2d(&forme), 2.5));

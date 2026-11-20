@@ -222,7 +222,7 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
         }
         Icone::Famille(cle) => {
             let outil = match cle {
-                "ligne" => Some(Outil::Polyligne), "arc" => Some(Outil::Arc),
+                "ligne" => Some(Outil::Polyligne),
                 "spline" => Some(Outil::Spline), "cercle" => Some(Outil::Cercle),
                 "rectangle" => Some(Outil::Rectangle), "texte" => Some(Outil::Texte),
                 "etiquette" => Some(Outil::Etiquette),

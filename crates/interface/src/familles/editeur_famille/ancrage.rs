@@ -21,8 +21,15 @@ pub(super) fn genre_element_2d(forme: &AnnotationForme) -> &'static str {
 
 impl EditeurFamille {
     /// Ajoute une polyligne ancrée dans la vue active et la sélectionne.
-    pub(super) fn ajouter_polyligne_ancree(&mut self, points: Vec<PointEsquisse>, fermee: bool) {
-        let element = Element2DFamille::polyligne(self.vue.esquisse(), points, fermee);
+    /// Polyligne ancrée aux plans ; `courbures` : une par segment (arcs), ou vide. La
+    /// courbure (angle de l'arc) est gardée quand les plans bougent : l'arc suit sa corde.
+    pub(super) fn ajouter_polyligne_ancree(&mut self, points: Vec<PointEsquisse>, fermee: bool, courbures: Vec<f64>) {
+        let mut element = Element2DFamille::polyligne(self.vue.esquisse(), points, fermee);
+        if courbures.iter().any(|k| *k != 0.0)
+            && let AnnotationForme::Polyligne { courbures: c, .. } = &mut element.forme
+        {
+            *c = courbures;
+        }
         self.famille.elements_2d.push(element);
         self.element_2d_cree();
     }

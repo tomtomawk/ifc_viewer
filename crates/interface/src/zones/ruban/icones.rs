@@ -535,7 +535,7 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.42, 0.40), (0.42, 0.76));
             seg((0.58, 0.40), (0.58, 0.76));
         }
-        Tourner | Arc => {
+        Tourner => {
             let pts = (0..24)
                 .map(|k| {
                     let a = 0.2 + k as f32 / 23.0 * 4.4;

@@ -79,9 +79,6 @@ pub(crate) enum Outil {
     Altimetrie,
     Texte,
     Etiquette,
-    /// Icône de l'outil Arc 2D de l'éditeur de familles. Dans un projet, l'arc est un
-    /// segment de la polyligne (Alt+clic) : ce n'est plus un outil du ruban.
-    Arc,
     Polyligne,
     Rectangle,
     Spline,
@@ -152,7 +149,6 @@ impl Outil {
         Self::Altimetrie,
         Self::Texte,
         Self::Etiquette,
-        Self::Arc,
         Self::Polyligne,
         Self::Rectangle,
         Self::Spline,
@@ -227,7 +223,6 @@ impl Outil {
             Self::Altimetrie => "Altimétrie",
             Self::Texte => "Texte",
             Self::Etiquette => "Étiquette",
-            Self::Arc => "Arc",
             Self::Polyligne => "Polyligne",
             Self::Rectangle => "Rectangle",
             Self::Spline => "Spline",
@@ -696,7 +691,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Choix("Précision", &["0.00 m", "0.000 m"]),
         ],
         Texte | Etiquette => vec![Nombre("Hauteur papier", 2.5, " mm")],
-        Arc | Polyligne | Rectangle | Spline | Cercle => vec![],
+        Polyligne | Rectangle | Spline | Cercle => vec![],
         Zone => vec![],
         Symbole => vec![Choix(
             "Symbole",
