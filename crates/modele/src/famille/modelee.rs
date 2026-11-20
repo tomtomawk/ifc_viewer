@@ -20,7 +20,7 @@ mod dessin;
 mod orientation;
 mod visibilite;
 mod maillage;
-pub use maillage::MaillageFamille;
+pub use maillage::{GeometrieMaillage, MaillageFamille};
 pub use orientation::{intersection, tourner, PlanTourne, Repere, SupportForme};
 pub use dessin::{Element2DFamille, points_ancrables_mut};
 pub use visibilite::{Affichage, NiveauDetail, TypeVue, VisibiliteElement, PARTOUT};

@@ -440,8 +440,10 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
             let mut supprimer = None;
             for (k, m) in ed.famille.maillages.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
-                    let detail = if m.triangles.is_empty() { format!("{} traits en plan", m.traits_plan.len()) } else { format!("{} triangles", m.triangles.len()) };
-                    ui.label(format!("{} · {detail}", m.nom)).on_hover_text("Maillage dans la boîte du type (Largeur, Epaisseur, Hauteur) : suit les dimensions du type, ne s'édite pas sommet par sommet");
+                    let g = m.geometrie();
+                    let detail = if g.triangles.is_empty() { format!("{} traits en plan", g.traits_plan.len()) } else { format!("{} triangles", g.triangles.len()) };
+                    let source = m.generateur.as_deref().map_or_else(String::new, |r| format!(" · généré ({r})"));
+                    ui.label(format!("{} · {detail}{source}", m.nom)).on_hover_text("Maillage dans la boîte du type (Largeur, Epaisseur, Hauteur) : suit les dimensions du type, ne s'édite pas sommet par sommet");
                     if ui.small_button("−").on_hover_text("Supprimer le maillage").clicked() {
                         supprimer = Some(k);
                     }

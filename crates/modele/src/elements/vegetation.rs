@@ -72,26 +72,16 @@ pub fn famille_vegetal(e: Essence) -> FamilleModelee {
     ];
     // en plan, le symbole remplace la vue des solides
     let sans_plan = VisibiliteElement { plan: false, ..Default::default() };
-    let (tronc, houppier) = crate::elements::dessin_vegetal::maillage_boite(e);
-    let solide = |nom: &str, tris: Vec<[DVec3; 3]>, materiau: &str| MaillageFamille { materiau_parametre: Some(materiau.into()), visibilite: sans_plan, ..indexer(nom, &tris) };
+    // géométrie produite par le code : le fichier ne garde que les références
+    use crate::elements::dessin_vegetal::reference;
+    let genere = |nom: &str, partie: &str| MaillageFamille { nom: nom.into(), generateur: Some(reference(e, partie)), ..Default::default() };
     f.maillages = vec![
-        solide("Houppier", houppier, MATERIAU_FEUILLAGE),
-        solide("Tronc", tronc, MATERIAU_ECORCE),
-        MaillageFamille { nom: "Symbole".into(), traits_plan: crate::elements::dessin_vegetal::symbole_plan(e), ..Default::default() },
+        MaillageFamille { materiau_parametre: Some(MATERIAU_FEUILLAGE.into()), visibilite: sans_plan, ..genere("Houppier", "houppier") },
+        MaillageFamille { materiau_parametre: Some(MATERIAU_ECORCE.into()), visibilite: sans_plan, ..genere("Tronc", "tronc") },
+        genere("Symbole", "symbole"),
     ];
     f.couleur = e.couleur();
     f
-}
-
-/// Maillage indexé de triangles (sommets confondus fusionnés).
-fn indexer(nom: &str, tris: &[[DVec3; 3]]) -> MaillageFamille {
-    let mut index = std::collections::HashMap::new();
-    let mut sommets: Vec<[f32; 3]> = Vec::new();
-    let triangles = tris.iter().map(|t| t.map(|p| {
-        let s = [p.x as f32, p.y as f32, p.z as f32];
-        *index.entry(s.map(f32::to_bits)).or_insert_with(|| { sommets.push(s); sommets.len() as u32 - 1 })
-    })).collect();
-    MaillageFamille { nom: nom.into(), sommets, triangles, ..Default::default() }
 }
 
 /// Type par défaut (code) d'une essence : dimensions usuelles, famille `famille_vegetal`.

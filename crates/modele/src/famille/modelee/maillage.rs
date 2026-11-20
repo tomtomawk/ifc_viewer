@@ -3,7 +3,21 @@
 //! y de −0,5 à 0,5 (Epaisseur, profondeur du type), z de 0 à 1 (Hauteur), centrés sur
 //! l'origine de la famille. Sert aux formes qu'aucun volume paramétrique ne décrit (houppier
 //! d'arbre, symbole de plan festonné) ; un maillage ne s'édite pas sommet par sommet.
+//!
+//! Un maillage peut désigner par `generateur` une géométrie produite par le code
+//! (`elements::dessin_vegetal::generer`, ex. `arbre:feuillu:houppier`) : le fichier ne
+//! garde alors que la référence, la géométrie est recalculée (et gardée en mémoire) à
+//! l'usage.
 use super::*;
+use std::sync::Arc;
+
+/// Géométrie d'un maillage dans la boîte du type : sommets, triangles, traits du plan.
+#[derive(Debug, Default)]
+pub struct GeometrieMaillage {
+    pub sommets: Vec<[f32; 3]>,
+    pub triangles: Vec<[u32; 3]>,
+    pub traits_plan: Vec<Vec<[f32; 2]>>,
+}
 
 /// Maillage de famille : triangles indexés (3D) et polylignes du plan, dans la boîte du
 /// type.
@@ -11,6 +25,10 @@ use super::*;
 #[serde(deny_unknown_fields)]
 pub struct MaillageFamille {
     pub nom: String,
+    /// Géométrie produite par le code à partir de cette référence (les sommets, triangles
+    /// et traits enregistrés sont alors ignorés et vides).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generateur: Option<String>,
     /// Sommets dans la boîte du type (voir le module).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sommets: Vec<[f32; 3]>,
@@ -35,6 +53,9 @@ impl MaillageFamille {
     /// Contrôle : sommets finis et dans une boîte raisonnable (au plus dix fois celle du
     /// type), indices existants.
     pub fn valider(&self) -> Result<(), String> {
+        if let Some(g) = &self.generateur {
+            return if crate::elements::dessin_vegetal::generer(g).is_some() { Ok(()) } else { Err(format!("Maillage « {} » : générateur inconnu « {g} ».", self.nom)) };
+        }
         let dans = |v: f32| v.is_finite() && v.abs() <= 10.0;
         if !self.sommets.iter().flatten().all(|v| dans(*v)) || !self.traits_plan.iter().flatten().flatten().all(|v| dans(*v)) {
             return Err(format!("Maillage « {} » : coordonnées hors de la boîte du type.", self.nom));
@@ -44,6 +65,14 @@ impl MaillageFamille {
             return Err(format!("Maillage « {} » : triangle vers un sommet absent.", self.nom));
         }
         Ok(())
+    }
+
+    /// Géométrie effective : celle du générateur désigné, sinon celle enregistrée.
+    pub fn geometrie(&self) -> Arc<GeometrieMaillage> {
+        if let Some(g) = self.generateur.as_deref().and_then(crate::elements::dessin_vegetal::generer) {
+            return g;
+        }
+        Arc::new(GeometrieMaillage { sommets: self.sommets.clone(), triangles: self.triangles.clone(), traits_plan: self.traits_plan.clone() })
     }
 
     /// Point de la boîte du type mis à l'échelle (mm, repère de la famille).
@@ -59,11 +88,12 @@ impl FamilleModelee {
         let k = MaillageFamille::echelle(r);
         self.maillages
             .iter()
-            .filter(|m| !m.triangles.is_empty())
-            .map(|m| {
-                let p = |i: u32| m.sommets.get(i as usize).map_or(DVec3::ZERO, |s| DVec3::new(s[0] as f64, s[1] as f64, s[2] as f64) * k);
+            .map(|m| (m, m.geometrie()))
+            .filter(|(_, g)| !g.triangles.is_empty())
+            .map(|(m, g)| {
+                let p = |i: u32| g.sommets.get(i as usize).map_or(DVec3::ZERO, |s| DVec3::new(s[0] as f64, s[1] as f64, s[2] as f64) * k);
                 SolideFamille {
-                    tris: m.triangles.iter().map(|t| t.map(p)).collect(),
+                    tris: g.triangles.iter().map(|t| t.map(p)).collect(),
                     vide: false,
                     materiau: Materiau::Panneau,
                     visible: self.visible(r, &m.visible),
@@ -81,9 +111,10 @@ impl FamilleModelee {
         self.maillages
             .iter()
             .filter(|m| m.visibilite.montre(a) && self.visible(r, &m.visible))
-            .flat_map(|m| m.traits_plan.iter())
-            .filter(|l| l.len() >= 2)
-            .map(|l| l.iter().map(|p| (p[0] as f64 * k.x, p[1] as f64 * k.y)).collect())
+            .flat_map(|m| {
+                let g = m.geometrie();
+                g.traits_plan.iter().filter(|l| l.len() >= 2).map(|l| l.iter().map(|p| (p[0] as f64 * k.x, p[1] as f64 * k.y)).collect()).collect::<Vec<_>>()
+            })
             .collect()
     }
 }

@@ -4,7 +4,52 @@
 //! familles d'arbres sous forme de maillages dans la boîte du type
 //! (`famille::modelee::MaillageFamille`).
 use crate::elements::generateur_vegetal::{tronc, Alea, Essence};
+use crate::famille::modelee::GeometrieMaillage;
 use glam::DVec3;
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// Préfixe des références de géométrie d'arbre : `arbre:<essence>:<partie>`.
+pub const PREFIXE: &str = "arbre:";
+
+/// Référence de la partie `partie` (`houppier`, `tronc`, `symbole`) d'une essence.
+pub fn reference(essence: Essence, partie: &str) -> String {
+    let e = match essence { Essence::Feuillu => "feuillu", Essence::Conifere => "conifere", Essence::Fastigie => "fastigie" };
+    format!("{PREFIXE}{e}:{partie}")
+}
+
+/// Géométrie (boîte du type) d'une référence `arbre:<essence>:<partie>`, calculée une
+/// fois puis gardée en mémoire. None : référence inconnue.
+pub fn generer(reference: &str) -> Option<Arc<GeometrieMaillage>> {
+    static MEMOIRE: OnceLock<Mutex<std::collections::HashMap<String, Arc<GeometrieMaillage>>>> = OnceLock::new();
+    let memoire = MEMOIRE.get_or_init(Default::default);
+    if let Some(g) = memoire.lock().unwrap_or_else(|e| e.into_inner()).get(reference) {
+        return Some(g.clone());
+    }
+    let (essence, partie) = reference.strip_prefix(PREFIXE)?.split_once(':')?;
+    let essence = match essence { "feuillu" => Essence::Feuillu, "conifere" => Essence::Conifere, "fastigie" => Essence::Fastigie, _ => return None };
+    let g = match partie {
+        "houppier" | "tronc" => {
+            let (t, h) = maillage_boite(essence);
+            indexer(if partie == "tronc" { &t } else { &h })
+        }
+        "symbole" => GeometrieMaillage { traits_plan: symbole_plan(essence), ..Default::default() },
+        _ => return None,
+    };
+    let g = Arc::new(g);
+    memoire.lock().unwrap_or_else(|e| e.into_inner()).insert(reference.to_string(), g.clone());
+    Some(g)
+}
+
+/// Triangles indexés (sommets confondus fusionnés).
+fn indexer(tris: &[[DVec3; 3]]) -> GeometrieMaillage {
+    let mut index = std::collections::HashMap::new();
+    let mut sommets: Vec<[f32; 3]> = Vec::new();
+    let triangles = tris.iter().map(|t| t.map(|p| {
+        let s = [p.x as f32, p.y as f32, p.z as f32];
+        *index.entry(s.map(f32::to_bits)).or_insert_with(|| { sommets.push(s); sommets.len() as u32 - 1 })
+    })).collect();
+    GeometrieMaillage { sommets, triangles, traits_plan: Vec::new() }
+}
 
 /// Icosphère (une subdivision : 80 faces) déformée : rayons (rx, ry, rz), bosses de ±`relief`.
 fn boule(c: DVec3, r: DVec3, relief: f64, alea: &mut Alea) -> Vec<[DVec3; 3]> {
