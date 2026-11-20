@@ -69,7 +69,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M18 | Épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
 | U2 | Revue des parcours du 20/11/2026 : Étiquette, Quadrillage et Niveau ne se placent pas dans la vue (formulaire de coordonnées, bouton « Ajouter ») ; attendu : Étiquette = clic sur l'élément puis point, Quadrillage = tracé à 2 points, Niveau = clic en coupe ou élévation | P1 | `outils/modeliser/bim/placement.rs`, `bim/palettes.rs` ; `docs/MODIFICATION.md` §1 « tout se fait graphiquement » |
-| U3 | Revue des parcours : champs de réglage affichés mais jamais lus (relevé par lecture du code, à confirmer champ par champ) — Déplacer (Distance, Contrainte), Copier (Copies, Distance), Tourner (Angle), Cote (Mode, Décalage papier), Texte (Ligne de repère, Alignement), Étiquette (Contenu, Hauteur papier), Quadrillage (Tracé) : les brancher ou les retirer | P1 | `crates/interface/src/zones/ruban/mod.rs` (`champs`) |
+| U11 | Réglages retirés car jamais lus (U3, 20/11/2026), à réaliser s'ils sont voulus : Texte (ligne de repère avec flèche, alignement gauche / centre / droite), Étiquette (contenu : type, repère, matériau), Cote (mode orthogonal, décalage papier), Zone (motif, pas), Quadrillage en arc, Déplacer contraint horizontal / vertical (Maj contraint déjà aux axes) | P3 | `zones/ruban/mod.rs` (`champs`) ; question au §9 |
 | U4 | Revue des parcours : options au bandeau seulement pour les tracés et Modifier ; Cote, Altimétrie, Poteau, Composant, Arbre, Pièce, Spline, Cercle n'ont leurs réglages que dans Propriétés | P2 | `outils/dessiner/dessin_plan/saisie.rs` (`barre_commande`) |
 | U5 | Revue des parcours : consigne absente dans la vue pour Ouverture ; consigne d'Ajuster au curseur au lieu de sous le bandeau | P2 | `socle/viewport.rs`, `outils/modifier/ajuster.rs` |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
@@ -129,6 +129,10 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | Sujet | Question |
 |---|---|
 | E1 | Emplacement partagé de la bibliothèque de styles, liste des catégories, priorité matériau / catégorie |
+| U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
+| U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
+| Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
+| Commits | `AGENTS.md` demande de pousser sur `master` ; la session cloud était configurée pour une branche de travail. Les commits du 20/11/2026 ont été poussés sur `master` selon `AGENTS.md` : à confirmer pour les sessions autonomes suivantes |
 
 ## 10. Études des évolutions
 

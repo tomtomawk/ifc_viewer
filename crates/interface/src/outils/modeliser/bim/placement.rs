@@ -94,7 +94,7 @@ impl Application {
                 Outil::Zone => F::Zone { contour: vec![a, [b[0], a[1]], b, [a[0], b[1]]] },
                 _ => F::Ligne { debut: a, fin: b },
             };
-            let mut hauteur = 2.5;
+            let mut hauteur = if outil == Outil::Etiquette { self.ruban_edition.nombre_option(Outil::Etiquette, 0) } else { 2.5 };
             if let Some(modele) = &self.bim.annotation_identique {
                 hauteur = modele.hauteur;
                 match &modele.forme {

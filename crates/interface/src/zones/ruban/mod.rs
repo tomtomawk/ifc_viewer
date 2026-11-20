@@ -634,7 +634,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Outil::*;
     match o {
         Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures | LienIfc => vec![],
-        Quadrillage => vec![Saisie("Repère", "A"), Choix("Tracé", &["Droit", "Arc"])],
+        Quadrillage => vec![Saisie("Repère", "A")],
         Mur => vec![
             Choix(
                 "Implantation",
@@ -684,39 +684,19 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Allège", 900.0, " mm"),
         ],
         Composant | Piece | Arbre => vec![],
-        Deplacer => vec![
-            Nombre("Distance", 1000.0, " mm"),
-            Choix("Contrainte", &["Libre", "Horizontale", "Verticale"]),
-        ],
-        Copier => vec![Nombre("Copies", 1.0, ""), Nombre("Distance", 1000.0, " mm")],
-        Tourner => vec![Nombre("Angle", 90.0, " °")],
-        Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser => vec![],
+        // distances, angles et copies se tapent pendant la commande (cote temporaire)
+        Deplacer | Copier | Tourner | Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser => vec![],
         Ajuster => vec![Choix("Mode", &["Ajuster ou prolonger", "Prolonger seulement"])],
-        Cote => vec![
-            Choix("Mode", &["Alignée", "Orthogonale"]),
-            Nombre("Décalage papier", 8.0, " mm"),
-            Case("Sélectionner des points"),
-        ],
+        Cote => vec![Case("Sélectionner des points")],
         CoteAngulaire => vec![Case("Sélectionner des points")],
         CoteDiametre => vec![],
         Altimetrie => vec![
             Choix("Référence", &["Projet", "Niveau sous le point"]),
             Choix("Précision", &["0.00 m", "0.000 m"]),
         ],
-        Texte => vec![
-            Choix("Ligne de repère", &["Sans flèche", "Avec flèche"]),
-            Nombre("Hauteur papier", 2.5, " mm"),
-            Choix("Alignement", &["Gauche", "Centre", "Droite"]),
-        ],
-        Etiquette => vec![
-            Choix("Contenu", &["Type", "Repère", "Matériau"]),
-            Nombre("Hauteur papier", 2.5, " mm"),
-        ],
+        Texte | Etiquette => vec![Nombre("Hauteur papier", 2.5, " mm")],
         Arc | Polyligne | Rectangle | Spline | Cercle => vec![],
-        Zone => vec![
-            Choix("Motif", &["Diagonales 45°", "Béton", "Isolant", "Plein"]),
-            Nombre("Pas papier", 2.0, " mm"),
-        ],
+        Zone => vec![],
         Symbole => vec![Choix(
             "Symbole",
             &["Nord", "Repère de coupe", "Repère de détail"],

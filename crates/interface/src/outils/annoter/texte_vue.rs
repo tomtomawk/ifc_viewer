@@ -44,7 +44,7 @@ impl Application {
     fn hauteur_texte_creation(&self) -> f64 {
         self.bim.annotation_identique.as_ref()
             .filter(|a| matches!(a.forme, AnnotationForme::Texte { .. }))
-            .map_or_else(|| self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Texte, 1), |a| a.hauteur)
+            .map_or_else(|| self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Texte, 0), |a| a.hauteur)
     }
 
     /// Crée le texte en cours de saisie (s'il n'est pas vide). Une seule étape d'annulation.
