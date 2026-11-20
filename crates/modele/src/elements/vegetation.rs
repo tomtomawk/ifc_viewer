@@ -112,7 +112,7 @@ pub fn famille_vegetal(e: Essence) -> FamilleModelee {
         profil,
         profondeur: [face("Intérieur"), face("Extérieur")],
         visible: None,
-        visibilite: vis.clone(),
+        visibilite: vis,
         materiau_parametre: Some(materiau.into()),
     };
     f.extrusions = vec![forme_rev("Houppier", houppier, MATERIAU_FEUILLAGE), forme_rev("Tronc", tronc, MATERIAU_ECORCE)];

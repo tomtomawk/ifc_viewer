@@ -86,7 +86,7 @@ mod tests {
     fn contour_concave_decoupe_traits_et_faces() {
         let contour = [[0.,0.],[4000.,0.],[4000.,1000.],[1000.,1000.],[1000.,4000.],[0.,4000.]];
         let style = Style { couleur: [0,0,0,255], epaisseur: 0.1 };
-        let ligne = Primitive { forme: Forme::Segments(vec![[DVec3::new(-1.,2.,0.),DVec3::new(5.,2.,0.)]]), style: style, role: Role::Vu, element: None };
+        let ligne = Primitive { forme: Forme::Segments(vec![[DVec3::new(-1.,2.,0.),DVec3::new(5.,2.,0.)]]), style, role: Role::Vu, element: None };
         let face = Primitive { forme: Forme::Triangles(vec![[DVec3::new(-1.,-1.,0.),DVec3::new(10.,-1.,0.),DVec3::new(-1.,10.,0.)]]), style, role: Role::Poche, element: None };
         let decoupe = decouper(vec![ligne, face], &contour).unwrap();
         let Forme::Segments(s) = &decoupe[0].forme else { panic!("segments attendus") };

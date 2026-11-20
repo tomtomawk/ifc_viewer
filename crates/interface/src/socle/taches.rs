@@ -410,7 +410,7 @@ mod tests {
         assert!(std::fs::read(d.join("A01.dwg")).unwrap().starts_with(b"AC1018"));
         // PDF groupé : une page par feuille du projet
         let groupe = std::fs::read(d.join("jeu.pdf")).unwrap();
-        assert_eq!(groupe.windows(10).filter(|w| w == b"/Type /Pag" || w == b"/Type/Page").count() >= p.feuilles.len(), true);
+        assert!(groupe.windows(10).filter(|w| w == b"/Type /Pag" || w == b"/Type/Page").count() >= p.feuilles.len());
         let d = dossier("jeu-annule");
         let c = Controle::default();
         c.annule.store(true, Ordering::Relaxed);

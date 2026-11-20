@@ -1,0 +1,5 @@
+# I5 : `unwrap`, `expect` et `panic!` interdits hors des tests (lints activés dans
+# `[workspace.lints]` du Cargo.toml racine) ; permis dans les tests.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
