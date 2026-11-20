@@ -508,6 +508,12 @@ impl Application {
             }
         }
         if texte_annotation { self.apercu_texte_vue(ui, rect, resp.hover_pos()); }
+        // Ouverture : un clic sur un mur la place (branche du clic plus haut) ; consigne et
+        // clic droit comme les autres placements
+        if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Ouverture) {
+            if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
+            if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, "Ouverture : cliquer sur un mur pour la placer · Échap ou clic droit : quitter"); }
+        }
         if let Some(composant) = placement {
             let painter = ui.painter().with_clip_rect(rect);
             let couleur = Color32::from_rgb(55, 130, 200);

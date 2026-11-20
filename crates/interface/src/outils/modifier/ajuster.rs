@@ -375,14 +375,17 @@ impl Application {
             }
         };
         let angle = self.ruban_edition.prolonger_angle;
-        // consigne de l'étape au curseur
+        // consigne de l'étape au curseur et sous le bandeau, comme les autres commandes
+        let consigne = match (angle, e.reference.is_some()) {
+            (true, false) => "Angle : cliquer la partie à conserver du 1ᵉʳ élément",
+            (true, true) => "Angle : cliquer la partie à conserver du 2ᵉ élément",
+            (false, false) => "Cliquer l'arête limite",
+            (false, true) => "Cliquer près de l'extrémité à ajuster · clic droit : autre limite",
+        };
+        if !self.message_visible() {
+            crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, &format!("AJUSTER / PROLONGER · {consigne} · Échap : quitter"));
+        }
         if let Some(q) = ui.input(|i| i.pointer.hover_pos()).filter(|q| rect.contains(*q)) {
-            let consigne = match (angle, e.reference.is_some()) {
-                (true, false) => "Angle : cliquer la partie à conserver du 1ᵉʳ élément",
-                (true, true) => "Angle : cliquer la partie à conserver du 2ᵉ élément",
-                (false, false) => "Cliquer l'arête limite",
-                (false, true) => "Cliquer près de l'extrémité à ajuster · clic droit : autre limite",
-            };
             painter.text(q + egui::vec2(16.0, -8.0), egui::Align2::LEFT_BOTTOM, consigne, egui::FontId::proportional(12.0), bleu);
         }
         if angle && e.reference.is_none() && let Some((id, _)) = &e.survol {
