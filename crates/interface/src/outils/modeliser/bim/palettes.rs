@@ -21,19 +21,16 @@ impl Application {
         if !types.iter().any(|t| t.id == c.type_composant) {
             c.type_composant = types[0].id.clone();
         }
-        choix_type_composant(ui, &mut c.type_composant, &types);
-        let choisi = c.type_composant.clone();
-        let mut ouvrir: Option<Option<String>> = None;
-        ui.horizontal(|ui| {
-            if ui.button("Modifier la famille").on_hover_text("Ouvre la famille du type dans l'éditeur ; « Charger dans le projet » met à jour tous ses composants").clicked() {
-                ouvrir = Some(Some(choisi));
+        let choix = choix_type_composant(ui, &mut c.type_composant, &types);
+        if let Some(source) = choix.dupliquer.and_then(|id| types.iter().find(|t| t.id == id)) {
+            let mut q = p.clone();
+            let id = dupliquer_type_composant(&mut q, source);
+            match self.appliquer_projet(q) {
+                Ok(()) => self.bim.composant.type_composant = id,
+                Err(e) => self.error = Some(e),
             }
-            if ui.button("Nouvelle famille").on_hover_text("Nouvelle famille de composant dans l'éditeur, sur la base de la table").clicked() {
-                ouvrir = Some(None);
-            }
-        });
-        if let Some(t) = ouvrir {
-            self.ouvrir_editeur_composant(t);
+        } else if choix.modifier.is_some() || choix.nouvelle {
+            self.ouvrir_editeur_composant(choix.modifier);
         }
     }
 
@@ -59,7 +56,8 @@ impl Application {
             nom: e.nom(), courant: *e == a.essence, etiquette: None, sous_titre: None, detail: None, actions: &[],
         }).collect();
         let titre = format!("Arbre · {}", a.essence.nom());
-        if let Some(k) = crate::zones::ruban::selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence : elle règle la hauteur et le houppier par défaut."), &lignes, None).ligne {
+        let vignette = |pe: &egui::Painter, r: egui::Rect, _: usize, c: Color32| crate::zones::ruban::vignettes::arbre(pe, r, c);
+        if let Some(k) = crate::zones::ruban::selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence : elle règle la hauteur et le houppier par défaut."), &lignes, None, Some(&vignette)).ligne {
             a.essence = Essence::TOUTES[k];
         }
         if a.essence != avant {

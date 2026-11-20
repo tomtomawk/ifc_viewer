@@ -218,7 +218,7 @@ impl Application {
                 nom, courant: !mixte && *id == commun, etiquette: None, sous_titre: None, detail: None, actions: &[],
             }).collect();
             let titre = format!("{} ({}) · {nom}", g.libelle, g.cibles.len());
-            let c = crate::zones::ruban::selecteur::simple(ui, &titre, None, &format!("{titre}\nLe type choisi s'applique à tous les éléments de cette sorte."), &lignes, None);
+            let c = crate::zones::ruban::selecteur::simple(ui, &titre, None, &format!("{titre}\nLe type choisi s'applique à tous les éléments de cette sorte."), &lignes, None, None);
             if let Some(i) = c.ligne {
                 choix = Some((k, g.types[i].0.clone()));
             }

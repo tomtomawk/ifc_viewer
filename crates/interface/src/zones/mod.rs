@@ -16,3 +16,4 @@ pub(crate) mod menu_vue;
 pub(crate) mod vue_native;
 pub(crate) mod vue_revit;
 pub(crate) mod graphismes;
+pub(crate) mod type_terrain;

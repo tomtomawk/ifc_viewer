@@ -146,7 +146,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   au milieu (glisser déplace). Les hauteurs des extrémités sont gardées ; chaque
   glissement est une seule étape d'annulation. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
 - **Modéliser → Terrain** : choisir le type (épaisseur, matériau) dans le sélecteur
-  « Terrain · nom » (Dupliquer au survol d'une ligne, « + Nouveau type de terrain… » ;
+  « Terrain · nom » (vignette des couches ; Dupliquer et Modifier au survol d'une ligne :
+  Modifier ouvre la fenêtre « Type de terrain » — nom, profondeur nominale, matériau,
+  couches de haut en bas avec une couche variable au plus ; « + Nouveau type de terrain… » ;
   un projet sans type de terrain propose le type par défaut « Terrain naturel », inscrit
   dans le projet à la première utilisation ; les types du gabarit ne sont repris qu'à
   la création d'un projet), tracer un périmètre
@@ -206,8 +208,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   (couches reconstruites d'après le type choisi ; une couche sélectionnée montre le
   type de son mur), mur seul (types à une couche), élément horizontal, porte ou
   fenêtre (dimensions du type), terrain, arbre (essence), composant. Tous ces
-  sélecteurs ont le même aspect (en-tête « catégorie · nom », liste surgissante ;
-  `zones/ruban/selecteur.rs`). Plusieurs éléments sélectionnés : un sélecteur par
+  sélecteurs ont le même aspect (en-tête « catégorie · nom », liste surgissante,
+  vignette du type ; `zones/ruban/selecteur.rs`). Composant : Modifier (famille dans
+  l'éditeur), Dupliquer, « + Nouvelle famille de composant… » ; poutre : Dupliquer. Plusieurs éléments sélectionnés : un sélecteur par
   sorte d'élément présente (murs, murs composés, éléments horizontaux, portes et
   fenêtres, ouvertures libres, composants, terrains, garde-corps, arbres), même si
   la sélection en mélange plusieurs ; « Types variés » quand les types diffèrent, et

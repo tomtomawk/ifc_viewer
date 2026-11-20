@@ -9,6 +9,7 @@ pub(crate) use ouvertures::nom_genre;
 mod icones;
 use icones::*;
 pub(crate) mod selecteur;
+pub(crate) mod vignettes;
 mod barre_commandes;
 pub use barre_commandes::*;
 #[cfg(test)]

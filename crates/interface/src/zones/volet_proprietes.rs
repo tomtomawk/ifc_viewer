@@ -18,6 +18,7 @@ impl Application {
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
         self.fenetre_types_traits(ui.ctx());
+        self.fenetre_type_terrain(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if self.proprietes_famille_selectionnee(ui) { return; }
         if let Some(jeu) = self.jeu_actif() {

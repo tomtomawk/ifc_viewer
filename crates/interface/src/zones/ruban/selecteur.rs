@@ -210,18 +210,28 @@ pub(crate) struct Choix {
     pub ajout: bool,
 }
 
-/// Sélecteur complet sans vignette pour les objets aux types simples (terrain, arbre,
-/// composant, sélection multiple) : en-tête « catégorie · nom », liste des lignes, ligne
-/// « + » facultative. Même aspect que les sélecteurs de mur ou de garde-corps.
-pub(crate) fn simple(ui: &mut egui::Ui, titre: &str, detail: Option<&str>, bulle: &str, lignes: &[Ligne], ajout: Option<&str>) -> Choix {
-    let bouton = entete(ui, titre, detail, bulle, None);
+/// Sélecteur complet des objets aux types simples (terrain, arbre, composant, pièce,
+/// poutre, sélection multiple) : en-tête « catégorie · nom », liste des lignes avec
+/// vignette facultative, ligne « + » facultative. Même aspect que les sélecteurs de mur ou
+/// de garde-corps.
+/// Vignette d'un sélecteur simple : peintre, zone, rang de la ligne, couleur du trait.
+pub(crate) type Vignette<'a> = &'a dyn Fn(&egui::Painter, egui::Rect, usize, Color32);
+
+pub(crate) fn simple(ui: &mut egui::Ui, titre: &str, detail: Option<&str>, bulle: &str, lignes: &[Ligne], ajout: Option<&str>, vignette: Option<Vignette>) -> Choix {
+    // en-tête : vignette de la ligne courante
+    let courant = lignes.iter().position(|l| l.courant);
+    let vignette_entete = vignette.zip(courant).map(|(v, k)| move |p: &egui::Painter, r: egui::Rect, c: Color32| v(p, r, k, c));
+    let bouton = entete(ui, titre, detail, bulle, vignette_entete.as_ref().map(|f| f as &dyn Fn(&egui::Painter, egui::Rect, Color32)));
     let largeur = largeur_liste(ui, lignes.iter().map(|l| l.nom), 120.0, 0, 0.0);
     let hauteur = lignes.iter().map(|l| if l.sous_titre.is_some() { HAUTEUR_LIGNE_DOUBLE } else { HAUTEUR_LIGNE }).sum::<f32>()
         + if ajout.is_some() { HAUTEUR_LIGNE + 12.0 } else { 4.0 };
     let mut choix = Choix::default();
     liste(&bouton, largeur, hauteur, |ui| {
         for (k, l) in lignes.iter().enumerate() {
-            let clic = ligne(ui, l, None);
+            let clic = match vignette {
+                Some(v) => ligne(ui, l, Some(&mut |ui: &mut egui::Ui, r: egui::Rect| v(ui.painter(), r, k, ui.visuals().text_color()))),
+                None => ligne(ui, l, None),
+            };
             if let Some(a) = clic.action {
                 choix.action = Some((k, a));
             } else if clic.choisi {

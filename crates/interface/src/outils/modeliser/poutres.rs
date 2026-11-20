@@ -229,12 +229,24 @@ impl Application {
         let nom = r.type_poutre.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).map_or_else(|| format!("Section {} × {} mm", r.largeur, r.hauteur), |t| t.nom.clone());
         {
             use crate::zones::ruban::selecteur;
-            let details: Vec<String> = types.iter().map(|t| format!("{} × {} mm", t.largeur, t.hauteur)).collect();
-            let mut lignes = vec![selecteur::Ligne { nom: "Section rectangulaire libre", courant: r.type_poutre.is_none(), etiquette: None, sous_titre: None, detail: Some(format!("{} × {} mm", r.largeur, r.hauteur)), actions: &[] }];
-            lignes.extend(types.iter().zip(&details).map(|(t, d)| selecteur::Ligne { nom: &t.nom, courant: r.type_poutre.as_ref() == Some(&t.id), etiquette: None, sous_titre: None, detail: Some(d.clone()), actions: &[] }));
+            let u = modele::unite::unite();
+            let details: Vec<String> = types.iter().map(|t| format!("{} × {}", u.afficher(t.largeur), u.afficher(t.hauteur))).collect();
+            let actions: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci")];
+            let mut lignes = vec![selecteur::Ligne { nom: "Section rectangulaire libre", courant: r.type_poutre.is_none(), etiquette: None, sous_titre: None, detail: Some(format!("{} × {}", u.afficher(r.largeur), u.afficher(r.hauteur))), actions }];
+            lignes.extend(types.iter().zip(&details).map(|(t, d)| selecteur::Ligne { nom: &t.nom, courant: r.type_poutre.as_ref() == Some(&t.id), etiquette: None, sous_titre: None, detail: Some(d.clone()), actions }));
+            // sections : ligne 0 = section libre, puis les types
+            let sections: Vec<(f64, f64)> = std::iter::once((r.largeur, r.hauteur)).chain(types.iter().map(|t| (t.largeur, t.hauteur))).collect();
+            let vignette = |pe: &egui::Painter, z: egui::Rect, k: usize, c: Color32| crate::zones::ruban::vignettes::poutre(pe, z, sections[k].0, sections[k].1, c);
             let titre = format!("Poutre · {nom}");
-            if let Some(k) = selecteur::simple(ui, &titre, None, &format!("{titre}\nType de poutre : profil, dimensions, matériau."), &lignes, None).ligne {
+            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nType de poutre : profil, dimensions, matériau."), &lignes, None, Some(&vignette));
+            if let Some(k) = choix.ligne {
                 r.type_poutre = k.checked_sub(1).map(|i| types[i].id.clone());
+            }
+            // Dupliquer : nouveau type au nom libre, d'après la section libre ou un type
+            if let Some((k, _)) = choix.action {
+                let base = k.checked_sub(1).map(|i| types[i].clone()).unwrap_or(TypePoutre { id: String::new(), nom: format!("Poutre {} × {}", r.largeur, r.hauteur), profil: None, largeur: r.largeur, hauteur: r.hauteur, materiau: None });
+                let nom = (2..).map(|n| format!("{} {n}", base.nom)).find(|n| types.iter().all(|t| &t.nom != n)).unwrap_or_default();
+                nouveau_type = Some(TypePoutre { id: format!("type-poutre-{}", noyau::uuid::uuid()), nom, ..base });
             }
         }
         let type_courant = r.type_poutre.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).cloned();

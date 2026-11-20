@@ -9,7 +9,9 @@ impl Application {
         let types = p.types_terrains_disponibles();
         let courant = self.dessin2d.terrain_type.clone().filter(|id| types.iter().any(|t| &t.id == id)).unwrap_or_else(|| types[0].id.clone());
         let choix = crate::zones::communes::selecteur_type_terrain(ui, p, Some(&courant), 1);
-        if let Some(source) = choix.dupliquer {
+        if let Some(t) = choix.modifier {
+            self.type_terrain_edite = Some(t);
+        } else if let Some(source) = choix.dupliquer {
             let mut q = p.clone();
             if let Some(id) = crate::zones::communes::dupliquer_type_terrain(&mut q, &source) {
                 match self.appliquer_projet(q) {

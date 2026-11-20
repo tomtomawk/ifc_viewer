@@ -615,6 +615,8 @@ pub struct Application {
     variante_creation_suivie: Option<String>,
     /// Matériau du projet natif dont les graphismes sont ouverts.
     materiau_edite: Option<String>,
+    /// Type de terrain ouvert dans la fenêtre « Type de terrain » (`zones/type_terrain.rs`).
+    pub(crate) type_terrain_edite: Option<String>,
     /// Onglet de la fenêtre Matériau : Graphique (faux) ou Apparence (vrai).
     materiau_apparence: bool,
     /// Éditeur de hachures ouvert, motif choisi, nom et tirets en cours de saisie (motif,
@@ -824,6 +826,7 @@ impl Application {
             liste_niveaux: Vec::new(),
             liste_materiaux: Vec::new(),
             materiau_edite: None,
+            type_terrain_edite: None,
             materiau_apparence: false,
             editeur_motifs: false,
             editeur_plumes: None,

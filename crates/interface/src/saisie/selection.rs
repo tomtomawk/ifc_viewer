@@ -43,7 +43,8 @@ impl Application {
                 nom: e.nom(), courant: *e == arbre.essence, etiquette: None, sous_titre: None, detail: None, actions: &[],
             }).collect();
             let titre = format!("Arbre · {}", arbre.essence.nom());
-            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence de l'arbre."), &lignes, None);
+            let vignette = |pe: &egui::Painter, r: egui::Rect, _: usize, c: Color32| crate::zones::ruban::vignettes::arbre(pe, r, c);
+            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence de l'arbre."), &lignes, None, Some(&vignette));
             ui.separator();
             let essence = Essence::TOUTES[choix.ligne?];
             if essence == arbre.essence {
@@ -57,6 +58,10 @@ impl Application {
             let actuel = p.type_terrain(terrain).id;
             let choix = crate::zones::communes::selecteur_type_terrain(ui, p, Some(&actuel), 1);
             ui.separator();
+            if let Some(t) = choix.modifier {
+                self.type_terrain_edite = Some(t);
+                return None;
+            }
             let mut q = p.clone();
             let nouveau = match (choix.choisi, choix.dupliquer) {
                 (_, Some(source)) => crate::zones::communes::dupliquer_type_terrain(&mut q, &source)?,
@@ -68,19 +73,19 @@ impl Application {
             return Some(q);
         }
         if let Some(composant) = p.composants.iter().find(|c| &c.id == id) {
-            let actuel = composant.type_composant.clone();
-            let nom = p.types_composants.iter().find(|t| t.id == actuel).map_or("Type absent", |t| t.nom.as_str());
-            let lignes: Vec<selecteur::Ligne> = p.types_composants.iter().map(|t| selecteur::Ligne {
-                nom: &t.nom, courant: t.id == actuel, etiquette: None, sous_titre: None, detail: None, actions: &[],
-            }).collect();
-            let titre = format!("Composant · {nom}");
-            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nType du composant."), &lignes, None);
+            use crate::outils::modeliser::bim::widgets::{choix_type_composant, dupliquer_type_composant};
+            let mut choisi = composant.type_composant.clone();
+            let choix = choix_type_composant(ui, &mut choisi, &p.types_composants);
             ui.separator();
-            let choisi = p.types_composants[choix.ligne?].id.clone();
-            if choisi == actuel {
+            let mut q = p.clone();
+            if let Some(source) = choix.dupliquer.and_then(|t| p.types_composants.iter().find(|x| x.id == t)) {
+                choisi = dupliquer_type_composant(&mut q, source);
+            } else if choix.modifier.is_some() || choix.nouvelle {
+                self.ouvrir_editeur_composant(choix.modifier);
+                return None;
+            } else if !choix.change {
                 return None;
             }
-            let mut q = p.clone();
             if let Some(c) = q.composants.iter_mut().find(|c| &c.id == id) { c.type_composant = choisi; }
             return Some(q);
         }

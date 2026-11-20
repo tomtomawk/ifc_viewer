@@ -18,6 +18,7 @@ Rôle : zones d'écran autour de la vue.
 | `donnees_importees.rs` | propriétés, matériau et couleur lus d'un élément importé (lecture seule, appelé depuis `proprietes.rs`) |
 | `menu_vue.rs` | clic droit dans la vue, poignée de milieu de mur |
 | `vue_native.rs`, `vue_revit.rs` | propriétés des vues natives et sélecteur de gabarit ; vues Revit, nomenclatures |
+| `type_terrain.rs` | fenêtre « Type de terrain » (Modifier du sélecteur de terrain : nom, profondeur, matériau, couches) |
 | `graphismes.rs` | fenêtres matériau, plumes, motifs |
 
 Dépendances typiques : `socle/`, `outils/` (barres d'options), `familles/` (sélection des familles), `documenter/` (feuilles).

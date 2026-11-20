@@ -15,27 +15,39 @@ pub(crate) struct ChoixTerrain {
     pub choisi: Option<String>,
     /// Type à dupliquer (action au survol, ou ligne « + » : le type courant).
     pub dupliquer: Option<String>,
+    /// Type à modifier (action au survol) : fenêtre « Type de terrain ».
+    pub modifier: Option<String>,
 }
 
 /// Sélecteur de type de terrain, le même à la création et sur une sélection : en-tête
 /// « Terrain · nom » (« Types variés » si `courant` vaut `None`), une ligne par type
-/// (profondeur, matériau), Dupliquer au survol, « + Nouveau type de terrain… ».
+/// (vignette des couches, profondeur, matériau), Dupliquer et Modifier au survol,
+/// « + Nouveau type de terrain… ».
 pub(crate) fn selecteur_type_terrain(ui: &mut egui::Ui, projet: &Projet, courant: Option<&str>, nombre: usize) -> ChoixTerrain {
     let types = projet.types_terrains_disponibles();
     let actuel = courant.and_then(|id| types.iter().find(|t| t.id == id)).or(courant.and(types.first()));
     let detail = |t: &TypeTerrain| format!("{} · {}", modele::unite::unite().afficher(t.epaisseur), t.materiau.as_deref().unwrap_or("matériau par défaut"));
     let details: Vec<String> = types.iter().map(detail).collect();
-    let actions: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci")];
+    let actions: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci"), (selecteur::ActionType::Modifier, "Modifier le type : nom, profondeur, matériau, couches")];
+    // couleurs des couches de chaque type (une seule : son matériau)
+    let couleurs: Vec<Vec<Color32>> = types.iter().map(|t| {
+        if t.couches.is_empty() { vec![crate::zones::ruban::vignettes::couleur_materiau(projet, t.materiau.as_deref())] }
+        else { t.couches.iter().map(|c| crate::zones::ruban::vignettes::couleur_materiau(projet, c.materiau.as_deref())).collect() }
+    }).collect();
+    let vignette = |pe: &egui::Painter, r: egui::Rect, k: usize, c: Color32| crate::zones::ruban::vignettes::terrain(pe, r, &couleurs[k], c);
     let lignes: Vec<selecteur::Ligne> = types.iter().zip(&details).map(|(t, d)| selecteur::Ligne {
         nom: &t.nom, courant: actuel.is_some_and(|a| a.id == t.id), etiquette: None, sous_titre: None, detail: Some(d.clone()), actions,
     }).collect();
     let categorie = if nombre > 1 { format!("Terrains ({nombre})") } else { "Terrain".into() };
     let titre = format!("{categorie} · {}", actuel.map_or("Types variés", |t| t.nom.as_str()));
     let bulle = format!("{titre}\nType du terrain : profondeur sous le terrain naturel, matériau et couches.");
-    let c = selecteur::simple(ui, &titre, actuel.map(|t| modele::unite::unite().afficher(t.epaisseur)).as_deref(), &bulle, &lignes, Some("Nouveau type de terrain…"));
+    let c = selecteur::simple(ui, &titre, actuel.map(|t| modele::unite::unite().afficher(t.epaisseur)).as_deref(), &bulle, &lignes, Some("Nouveau type de terrain…"), Some(&vignette));
     let mut choix = ChoixTerrain { choisi: c.ligne.map(|k| types[k].id.clone()), ..Default::default() };
-    if let Some((k, _)) = c.action {
-        choix.dupliquer = Some(types[k].id.clone());
+    if let Some((k, a)) = c.action {
+        match a {
+            selecteur::ActionType::Dupliquer => choix.dupliquer = Some(types[k].id.clone()),
+            selecteur::ActionType::Modifier => choix.modifier = Some(types[k].id.clone()),
+        }
     } else if c.ajout {
         choix.dupliquer = Some(actuel.unwrap_or(&types[0]).id.clone());
     }

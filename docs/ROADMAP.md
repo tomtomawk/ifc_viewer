@@ -69,7 +69,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
 | U11 | Réglages retirés car jamais lus (U3, 20/11/2026), à réaliser s'ils sont voulus : Texte (ligne de repère avec flèche, alignement gauche / centre / droite), Étiquette (contenu : type, repère, matériau), Cote (mode orthogonal, décalage papier), Zone (motif, pas), Quadrillage en arc, Déplacer contraint horizontal / vertical (Maj contraint déjà aux axes) | P3 | `zones/ruban/mod.rs` (`champs`) ; question au §9 |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
-| U9 | Sélecteurs simples (terrain, arbre, composant, pièce, poutre, sélection multiple) : vignettes ; Renommer et Dupliquer pour composant et poutre ; éditeur de type de terrain (couches) depuis le sélecteur | P3 | `zones/ruban/selecteur.rs` (`simple`) |
 
 ## 5. Familles
 
