@@ -2,6 +2,7 @@
 perpendiculaire au dernier trait, dans une instance isolée.
 
 python tools/test-accrochage.py --exe target/release/bimedit.exe
+(Linux sans affichage : xvfb-run -a python3 tools/test-accrochage.py --exe target/debug/bimedit)
 """
 import argparse
 import json
@@ -114,7 +115,9 @@ def run(exe):
             x, y = pt["position"]
             # (point − dernier point) · (dernier trait) = 0 : sur la perpendiculaire
             assert abs((x - bx) * (bx - ax) + (y - by) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2) ** .5 < 1.0, ("perpendiculaire non accrochée", pt, trace)
-            saisie([{"action": "touche", "touche": "Escape"}, {"action": "touche", "touche": "Escape"}])
+            # Échap interrompt le tracé (contour laissé ouvert), Échap annonce l'abandon, Échap
+            # abandonne : sinon le contour en attente garde le bandeau et bloque les poignées
+            saisie([{"action": "touche", "touche": "Escape"}, {"action": "touche", "touche": "Escape"}, {"action": "touche", "touche": "Escape"}])
 
             # 4. Poignée d'extrémité d'un mur : magnétisme sur le prolongement du mur
             commande("outil", "aucun")
