@@ -16,7 +16,6 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
 | A1b | Résorber les avertissements clippy (environ 270 au 17/11/2026, dont 140 `if` imbriqués et 52 types complexes) et 3 erreurs (`approx_constant` dans des tests de `formats`), puis rendre clippy bloquant dans la CI | P2 | `.github/workflows/ci.yml`, tâche `debug` |
-| A11 | Pilote : taille de message non bornée, jeton sous le dossier temporaire commun hors Windows, inscription d'instance dont l'échec est ignoré | P2 | `crates/pilote/src/lib.rs:60-71`, `instances.rs:40`, `:57-63` |
 | T1 | Tests de fichiers malformés : fait pour les cas d'A3 ; restent le balayage aléatoire (fuzzing) d'IFC et de RVT, les fichiers `rvt/{vues,feuilles,nomenclatures,parametres,annexes,zones}.rs` non relus, et `Projet::verifier()` sur un `.modele.json` malformé ; `scene` sans test | P2 | `crates/formats/src/ifc/bornes.rs` |
 | T2 | Les 20 scripts `tools/test-*.py` (clics simulés) ne tournent pas en CI | P2 | `tools/` |
 

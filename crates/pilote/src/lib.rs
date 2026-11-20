@@ -24,12 +24,15 @@ pub fn documentation(sujet: &str) -> Result<&'static str, String> {
 }
 
 use eframe::egui;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 
 pub const PORT: u16 = 47811;
+/// Taille maximale d'une requête du canal TCP (une ligne) : un projet complet passé à
+/// `editer` y tient largement.
+pub const TAILLE_MAX_REQUETE: u64 = 256 << 20;
 
 /// Commande reçue, avec le canal de sa réponse (une ligne JSON).
 pub struct Requete {
@@ -46,7 +49,9 @@ pub fn demarrer(ctx: egui::Context) -> Option<Receiver<Requete>> {
         None => {
             let ecoute = TcpListener::bind(("127.0.0.1", PORT)).or_else(|_| TcpListener::bind(("127.0.0.1", 0))).ok()?;
             let jeton = instances::nouveau_jeton();
-            instances::inscrire(ecoute.local_addr().ok()?.port(), &jeton);
+            if let Err(e) = instances::inscrire(ecoute.local_addr().ok()?.port(), &jeton) {
+                eprintln!("{e} : l'instance reste pilotable sur son port, mais le pont MCP ne la verra pas.");
+            }
             (ecoute, Some(jeton))
         }
     };
@@ -68,7 +73,13 @@ fn servir(flux: TcpStream, tx: Sender<Requete>, ctx: egui::Context, jeton: Optio
     let _ = flux.set_read_timeout(Some(Duration::from_secs(30)));
     let mut ligne = String::new();
     let Ok(copie) = flux.try_clone() else { return };
-    if BufReader::new(copie).read_line(&mut ligne).is_err() {
+    // requête bornée : une ligne sans fin ne remplit pas la mémoire
+    if BufReader::new(copie.take(TAILLE_MAX_REQUETE)).read_line(&mut ligne).is_err() {
+        return;
+    }
+    if !ligne.ends_with('\n') && ligne.len() as u64 >= TAILLE_MAX_REQUETE {
+        let mut flux = flux;
+        let _ = writeln!(flux, "{}", erreur(&format!("requête de plus de {} Mo refusée", TAILLE_MAX_REQUETE >> 20)));
         return;
     }
     let ligne = ligne.trim_end_matches(['\r', '\n']);

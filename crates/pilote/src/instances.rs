@@ -1,5 +1,6 @@
 //! Registre local des instances pilotables : un fichier JSON par instance dans
-//! `%LOCALAPPDATA%\BIMedit\instances` (port, jeton, fichier ouvert). Le pont MCP le lit pour
+//! `%LOCALAPPDATA%\BIMedit\instances` (Windows) ou un dossier propre à l'utilisateur
+//! ailleurs (`dossier`), lisible par lui seul (port, jeton, fichier ouvert). Le pont MCP le lit pour
 //! lister les instances et en choisir une ; une instance lancée par l'utilisateur est donc
 //! joignable comme une instance lancée par le pont.
 //!
@@ -36,9 +37,42 @@ pub fn jeton_impose() -> Option<String> {
     std::env::var("BIMEDIT_JETON").ok().filter(|j| !j.is_empty())
 }
 
+/// Dossier du registre. Windows : `%LOCALAPPDATA%\BIMedit\instances`. Ailleurs, jamais le
+/// dossier temporaire commun (les jetons y seraient lisibles par les autres comptes) :
+/// `$XDG_RUNTIME_DIR/bimedit/instances` (propre à l'utilisateur), sinon
+/// `$XDG_STATE_HOME/bimedit/instances`, sinon `~/.local/state/bimedit/instances`.
 pub fn dossier() -> PathBuf {
-    let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
-    base.join("BIMedit").join("instances")
+    dossier_depuis(|nom| std::env::var_os(nom))
+}
+
+/// `dossier` d'après les variables d'environnement données (testable).
+fn dossier_depuis(env: impl Fn(&str) -> Option<std::ffi::OsString>) -> PathBuf {
+    let variable = |nom: &str| env(nom).filter(|v| !v.is_empty()).map(PathBuf::from);
+    if let Some(base) = variable("LOCALAPPDATA") {
+        return base.join("BIMedit").join("instances");
+    }
+    let base = variable("XDG_RUNTIME_DIR")
+        .or_else(|| variable("XDG_STATE_HOME"))
+        .or_else(|| variable("HOME").map(|h| h.join(".local").join("state")))
+        .unwrap_or_else(|| std::env::temp_dir().join(format!("bimedit-{}", utilisateur())));
+    base.join("bimedit").join("instances")
+}
+
+/// Nom du compte, pour un dernier recours sans dossier personnel.
+fn utilisateur() -> String {
+    std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_else(|_| "inconnu".into())
+}
+
+/// Crée le dossier du registre, réservé à l'utilisateur hors Windows (0700).
+fn creer_dossier() -> std::io::Result<()> {
+    let d = dossier();
+    std::fs::create_dir_all(&d)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
 }
 
 fn fichier_de(pid: u32) -> PathBuf {
@@ -52,20 +86,25 @@ pub fn nouveau_jeton() -> String {
 /// Instance de ce processus, une fois inscrite.
 static COURANTE: Mutex<Option<Instance>> = Mutex::new(None);
 
-fn ecrire(i: &Instance) {
+fn ecrire(i: &Instance) -> Result<(), String> {
     let chemin = fichier_de(i.pid);
-    if std::fs::create_dir_all(dossier()).is_err() { return; }
+    let message = |e: std::io::Error| format!("Registre des instances ({}) : {e}", chemin.display());
+    creer_dossier().map_err(message)?;
     // écriture atomique : le pont ne lit jamais un fichier à moitié écrit
     let temporaire = chemin.with_extension("tmp");
-    if let Ok(json) = serde_json::to_vec_pretty(i)
-        && std::fs::write(&temporaire, json).is_ok()
+    let json = serde_json::to_vec_pretty(i).map_err(|e| e.to_string())?;
+    std::fs::write(&temporaire, json).map_err(message)?;
+    #[cfg(unix)]
     {
-        let _ = std::fs::rename(&temporaire, &chemin);
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&temporaire, std::fs::Permissions::from_mode(0o600)).map_err(message)?;
     }
+    std::fs::rename(&temporaire, &chemin).map_err(message)
 }
 
-/// Inscrit l'instance (mode normal seulement).
-pub fn inscrire(port: u16, jeton: &str) {
+/// Inscrit l'instance (mode normal seulement). Un échec est rendu : l'instance reste
+/// pilotable par son port, mais le pont MCP ne la trouvera pas.
+pub fn inscrire(port: u16, jeton: &str) -> Result<(), String> {
     let i = Instance {
         pid: std::process::id(),
         port,
@@ -75,8 +114,9 @@ pub fn inscrire(port: u16, jeton: &str) {
         fichier: None,
         partage: None,
     };
-    ecrire(&i);
+    let r = ecrire(&i);
     *COURANTE.lock().unwrap() = Some(i);
+    r
 }
 
 /// Met à jour le fichier ouvert et le partage ; n'écrit que s'ils ont changé.
@@ -86,7 +126,9 @@ pub fn publier(fichier: Option<String>, partage: Option<String>) {
     if i.fichier == fichier && i.partage == partage { return; }
     i.fichier = fichier;
     i.partage = partage;
-    ecrire(i);
+    if let Err(e) = ecrire(i) {
+        eprintln!("{e}");
+    }
 }
 
 /// Pid et port de cette instance, si elle est inscrite.
@@ -138,6 +180,17 @@ fn egal_temps_constant(a: &[u8], b: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Hors Windows, le registre (jetons) n'est jamais dans le dossier temporaire commun.
+    #[test]
+    fn dossier_du_registre_propre_a_l_utilisateur() {
+        let env = |vars: &'static [(&'static str, &'static str)]| move |nom: &str| vars.iter().find(|(n, _)| *n == nom).map(|(_, v)| std::ffi::OsString::from(v));
+        assert_eq!(dossier_depuis(env(&[("LOCALAPPDATA", "C:/L"), ("HOME", "/h")])), PathBuf::from("C:/L/BIMedit/instances"));
+        assert_eq!(dossier_depuis(env(&[("XDG_RUNTIME_DIR", "/run/user/1000"), ("HOME", "/h")])), PathBuf::from("/run/user/1000/bimedit/instances"));
+        assert_eq!(dossier_depuis(env(&[("HOME", "/h")])), PathBuf::from("/h/.local/state/bimedit/instances"));
+        assert_eq!(dossier_depuis(env(&[("LOCALAPPDATA", ""), ("HOME", "/h")])), PathBuf::from("/h/.local/state/bimedit/instances"));
+        assert_ne!(dossier_depuis(env(&[])).parent(), Some(std::env::temp_dir().join("BIMedit").as_path()));
+    }
 
     #[test]
     fn jeton_exige_et_retire() {

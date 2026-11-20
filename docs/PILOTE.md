@@ -8,7 +8,12 @@ JSON avec `ok`.
 
 - Chaque instance écoute sur `127.0.0.1`, port 47811 s'il est libre, sinon un port choisi
   par le système, et s'inscrit dans `%LOCALAPPDATA%\BIMedit\instances\<pid>.json`
-  (`pid`, `port`, `jeton`, `fichier` ouvert, `partage` collaboratif). L'inscription
+  sous Windows, ailleurs dans `$XDG_RUNTIME_DIR/bimedit/instances` (à défaut
+  `$XDG_STATE_HOME`, puis `~/.local/state`), dossier 0700 et fichiers 0600, jamais le
+  dossier temporaire commun (`pid`, `port`, `jeton`, `fichier` ouvert, `partage`
+  collaboratif). Une inscription impossible est signalée sur la sortie d'erreur :
+  l'instance reste pilotable par son port, sans être vue du pont.
+- Une requête TCP (une ligne) est limitée à 256 Mo ; au-delà, elle est refusée. L'inscription
   disparaît à la fermeture ; le pont efface celles des instances qui ne répondent plus.
 - Le jeton (32 caractères aléatoires, nouveau à chaque lancement) est exigé : une ligne
   sans `@jeton` ou avec un autre jeton est refusée.
