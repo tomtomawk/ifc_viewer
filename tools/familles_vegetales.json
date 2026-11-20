@@ -1,0 +1,1447 @@
+{
+ "fastigie": {
+  "categorie": "vegetation",
+  "elements_2d": [
+   {
+    "vue": "plan",
+    "forme": {
+     "forme": "polyligne",
+     "points": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     "fermee": true,
+     "courbures": [
+      0.41421356237309503,
+      0.41421356237309503,
+      0.41421356237309503,
+      0.41421356237309503
+     ]
+    },
+    "hauteur": 2.5,
+    "ancrage": [
+     {
+      "h": {
+       "plan": "Droite",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Milieu",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Extérieur",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Gauche",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Milieu",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Intérieur",
+       "decalage": 0.0
+      }
+     }
+    ]
+   }
+  ],
+  "parametres": [
+   {
+    "nom": "Rendu",
+    "formule": "arbre:fastigie",
+    "genre": "texte"
+   },
+   {
+    "nom": "Feuillage",
+    "formule": "Feuillage",
+    "genre": "materiau"
+   },
+   {
+    "nom": "Écorce",
+    "formule": "Écorce",
+    "genre": "materiau"
+   }
+  ],
+  "plans": [
+   {
+    "nom": "Centre",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Gauche",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Droite",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "R50",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "R87",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Tronc",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Milieu",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Extérieur",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": false,
+    "hote": "exterieur"
+   },
+   {
+    "nom": "Intérieur",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": false,
+    "hote": "interieur"
+   },
+   {
+    "nom": "Bas",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Haut",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Fut",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z07",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z25",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z50",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z75",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z93",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   }
+  ],
+  "contraintes": [
+   {
+    "genre": "egalite",
+    "a": "Gauche",
+    "m": "Centre",
+    "b": "Droite",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Gauche",
+    "b": "Droite",
+    "valeur": "Largeur",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "R50",
+    "valeur": "Largeur*0.25",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "R87",
+    "valeur": "Largeur*0.433",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "Tronc",
+    "valeur": "Largeur*0.035",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Haut",
+    "valeur": "Hauteur",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Fut",
+    "valeur": "Hauteur*0.1000",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z07",
+    "valeur": "Hauteur*0.1603",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z25",
+    "valeur": "Hauteur*0.3250",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z50",
+    "valeur": "Hauteur*0.5500",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z75",
+    "valeur": "Hauteur*0.7750",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z93",
+    "valeur": "Hauteur*0.9397",
+    "priorite": 9
+   }
+  ],
+  "volumes": [],
+  "extrusions": [
+   {
+    "operation": {
+     "genre": "revolution",
+     "revolution": {
+      "axe": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        100.0
+       ]
+      ],
+      "debut": 0.0,
+      "angle": 360.0
+     }
+    },
+    "nom": "Houppier",
+    "vide": false,
+    "materiau": "menuiserie",
+    "vue": "elevation",
+    "profil": [
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Haut",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R50",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z93",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R87",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z75",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Droite",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R87",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z25",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R50",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z07",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Fut",
+       "decalage": 0.0
+      }
+     }
+    ],
+    "profondeur": [
+     {
+      "plan": "Intérieur",
+      "decalage": 0.0
+     },
+     {
+      "plan": "Extérieur",
+      "decalage": 0.0
+     }
+    ],
+    "visibilite": {
+     "faible": true,
+     "moyen": true,
+     "eleve": true,
+     "plan": false,
+     "coupe": true,
+     "vue_3d": true
+    },
+    "materiau_parametre": "Feuillage"
+   },
+   {
+    "operation": {
+     "genre": "revolution",
+     "revolution": {
+      "axe": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        100.0
+       ]
+      ],
+      "debut": 0.0,
+      "angle": 360.0
+     }
+    },
+    "nom": "Tronc",
+    "vide": false,
+    "materiau": "menuiserie",
+    "vue": "elevation",
+    "profil": [
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Bas",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Tronc",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Bas",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Tronc",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     }
+    ],
+    "profondeur": [
+     {
+      "plan": "Intérieur",
+      "decalage": 0.0
+     },
+     {
+      "plan": "Extérieur",
+      "decalage": 0.0
+     }
+    ],
+    "visibilite": {
+     "faible": true,
+     "moyen": true,
+     "eleve": true,
+     "plan": false,
+     "coupe": true,
+     "vue_3d": true
+    },
+    "materiau_parametre": "Écorce"
+   }
+  ],
+  "couleur": [
+   96,
+   128,
+   56
+  ],
+  "genre": "libre"
+ },
+ "conifere": {
+  "categorie": "vegetation",
+  "elements_2d": [
+   {
+    "vue": "plan",
+    "forme": {
+     "forme": "polyligne",
+     "points": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     "fermee": true,
+     "courbures": [
+      0.41421356237309503,
+      0.41421356237309503,
+      0.41421356237309503,
+      0.41421356237309503
+     ]
+    },
+    "hauteur": 2.5,
+    "ancrage": [
+     {
+      "h": {
+       "plan": "Droite",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Milieu",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Extérieur",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Gauche",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Milieu",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Intérieur",
+       "decalage": 0.0
+      }
+     }
+    ]
+   }
+  ],
+  "parametres": [
+   {
+    "nom": "Rendu",
+    "formule": "arbre:conifere",
+    "genre": "texte"
+   },
+   {
+    "nom": "Feuillage",
+    "formule": "Feuillage",
+    "genre": "materiau"
+   },
+   {
+    "nom": "Écorce",
+    "formule": "Écorce",
+    "genre": "materiau"
+   }
+  ],
+  "plans": [
+   {
+    "nom": "Centre",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Gauche",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Droite",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "R50",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "R87",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Tronc",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Milieu",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Extérieur",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": false,
+    "hote": "exterieur"
+   },
+   {
+    "nom": "Intérieur",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": false,
+    "hote": "interieur"
+   },
+   {
+    "nom": "Bas",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Haut",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Fut",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z07",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z25",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z50",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z75",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z93",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   }
+  ],
+  "contraintes": [
+   {
+    "genre": "egalite",
+    "a": "Gauche",
+    "m": "Centre",
+    "b": "Droite",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Gauche",
+    "b": "Droite",
+    "valeur": "Largeur",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "R50",
+    "valeur": "Largeur*0.25",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "R87",
+    "valeur": "Largeur*0.433",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "Tronc",
+    "valeur": "Largeur*0.035",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Haut",
+    "valeur": "Hauteur",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Fut",
+    "valeur": "Hauteur*0.1200",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z07",
+    "valeur": "Hauteur*0.1790",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z25",
+    "valeur": "Hauteur*0.3400",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z50",
+    "valeur": "Hauteur*0.5600",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z75",
+    "valeur": "Hauteur*0.7800",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z93",
+    "valeur": "Hauteur*0.9410",
+    "priorite": 9
+   }
+  ],
+  "volumes": [],
+  "extrusions": [
+   {
+    "operation": {
+     "genre": "revolution",
+     "revolution": {
+      "axe": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        100.0
+       ]
+      ],
+      "debut": 0.0,
+      "angle": 360.0
+     }
+    },
+    "nom": "Houppier",
+    "vide": false,
+    "materiau": "menuiserie",
+    "vue": "elevation",
+    "profil": [
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Haut",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Droite",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Fut",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Fut",
+       "decalage": 0.0
+      }
+     }
+    ],
+    "profondeur": [
+     {
+      "plan": "Intérieur",
+      "decalage": 0.0
+     },
+     {
+      "plan": "Extérieur",
+      "decalage": 0.0
+     }
+    ],
+    "visibilite": {
+     "faible": true,
+     "moyen": true,
+     "eleve": true,
+     "plan": false,
+     "coupe": true,
+     "vue_3d": true
+    },
+    "materiau_parametre": "Feuillage"
+   },
+   {
+    "operation": {
+     "genre": "revolution",
+     "revolution": {
+      "axe": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        100.0
+       ]
+      ],
+      "debut": 0.0,
+      "angle": 360.0
+     }
+    },
+    "nom": "Tronc",
+    "vide": false,
+    "materiau": "menuiserie",
+    "vue": "elevation",
+    "profil": [
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Bas",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Tronc",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Bas",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Tronc",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     }
+    ],
+    "profondeur": [
+     {
+      "plan": "Intérieur",
+      "decalage": 0.0
+     },
+     {
+      "plan": "Extérieur",
+      "decalage": 0.0
+     }
+    ],
+    "visibilite": {
+     "faible": true,
+     "moyen": true,
+     "eleve": true,
+     "plan": false,
+     "coupe": true,
+     "vue_3d": true
+    },
+    "materiau_parametre": "Écorce"
+   }
+  ],
+  "couleur": [
+   64,
+   100,
+   60
+  ],
+  "genre": "libre"
+ },
+ "feuillu": {
+  "categorie": "vegetation",
+  "elements_2d": [
+   {
+    "vue": "plan",
+    "forme": {
+     "forme": "polyligne",
+     "points": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0
+      ]
+     ],
+     "fermee": true,
+     "courbures": [
+      0.41421356237309503,
+      0.41421356237309503,
+      0.41421356237309503,
+      0.41421356237309503
+     ]
+    },
+    "hauteur": 2.5,
+    "ancrage": [
+     {
+      "h": {
+       "plan": "Droite",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Milieu",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Extérieur",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Gauche",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Milieu",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Intérieur",
+       "decalage": 0.0
+      }
+     }
+    ]
+   }
+  ],
+  "parametres": [
+   {
+    "nom": "Rendu",
+    "formule": "arbre:feuillu",
+    "genre": "texte"
+   },
+   {
+    "nom": "Feuillage",
+    "formule": "Feuillage",
+    "genre": "materiau"
+   },
+   {
+    "nom": "Écorce",
+    "formule": "Écorce",
+    "genre": "materiau"
+   }
+  ],
+  "plans": [
+   {
+    "nom": "Centre",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Gauche",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Droite",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "R50",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "R87",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Tronc",
+    "axe": "x",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Milieu",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Extérieur",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": false,
+    "hote": "exterieur"
+   },
+   {
+    "nom": "Intérieur",
+    "axe": "y",
+    "position": 0.0,
+    "fixe": false,
+    "hote": "interieur"
+   },
+   {
+    "nom": "Bas",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": true
+   },
+   {
+    "nom": "Haut",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Fut",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z07",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z25",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z50",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z75",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   },
+   {
+    "nom": "Z93",
+    "axe": "z",
+    "position": 0.0,
+    "fixe": false
+   }
+  ],
+  "contraintes": [
+   {
+    "genre": "egalite",
+    "a": "Gauche",
+    "m": "Centre",
+    "b": "Droite",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Gauche",
+    "b": "Droite",
+    "valeur": "Largeur",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "R50",
+    "valeur": "Largeur*0.25",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "R87",
+    "valeur": "Largeur*0.433",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Centre",
+    "b": "Tronc",
+    "valeur": "Largeur*0.035",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Haut",
+    "valeur": "Hauteur",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Fut",
+    "valeur": "Hauteur*0.3500",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z07",
+    "valeur": "Hauteur*0.3935",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z25",
+    "valeur": "Hauteur*0.5125",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z50",
+    "valeur": "Hauteur*0.6750",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z75",
+    "valeur": "Hauteur*0.8375",
+    "priorite": 9
+   },
+   {
+    "genre": "distance",
+    "a": "Bas",
+    "b": "Z93",
+    "valeur": "Hauteur*0.9565",
+    "priorite": 9
+   }
+  ],
+  "volumes": [],
+  "extrusions": [
+   {
+    "operation": {
+     "genre": "revolution",
+     "revolution": {
+      "axe": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        100.0
+       ]
+      ],
+      "debut": 0.0,
+      "angle": 360.0
+     }
+    },
+    "nom": "Houppier",
+    "vide": false,
+    "materiau": "menuiserie",
+    "vue": "elevation",
+    "profil": [
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Haut",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R50",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z93",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R87",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z75",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Droite",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R87",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z25",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "R50",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z07",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Fut",
+       "decalage": 0.0
+      }
+     }
+    ],
+    "profondeur": [
+     {
+      "plan": "Intérieur",
+      "decalage": 0.0
+     },
+     {
+      "plan": "Extérieur",
+      "decalage": 0.0
+     }
+    ],
+    "visibilite": {
+     "faible": true,
+     "moyen": true,
+     "eleve": true,
+     "plan": false,
+     "coupe": true,
+     "vue_3d": true
+    },
+    "materiau_parametre": "Feuillage"
+   },
+   {
+    "operation": {
+     "genre": "revolution",
+     "revolution": {
+      "axe": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        100.0
+       ]
+      ],
+      "debut": 0.0,
+      "angle": 360.0
+     }
+    },
+    "nom": "Tronc",
+    "vide": false,
+    "materiau": "menuiserie",
+    "vue": "elevation",
+    "profil": [
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Bas",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Tronc",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Bas",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Tronc",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     },
+     {
+      "h": {
+       "plan": "Centre",
+       "decalage": 0.0
+      },
+      "v": {
+       "plan": "Z50",
+       "decalage": 0.0
+      }
+     }
+    ],
+    "profondeur": [
+     {
+      "plan": "Intérieur",
+      "decalage": 0.0
+     },
+     {
+      "plan": "Extérieur",
+      "decalage": 0.0
+     }
+    ],
+    "visibilite": {
+     "faible": true,
+     "moyen": true,
+     "eleve": true,
+     "plan": false,
+     "coupe": true,
+     "vue_3d": true
+    },
+    "materiau_parametre": "Écorce"
+   }
+  ],
+  "couleur": [
+   86,
+   120,
+   52
+  ],
+  "genre": "libre"
+ }
+}

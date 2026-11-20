@@ -197,33 +197,6 @@ impl Application {
                 }
             }
             ui.separator();
-        } else if let Some(arbre) = projet.arbres.iter().find(|a| modele::identifiants::id_natif("arbre", &a.id) == id) {
-            // essence : sélecteur en tête du volet (`selecteur_type_selection`)
-            let mut a = arbre.clone();
-            crate::zones::palette_creation::titre_parametres(ui, "Arbre");
-            let mut change = false;
-            egui::Grid::new("arbre_proprietes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
-                ui.label("Nom");
-                change |= ui.text_edit_singleline(&mut a.nom).changed() && !a.nom.trim().is_empty();
-                ui.end_row();
-                ui.label("Hauteur");
-                change |= ui.add(egui::DragValue::new(&mut a.hauteur).speed(50.0).range(500.0..=60_000.0).dimensions()).changed();
-                ui.end_row();
-                ui.label("Houppier");
-                change |= ui.add(egui::DragValue::new(&mut a.diametre).speed(50.0).range(300.0..=40_000.0).dimensions()).changed();
-                ui.end_row();
-                ui.label("Décalage");
-                change |= ui.add(egui::DragValue::new(&mut a.decalage).speed(10.0).dimensions()).changed();
-                ui.end_row();
-            });
-            if change {
-                let mut p = projet.clone();
-                if let Some(x) = p.arbres.iter_mut().find(|x| x.id == a.id) {
-                    *x = a;
-                }
-                nouveau = Some(p);
-            }
-            ui.separator();
         } else if let Some(e) = projet.importes.iter().find(|e| modele::identifiants::id_natif("importe", &e.id)==id) {
             ui.heading(&e.nom); ui.label(&e.categorie); ui.label("Géométrie importée"); ui.label(&e.raison);
             if let Some(n)=e.niveau.as_ref().and_then(|n|projet.niveau(n)) { ui.label(format!("Niveau : {}",n.nom)); }

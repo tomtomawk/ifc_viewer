@@ -133,7 +133,7 @@ fn famille_visible_selon_detail_et_type_de_vue() {
 /// rendu désignée par le paramètre « Rendu » ; elle n'ajoute aucune arête.
 #[test]
 fn vegetal_rendu_par_reference_sans_arete() {
-    use modele::elements::arbre::Essence;
+    use modele::elements::generateur_vegetal::Essence;
     use modele::elements::composant::Composant;
     use modele::elements::vegetation::type_vegetal;
     let scene = |reference: &str| {

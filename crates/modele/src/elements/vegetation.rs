@@ -5,7 +5,7 @@
 //!
 //! Les trois familles ci-dessous sont les types par défaut du code : un projet sans type
 //! de végétation les propose, et un type n'entre dans le projet qu'au premier placement.
-use crate::elements::arbre::{remplacement_vegetal, Essence, Remplacement, MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
+use crate::elements::generateur_vegetal::{remplacement_vegetal, Essence, Remplacement, MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
 use crate::elements::composant::TypeComposant;
 use crate::famille::modelee::*;
 use glam::DVec3;

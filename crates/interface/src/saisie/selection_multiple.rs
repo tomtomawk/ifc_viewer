@@ -96,13 +96,6 @@ fn appliquer_garde_corps(q: &mut Projet, ids: &[String], t: Option<&str>) -> Res
     Ok(())
 }
 
-fn appliquer_arbres(q: &mut Projet, ids: &[String], t: Option<&str>) -> Result<(), String> {
-    use modele::elements::arbre::Essence;
-    let essence = Essence::TOUTES.into_iter().find(|e| Some(e.nom()) == t).ok_or("Essence inconnue.")?;
-    q.arbres.iter_mut().filter(|a| ids.contains(&a.id)).for_each(|a| a.essence = essence);
-    Ok(())
-}
-
 /// Sortes d'éléments de la sélection qui ont des types, dans un ordre fixe.
 fn groupes(p: &Projet, ids: &[String]) -> Vec<Groupe> {
     use modele::GenreOuverture as G;
@@ -136,9 +129,12 @@ fn groupes(p: &Projet, ids: &[String]) -> Vec<Groupe> {
         let types = p.types_ouvertures.iter().filter(|t| (t.genre == G::Libre) == libre).map(|t| (Some(t.id.clone()), t.nom.clone())).collect();
         ajouter(libelle, ouvertures.iter().map(|o| o.id.clone()).collect(), ouvertures.iter().map(|o| o.type_ouverture.clone()).collect(), types, appliquer_ouvertures, false);
     }
-    let composants: Vec<_> = p.composants.iter().filter(|c| ids.contains(&c.id)).collect();
-    let types = p.types_composants.iter().map(|t| (Some(t.id.clone()), t.nom.clone())).collect();
-    ajouter("Composants", composants.iter().map(|c| c.id.clone()).collect(), composants.iter().map(|c| Some(c.type_composant.clone())).collect(), types, appliquer_composants, false);
+    // composants et végétaux (outil Arbre) : chacun parmi les types de sa nature
+    for (libelle, vegetal) in [("Composants", false), ("Arbres", true)] {
+        let composants: Vec<_> = p.composants.iter().filter(|c| ids.contains(&c.id) && p.types_composants.iter().any(|t| t.id == c.type_composant && t.vegetal()) == vegetal).collect();
+        let types = p.types_composants.iter().filter(|t| t.vegetal() == vegetal).map(|t| (Some(t.id.clone()), t.nom.clone())).collect();
+        ajouter(libelle, composants.iter().map(|c| c.id.clone()).collect(), composants.iter().map(|c| Some(c.type_composant.clone())).collect(), types, appliquer_composants, false);
+    }
     let terrains: Vec<_> = p.terrains.iter().filter(|t| ids.contains(&t.id)).collect();
     let types = p.types_terrains_disponibles().into_iter().map(|t| (Some(t.id), t.nom)).collect();
     ajouter("Terrains", terrains.iter().map(|t| t.id.clone()).collect(), terrains.iter().map(|t| Some(p.type_terrain(t).id)).collect(), types, appliquer_terrains, false);
@@ -146,9 +142,6 @@ fn groupes(p: &Projet, ids: &[String]) -> Vec<Groupe> {
     let mut types: Vec<(Option<String>, String)> = vec![(None, "Standard".into())];
     types.extend(p.types_garde_corps.iter().map(|t| (Some(t.id.clone()), t.nom.clone())));
     ajouter("Garde-corps", garde_corps.iter().map(|g| g.id.clone()).collect(), garde_corps.iter().map(|g| g.type_garde_corps.clone()).collect(), types, appliquer_garde_corps, false);
-    let arbres: Vec<_> = p.arbres.iter().filter(|a| ids.contains(&a.id)).collect();
-    let types = modele::elements::arbre::Essence::TOUTES.into_iter().map(|e| (Some(e.nom().to_string()), e.nom().to_string())).collect();
-    ajouter("Arbres", arbres.iter().map(|a| a.id.clone()).collect(), arbres.iter().map(|a| Some(a.essence.nom().to_string())).collect(), types, appliquer_arbres, false);
     out
 }
 

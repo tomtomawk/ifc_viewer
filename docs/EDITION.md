@@ -86,7 +86,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   - tous les identifiants importés renouvelés (références internes reportées : hôtes,
     assemblages, niveaux, types, implantations) ; sources renumérotées ;
   - repris : éléments du modèle (murs, assemblages, ouvertures, dalles, site, barres,
-    escaliers, pièces, composants, arbres, garde-corps, éléments importés,
+    escaliers, pièces, composants (dont végétaux), garde-corps, éléments importés,
     quadrillages) ; non repris : vues, feuilles, nomenclatures, liens, phases et
     sous-projets du fichier importé ;
   - refusée si le projet importé ne passe pas `verifier()`.
@@ -212,7 +212,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Le panneau Propriétés commence par le sélecteur de type de l'élément : mur composé
   (couches reconstruites d'après le type choisi ; une couche sélectionnée montre le
   type de son mur), mur seul (types à une couche), élément horizontal, porte ou
-  fenêtre (dimensions du type), terrain, arbre (essence), composant. Tous ces
+  fenêtre (dimensions du type), terrain, composant (dont végétal). Tous ces
   sélecteurs ont le même aspect (en-tête « catégorie · nom », liste surgissante,
   vignette du type ; `zones/ruban/selecteur.rs`). Composant : Modifier (famille dans
   l'éditeur), Dupliquer, « + Nouvelle famille de composant… » ; un composant végétal
@@ -676,8 +676,7 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   garde sa contrainte haute. Détacher rétablit cette contrainte sur l'ensemble du mur.
   Supprimer la toiture détache ses murs.
 - Après chaque opération, les opérations booléennes des murs inchangés sont reprises
-  de la mémoire (`noyau::csg_memoire`) ; les silhouettes des arbres aussi
-  (`maillage::aretes::silhouette_arbre`). Les arêtes jointes par matériau et
+  de la mémoire (`noyau::csg_memoire`). Les arêtes jointes par matériau et
   l'assemblage de la scène sont recalculés en entier (mesures et suite :
   [SUIVI.md](SUIVI.md) §1 et tâche A8 de [ROADMAP.md](ROADMAP.md)). La copie de récupération n'est pas un journal
   incrémental ; un calcul qui n'a pas encore abouti n'y figure pas.
@@ -736,7 +735,7 @@ Sans champ de texte actif, taper deux lettres à la suite : `CS` créer à l'ide
 `RO` tourner, `AL` aligner, `AJ` ajuster. `Ctrl+A` sélectionne les éléments visibles ;
 Suppr demande confirmation de suppression. `CS` reprend les paramètres des murs,
 éléments horizontaux à pente uniforme, poteaux, poutres, ouvertures natives simples,
-escaliers, garde-corps, composants, arbres, pièces, terrains, limites de propriété,
+escaliers, garde-corps, composants (un végétal ouvre l'outil Arbre), pièces, terrains, limites de propriété,
 quadrillages, coupes, élévations et annotations. Il ouvre l'outil correspondant pour
 un nouveau placement ou tracé. Pour un escalier, choisissez les garde-corps dans
 le ruban avant de tracer si vous souhaitez en créer.

@@ -4,7 +4,7 @@ use super::differences::Difference;
 use serde_json::value::RawValue;
 use std::collections::{HashMap, HashSet};
 
-pub(crate) const CATEGORIES_PROJET: [(&str, &str); 20] = [
+pub(crate) const CATEGORIES_PROJET: [(&str, &str); 19] = [
         ("niveaux", "niveau"),
         ("murs", "mur"),
         ("assemblages", "assemblage"),
@@ -12,7 +12,6 @@ pub(crate) const CATEGORIES_PROJET: [(&str, &str); 20] = [
         ("barres", "structure"),
         ("pieces", "pièce"),
         ("composants", "composant"),
-        ("arbres", "arbre"),
         ("escaliers", "escalier"),
         ("garde_corps", "garde-corps"),
         ("ouvertures", "ouverture"),

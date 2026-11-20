@@ -344,6 +344,21 @@ def arbres():
     return out
 
 
+def vegetaux():
+    """Arbres en composants de la catégorie Végétation : un type par nom, essence et
+    dimensions, sur la famille de son essence (`familles_vegetales.json`, familles par
+    défaut du code : `modele::elements::vegetation`)."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "familles_vegetales.json"), encoding="utf-8") as f:
+        familles = json.load(f)
+    liste = arbres()
+    cles = sorted({(a["nom"], a["essence"], a["hauteur"], a["diametre"]) for a in liste}, key=lambda k: (k[0], k[2]))
+    ids = {k: f"type-vegetal-ilot-{i + 1}" for i, k in enumerate(cles)}
+    types = [{"id": ids[k], "nom": f"{k[0]} {k[2] / 1000:g} m".replace(".", ","), "largeur": k[3], "profondeur": k[3], "hauteur": k[2], "modele": familles[k[1]]} for k in cles]
+    composants = [{"id": a["id"], "nom": a["nom"], "type_composant": ids[(a["nom"], a["essence"], a["hauteur"], a["diametre"])],
+                   "niveau": a["niveau"], "position": a["position"], "decalage": a["decalage"], "rotation": 0.0} for a in liste]
+    return types, composants
+
+
 def plancher(id, nom, type_dalle, niveau, x0, y0, x1, y1, retrait, debords=None):
     """Plancher au nu intérieur des murs (retrait : demi-épaisseurs par face, sud, est,
     nord, ouest) et débords filants en bandes extérieures (mm par face)."""
@@ -454,7 +469,8 @@ def projet():
             "points": points_terrain(),
             "type_terrain": "pelouse",
         }],
-        "arbres": arbres(),
+        "types_composants": vegetaux()[0],
+        "composants": vegetaux()[1],
         "murs": murs,
         "assemblages": [],
         "materiaux": [m for m in MATERIAUX if m["nom"] != "Zinc"],

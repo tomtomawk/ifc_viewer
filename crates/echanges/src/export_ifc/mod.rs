@@ -217,7 +217,13 @@ fn contenu(p: &Projet) -> Result<Step, String> {
         let solides = c.solides(p)?;
         let parts: Vec<_> = solides.iter().filter(|(_, k, _)| EXPORT.montre(*k)).map(|(m, _, t)| (m.as_deref(), t.as_slice())).collect();
         let rep = styles.forme(&mut w, p, contexte, &parts, &[]);
-        let id = w.add(format!("IFCFURNITURE('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&c.id, None), texte(&c.nom), ref_(rep)));
+        // végétaux (familles de la catégorie Végétation) : éléments géographiques
+        let vegetal = p.types_composants.iter().any(|t| t.id == c.type_composant && t.vegetal());
+        let id = if vegetal {
+            w.add(format!("IFCGEOGRAPHICELEMENT('{}',$,{},$,'VEGETATION',#{placement},{},$,.USERDEFINED.)", guid(&c.id, None), texte(&c.nom), ref_(rep)))
+        } else {
+            w.add(format!("IFCFURNITURE('{}',$,{},$,$,#{placement},{},$,.NOTDEFINED.)", guid(&c.id, None), texte(&c.nom), ref_(rep)))
+        };
         contenus.entry(niveaux[&c.niveau]).or_default().push(id);
     }
     // pièces : volumes du sol au niveau supérieur (2,5 m au dernier), agrégés au niveau

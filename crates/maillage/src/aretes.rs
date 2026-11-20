@@ -7,8 +7,8 @@ use rayon::prelude::*;
 
 /// Arêtes des éléments calculées par matériau : là où deux éléments d'un même matériau se
 /// joignent (murs raccordés, dalle sous un mur), pas d'arête sur les faces qui se
-/// prolongent ; les parties sans matériau restent à part. Les éléments de `exclus` (arbres,
-/// terrains : leurs arêtes sont calculées autrement) ne sont pas traités.
+/// prolongent ; les parties sans matériau restent à part. Les éléments de `exclus`
+/// (terrains : leurs arêtes sont calculées autrement) ne sont pas traités.
 pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>], exclus: &std::collections::HashSet<Id>) -> std::collections::HashMap<Id, noyau::aretes::Aretes> {
     use std::collections::HashMap;
     let mut groupes: HashMap<String, Vec<([DVec3; 3], usize)>> = HashMap::new();
@@ -37,81 +37,6 @@ pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<Stri
 /// Traits d'un terrain en plan : périmètre de sa surface et courbes de niveau à un pas
 /// rond (une douzaine au plus). La surface lissée n'a pas d'arête : sans ces traits, la
 /// partie vue sous le plan de coupe (faces blanches) ne se distingue pas du papier.
-/// Arêtes d'une surface courbe (arbre) : toutes « douces », tracées sur la silhouette
-/// seulement ; bords libres en arêtes vives.
-/// Silhouettes des arbres déjà calculées : empreinte de l'arbre et de l'altitude de son
-/// niveau, génération de dernier usage, arêtes.
-#[derive(Default)]
-struct MemoireArbres {
-    generation: u64,
-    silhouettes: std::collections::HashMap<u64, (u64, noyau::aretes::Aretes)>,
-}
-
-fn memoire_arbres() -> &'static std::sync::Mutex<MemoireArbres> {
-    static M: std::sync::OnceLock<std::sync::Mutex<MemoireArbres>> = std::sync::OnceLock::new();
-    M.get_or_init(Default::default)
-}
-
-/// Nombre de constructions pendant lesquelles une silhouette inutilisée est gardée
-/// (annuler puis rétablir la retrouvent).
-const GENERATIONS_GARDEES: u64 = 4;
-
-/// Silhouette de l'arbre `a` posé à `z0` (mm), reprise de la mémoire ou calculée.
-pub(crate) fn silhouette_arbre(a: &modele::elements::arbre::Arbre, z0: f64, calcul: impl FnOnce() -> noyau::aretes::Aretes) -> noyau::aretes::Aretes {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    // tous les paramètres de l'arbre (Debug : nombres écrits en entier)
-    format!("{a:?}").hash(&mut h);
-    z0.to_bits().hash(&mut h);
-    let cle = h.finish();
-    {
-        let mut m = memoire_arbres().lock().unwrap_or_else(|e| e.into_inner());
-        let g = m.generation;
-        if let Some(e) = m.silhouettes.get_mut(&cle) {
-            e.0 = g;
-            return e.1.clone();
-        }
-    }
-    let s = calcul();
-    let mut m = memoire_arbres().lock().unwrap_or_else(|e| e.into_inner());
-    let g = m.generation;
-    m.silhouettes.insert(cle, (g, s.clone()));
-    s
-}
-
-/// Fin d'une construction de scène : oublie les silhouettes inutilisées depuis
-/// `GENERATIONS_GARDEES` constructions.
-pub(crate) fn fin_de_construction() {
-    let mut m = memoire_arbres().lock().unwrap_or_else(|e| e.into_inner());
-    m.generation += 1;
-    let g = m.generation;
-    m.silhouettes.retain(|_, e| g - e.0 <= GENERATIONS_GARDEES);
-}
-
-pub(crate) fn aretes_silhouette(tris: &[[glam::DVec3; 3]]) -> noyau::aretes::Aretes {
-    use glam::DVec3;
-    let cle = |p: DVec3| (p * 10_000.0).round().as_i64vec3().to_array();
-    let mut bords: std::collections::HashMap<([i64; 3], [i64; 3]), ([DVec3; 2], Vec<DVec3>)> = std::collections::HashMap::new();
-    for t in tris {
-        let n = (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero();
-        for i in 0..3 {
-            let (a, b) = (t[i], t[(i + 1) % 3]);
-            let (ka, kb) = (cle(a), cle(b));
-            let k = if ka < kb { (ka, kb) } else { (kb, ka) };
-            bords.entry(k).or_insert(([a, b], Vec::new())).1.push(n);
-        }
-    }
-    let mut out = noyau::aretes::Aretes::default();
-    for (seg, normales) in bords.into_values() {
-        match normales[..] {
-            [n1, n2] => out.douces.push((seg, n1, n2)),
-            _ => out.vives.push(seg),
-        }
-    }
-    out.ordonner();
-    out
-}
-
 pub(crate) fn aretes_terrain(projet: &Projet, t: &modele::elements::site::Terrain) -> noyau::aretes::Aretes {
     use glam::DVec3;
     let decalage = DVec3::new(0.0, 0.0, -projet.ngf());

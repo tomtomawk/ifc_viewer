@@ -241,3 +241,16 @@ fn quantites_egales_a_la_nomenclature() {
         }
     }
 }
+
+/// V1 : un composant d'une famille Végétation s'exporte en élément géographique.
+#[test]
+fn vegetal_en_element_geographique() {
+    use modele::elements::composant::Composant;
+    let mut p = Projet::nouveau("V");
+    p.niveaux.push(modele::Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+    let t = modele::elements::vegetation::type_vegetal(Default::default());
+    p.composants.push(Composant { id: "c".into(), nom: "Tilleul".into(), type_composant: t.id.clone(), niveau: "n".into(), ..Default::default() });
+    p.types_composants.push(t);
+    let s = exporter(&p).unwrap();
+    assert!(s.contains("IFCGEOGRAPHICELEMENT(") && s.contains("'Tilleul',$,'VEGETATION'") && !s.contains("IFCFURNITURE("), "{s}");
+}

@@ -176,7 +176,7 @@ impl ExecutionFusion for Projet {
             }};
         }
         let _ = ajouter!(niveaux, profils, types_murs, types_dalles, types_ouvertures, types_poutres, types_composants, types_garde_corps);
-        let elements = ajouter!(murs, assemblages, ouvertures, dalles, terrains, limites_propriete, barres, escaliers, pieces, composants, arbres, garde_corps, importes, quadrillages);
+        let elements = ajouter!(murs, assemblages, ouvertures, dalles, terrains, limites_propriete, barres, escaliers, pieces, composants, garde_corps, importes, quadrillages);
         self.materiaux.extend(materiaux);
         self.sources.extend(imp.sources);
         for (id, r) in imp.implantations { if elements.contains(&id) { self.implantations.insert(id, r); } }

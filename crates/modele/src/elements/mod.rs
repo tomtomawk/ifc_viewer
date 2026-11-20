@@ -1,6 +1,6 @@
 //! Éléments hors murs : escaliers, terrain, cadrage, dalles et toits en pente.
 pub mod cadrage;
-pub mod arbre;
+pub mod generateur_vegetal;
 pub mod composant;
 pub mod vegetation;
 pub mod piece;

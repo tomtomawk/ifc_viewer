@@ -82,10 +82,6 @@ impl Application {
                 self.bim.composant = c.clone();
                 self.ruban_edition.activer_outil(Outil::Composant);
             }
-        } else if let Some(a) = p.arbres.iter().find(|a| &a.id == id) {
-            self.bim.vegetal.type_composant = modele::elements::vegetation::type_vegetal(a.essence).id;
-            self.bim.vegetal.decalage = a.decalage;
-            self.ruban_edition.activer_outil(Outil::Arbre);
         } else if let Some(piece) = p.pieces.iter().find(|piece| &piece.id == id) {
             self.bim.nom_piece = piece.nom.clone();
             self.bim.etiquette_piece = piece.etiquette.clone();

@@ -32,10 +32,6 @@ pub enum Commande {
     Composant {
         composant: Composant,
     },
-    /// Crée (identifiant vide) ou modifie un arbre.
-    Arbre {
-        arbre: modele::elements::arbre::Arbre,
-    },
     /// Crée (identifiant vide) ou remplace un type de composant.
     TypeComposant {
         type_composant: TypeComposant,

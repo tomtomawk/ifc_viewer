@@ -96,7 +96,7 @@ pub fn famille_table() -> FamilleModelee {
 /// Types livrés avec le code (table, végétaux) : proposés par les outils et ajoutés au
 /// projet à leur premier placement.
 pub fn types_par_defaut() -> Vec<TypeComposant> {
-    std::iter::once(type_table()).chain(crate::elements::arbre::Essence::TOUTES.into_iter().map(crate::elements::vegetation::type_vegetal)).collect()
+    std::iter::once(type_table()).chain(crate::elements::generateur_vegetal::Essence::TOUTES.into_iter().map(crate::elements::vegetation::type_vegetal)).collect()
 }
 
 /// Type livré avec le code portant cet identifiant.

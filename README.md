@@ -263,10 +263,12 @@ cour-jardin, trois maisons avec jardins ; vues caméra « rue », « cour » et 
 textures dans `textures/`, en chemins relatifs).
 Il est produit par `tools/projet_demo_ilot.py` (numpy, Pillow).
 
-**Arbres** (Modéliser › Site › Arbre) : essence (feuillu, conifère, fastigié), hauteur,
-diamètre du houppier, décalage ; symbole en plan, géométrie générée (variée d'un arbre à
-l'autre), matériaux « Feuillage » et « Écorce » du projet s'ils existent. Le champ
-`asset` est réservé au remplacement par un modèle de bibliothèque dans le style Réaliste.
+**Arbres** (Modéliser › Site › Arbre) : composants d'une famille de la catégorie
+Végétation, éditable dans l'éditeur de familles (houppier et tronc en révolution, cercle
+en plan ; Largeur = houppier, Hauteur = hauteur totale). Son paramètre texte `Rendu`
+(`arbre:feuillu`, `arbre:conifere`, `arbre:fastigie`) désigne la géométrie générée montrée
+dans le style Réaliste (branches et plans de feuillage, matériaux « Feuillage » et
+« Écorce »). Les familles de l'îlot viennent de `tools/familles_vegetales.json`.
 
 Texture de pelouse de l'îlot (`samples/ilot_demo/textures/herbe_*.jpg`) et du gabarit
 (`gabarits/textures/herbe_*.jpg`, réencodée en 1024 px) : « Grass004 »

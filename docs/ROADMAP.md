@@ -67,7 +67,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
 | M18 | Épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
-| V1 | Arbres en familles (décision du 20/11/2026 : catégorie Végétation, géométrie graphique éditable, géométrie de rendu par référence d'un générateur intégré dans le paramètre texte `Rendu` ; projets d'exemple mis à jour, pas de conversion des autres). Fait : modèle (paramètre texte, catégorie, générateur, familles par défaut), maillage (rendu par référence), outil Arbre (composants Végétation). Reste : retrait de l'élément `Arbre`, exemples récrits, export IFC (`IfcGeographicElement`) | P2 | `crates/modele/src/elements/vegetation.rs` |
 | U11 | Réglages retirés car jamais lus (U3, 20/11/2026), à réaliser s'ils sont voulus : Texte (ligne de repère avec flèche, alignement gauche / centre / droite), Étiquette (contenu : type, repère, matériau), Cote (mode orthogonal, décalage papier), Zone (motif, pas), Quadrillage en arc, Déplacer contraint horizontal / vertical (Maj contraint déjà aux axes) | P3 | `zones/ruban/mod.rs` (`champs`) ; question au §9 |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
 

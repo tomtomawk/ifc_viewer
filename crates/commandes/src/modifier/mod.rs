@@ -125,7 +125,6 @@ impl ExecutionModifier for Projet {
                             || self.barres.iter().any(|b| b.niveau == n.id)
                             || self.pieces.iter().any(|b| b.niveau == n.id)
                             || self.composants.iter().any(|b| b.niveau == n.id)
-                            || self.arbres.iter().any(|b| b.niveau == n.id)
                             || self.escaliers.iter().any(|e| e.niveau == n.id || e.niveau_haut.as_ref() == Some(&n.id))
                             || self.garde_corps.iter().any(|g| g.niveau == n.id)
                             || self
@@ -147,7 +146,6 @@ impl ExecutionModifier for Projet {
                 self.barres.retain(|x| !set.contains(&x.id));
                 self.pieces.retain(|x| !set.contains(&x.id));
                 self.composants.retain(|x| !set.contains(&x.id));
-                self.arbres.retain(|x| !set.contains(&x.id));
                 self.escaliers.retain(|x| !set.contains(&x.id));
                 self.garde_corps.retain(|x| !set.contains(&x.id));
                 self.importes.retain(|x| !set.contains(&x.id));

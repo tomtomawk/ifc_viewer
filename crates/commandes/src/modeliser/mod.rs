@@ -1,5 +1,5 @@
 //! Modéliser : commandes qui créent ou remplacent un élément du modèle (site, escaliers,
-//! garde-corps, pièces, composants, arbres, barres, ouvertures, type de mur composé,
+//! garde-corps, pièces, composants (dont végétaux), barres, ouvertures, type de mur composé,
 //! contours et trémies de dalle).
 use crate::socle::interne::*;
 use fusion::ExecutionFusion;
@@ -112,27 +112,6 @@ impl ExecutionModeliser for Projet {
                 match self.types_composants.iter_mut().find(|t| t.id == id) {
                     Some(t) => *t = type_composant,
                     None => self.types_composants.push(type_composant),
-                }
-                Ok(vec![id])
-            }
-            Commande::Arbre { mut arbre } => {
-                self.niveau(&arbre.niveau).ok_or("Arbre : niveau introuvable.")?;
-                if !arbre.position.iter().chain([&arbre.decalage, &arbre.hauteur, &arbre.diametre]).all(|x| x.is_finite()) || arbre.hauteur <= 0.0 || arbre.diametre <= 0.0 {
-                    return Err("Arbre : position ou dimensions non valides.".into());
-                }
-                if arbre.nom.trim().is_empty() {
-                    arbre.nom = arbre.essence.nom().into();
-                }
-                if arbre.id.is_empty() {
-                    arbre.id = identite(self, "arbre");
-                }
-                let id = arbre.id.clone();
-                if let Some(x) = self.arbres.iter_mut().find(|x| x.id == id) {
-                    *x = arbre;
-                } else if self.identifiants().contains(&id) {
-                    return Err("Identifiant déjà utilisé.".into());
-                } else {
-                    self.arbres.push(arbre);
                 }
                 Ok(vec![id])
             }

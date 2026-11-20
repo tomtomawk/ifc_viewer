@@ -1,7 +1,6 @@
 //! Sélection : clic, rectangle, cadrage sur les objets.
 use commandes::Execution;
 use crate::*;
-use crate::zones::ruban::selecteur;
 
 impl Application {
     pub(crate) fn select(&mut self, id: Option<Id>, reveal: bool) {
@@ -37,23 +36,6 @@ impl Application {
         }
         let (p, _) = self.natif.as_ref()?;
         let [id] = ids.as_slice() else { return None };
-        if let Some(arbre) = p.arbres.iter().find(|a| &a.id == id) {
-            use modele::elements::arbre::Essence;
-            let lignes: Vec<selecteur::Ligne> = Essence::TOUTES.iter().map(|e| selecteur::Ligne {
-                nom: e.nom(), courant: *e == arbre.essence, etiquette: None, sous_titre: None, detail: None, actions: &[],
-            }).collect();
-            let titre = format!("Arbre · {}", arbre.essence.nom());
-            let vignette = |pe: &egui::Painter, r: egui::Rect, _: usize, c: Color32| crate::zones::ruban::vignettes::arbre(pe, r, c);
-            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nEssence de l'arbre."), &lignes, None, Some(&vignette));
-            ui.separator();
-            let essence = Essence::TOUTES[choix.ligne?];
-            if essence == arbre.essence {
-                return None;
-            }
-            let mut q = p.clone();
-            if let Some(a) = q.arbres.iter_mut().find(|a| &a.id == id) { a.essence = essence; }
-            return Some(q);
-        }
         if let Some(terrain) = p.terrains.iter().find(|t| &t.id == id) {
             let actuel = p.type_terrain(terrain).id;
             let choix = crate::zones::communes::selecteur_type_terrain(ui, p, Some(&actuel), 1);
@@ -310,7 +292,7 @@ impl Application {
                     .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                     .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
                     .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-                    .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
+                    .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                     .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
@@ -383,7 +365,7 @@ impl Application {
                             .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                             .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
                             .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-                            .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
+                            .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
@@ -424,7 +406,7 @@ impl Application {
                 .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
                 .chain(p.terrains.iter().map(|x| ("terrain", &x.id)))
                 .chain(p.limites_propriete.iter().map(|x| ("limite_propriete", &x.id)))
-                .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
+                .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
                 .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))

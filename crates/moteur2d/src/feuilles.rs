@@ -13,7 +13,7 @@ pub(super) fn ids_masques_vue(p: &Projet, v: &Vue) -> std::collections::HashSet<
     p.murs.iter().map(|x| ("mur", &x.id))
         .chain(p.assemblages.iter().map(|x| ("assemblage", &x.id)))
         .chain(p.dalles.iter().map(|x| ("dalle", &x.id)))
-        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id))).chain(p.arbres.iter().map(|x| ("arbre", &x.id)))
+        .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
         .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
         .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
         .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))

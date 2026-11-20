@@ -15,7 +15,7 @@ mod materiaux;
 pub mod textures_gabarit;
 mod navigateur;
 
-use aretes::{aretes_jointes, aretes_silhouette, aretes_terrain};
+use aretes::{aretes_jointes, aretes_terrain};
 use materiaux::{coupe_materiau, motif_surface, opacite, rendu_materiau};
 use navigateur::navigateur;
 
@@ -77,10 +77,9 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         entite(id_natif("type-composant", &t.id), "IFCFURNITURETYPE", &t.id, &t.nom, 10)?;
     }
     for c in &projet.composants {
-        entite(id_natif("composant", &c.id), "IFCFURNISHINGELEMENT", &c.id, &c.nom, 9)?;
-    }
-    for a in &projet.arbres {
-        entite(id_natif("arbre", &a.id), "IFCGEOGRAPHICELEMENT", &a.id, &a.nom, 9)?;
+        // végétaux : éléments géographiques, comme les terrains
+        let vegetal = projet.types_composants.iter().any(|t| t.id == c.type_composant && t.vegetal());
+        entite(id_natif("composant", &c.id), if vegetal { "IFCGEOGRAPHICELEMENT" } else { "IFCFURNISHINGELEMENT" }, &c.id, &c.nom, 9)?;
     }
     for g in &projet.garde_corps {
         entite(id_natif("garde_corps", &g.id), "IFCRAILING", &g.id, &g.nom, 9)?;
@@ -366,38 +365,6 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             }
         }
     }
-    // arbres : tronc (matériau « Écorce ») et houppier (« Feuillage »), couleurs par
-    // défaut sans ces matériaux
-    for a in &projet.arbres {
-        use modele::elements::arbre::{MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
-        let id = id_natif("arbre", &a.id);
-        let parent = id_natif("niveau", &a.niveau);
-        model.parent.insert(id, parent);
-        model.children.entry(parent).or_default().push(id);
-        let z0 = projet.niveau(&a.niveau).map_or(0.0, |n| n.altitude);
-        // proxy (style Graphique, plans) et remplacement (style Réaliste : branches et
-        // plans de feuillage découpés), choisis par le shader selon le style (4ᵉ octet du
-        // motif : 1 Graphique seulement, 2 Réaliste seulement)
-        let (tronc, houppier) = a.solides(z0);
-        let r = a.remplacement(z0);
-        // sans ces matériaux dans le projet : ceux du gabarit (textures, feuillage découpé),
-        // le feuillage à la couleur de l'essence
-        let gabarit = |nom: &str| modele::murs::assemblage::materiau_par_defaut(nom);
-        let ecorce = projet.materiau(MATERIAU_ECORCE).cloned().unwrap_or_else(|| gabarit(MATERIAU_ECORCE));
-        let feuillage = projet.materiau(MATERIAU_FEUILLAGE).cloned().unwrap_or_else(|| modele::Materiau { couleur: a.essence.couleur(), ..gabarit(MATERIAU_FEUILLAGE) });
-        let mut parts = Vec::new();
-        let mut rendu = Vec::new();
-        let mut motifs = Vec::new();
-        for (m, tris, style) in [(&ecorce, tronc, 1u8), (&feuillage, houppier, 1), (&ecorce, r.bois, 2), (&feuillage, r.feuillage, 2)] {
-            let [cr, cg, cb] = m.couleur.map(|x| x as f32 / 255.0);
-            let couleur = opacite(Some(m), [cr, cg, cb, 1.0]);
-            rendu.push(Some(rendu_materiau(m, couleur, &mut table_apparences)));
-            motifs.push(Some([0, 0, 0, style]));
-            parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
-        }
-        materiaux_parts.push(vec![Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into()), Some(MATERIAU_ECORCE.into()), Some(MATERIAU_FEUILLAGE.into())]);
-        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu, motifs });
-    }
     for c in &projet.composants {
         let id = id_natif("composant", &c.id);
         let parent = id_natif("niveau", &c.niveau);
@@ -424,7 +391,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         }).collect();
         let (mut rendu, mut motifs) = (Vec::new(), Vec::new());
         if let Some(r) = remplacement {
-            use modele::elements::arbre::{MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
+            use modele::elements::generateur_vegetal::{MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
             // géométrie graphique : style Graphique seulement (4ᵉ octet du motif : 1)
             rendu = vec![None; parts.len()];
             motifs = vec![Some([0, 0, 0, 1]); parts.len()];
@@ -515,9 +482,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: o.donnees.couleur.map_or([0.65,0.68,0.72,1.0], |c| c.map(|x| x as f32 / 255.0)), tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
     chrono("scène : autres éléments", &mut t_etape);
-    // arbres et terrains : arêtes remplacées ci-dessous (silhouette, terrain lissé) ;
-    // les joindre aux autres coûtait 90 % du temps des arêtes sur l'îlot (feuillages)
-    let exclus: std::collections::HashSet<noyau::Id> = projet.arbres.iter().map(|a| id_natif("arbre", &a.id)).chain(projet.terrains.iter().map(|t| id_natif("terrain", &t.id))).collect();
+    // terrains : arêtes remplacées ci-dessous (terrain lissé)
+    let exclus: std::collections::HashSet<noyau::Id> = projet.terrains.iter().map(|t| id_natif("terrain", &t.id)).collect();
     // familles dont des parties ne sont pas visibles partout : arêtes calculées par
     // l'assemblage, une fois par masque de visibilité
     let restreints: std::collections::HashSet<noyau::Id> = geoms.iter().filter(|g| g.visibilite.iter().any(|m| *m != modele::famille::modelee::PARTOUT)).map(|g| g.id).collect();
@@ -533,27 +499,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     for t in &projet.terrains {
         aretes.insert(id_natif("terrain", &t.id), aretes_terrain(projet, t));
     }
-    // arbres : surfaces courbes, arêtes sur la silhouette seulement ; gardées d'une
-    // construction à l'autre tant que l'arbre et son niveau ne changent pas (31 arbres :
-    // 50 ms par commande sur l'îlot)
-    for a in &projet.arbres {
-        let z0 = projet.niveau(&a.niveau).map_or(0.0, |n| n.altitude);
-        let s = aretes::silhouette_arbre(a, z0, || {
-            let (t, h) = a.solides(z0);
-            let tris: Vec<[glam::DVec3; 3]> = t.into_iter().chain(h).map(|t| t.map(|v| v * 0.001)).collect();
-            aretes_silhouette(&tris)
-        });
-        aretes.insert(id_natif("arbre", &a.id), s);
-    }
-    aretes::fin_de_construction();
     let mut scene = formats::ifc::assemblage::assemble_avec(model, geoms, path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| projet.nom.clone()), aretes);
     chrono("scène : assemblage", &mut t_etape);
-    for a in &projet.arbres {
-        if let Some(&o) = scene.object_of.get(&id_natif("arbre", &a.id)) {
-            let r = scene.objects[o as usize].opaque;
-            lisser(&mut scene.vertices[r.start as usize..(r.start + r.count) as usize]);
-        }
-    }
     for id in vegetaux {
         if let Some(&o) = scene.object_of.get(&id) {
             let r = scene.objects[o as usize].opaque;
