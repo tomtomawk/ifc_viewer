@@ -244,3 +244,25 @@ fn svg_feuille_deterministe() {
     let nuls = premier.split('M').filter(|m| m.split_once('L').is_some_and(|(a, b)| a.trim() == b.split(['M', '"']).next().unwrap_or("").trim())).count();
     assert_eq!(nuls, 0, "segments de longueur nulle dans le SVG");
 }
+
+/// DWG d'une feuille de l'exemple : relu, mêmes entités (lignes, arcs, cercles, aplats)
+/// que son DXF, dans les mêmes calques.
+#[test]
+fn dwg_feuille_relue() {
+    let p = modele::Projet::lire_json(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap()).unwrap();
+    let f = p.feuilles.first().expect("une feuille dans l'exemple");
+    let dxf = moteur2d::dxf_feuille(&p, f).unwrap();
+    let dwg = moteur2d::dwg_feuille(&p, f).unwrap();
+    let compte = |doc: &acadrust::CadDocument| {
+        let mut c = std::collections::BTreeMap::new();
+        for e in doc.entities() {
+            *c.entry((format!("{e:?}").split('(').next().unwrap_or("").to_string(), e.common().layer.clone())).or_insert(0usize) += 1;
+        }
+        c
+    };
+    let depuis_dxf = acadrust::DxfReader::from_reader(std::io::Cursor::new(dxf.into_bytes())).unwrap().read().unwrap();
+    let relu = acadrust::DwgReader::from_stream(std::io::Cursor::new(dwg)).read().unwrap();
+    let (a, b) = (compte(&depuis_dxf), compte(&relu));
+    assert!(a.len() > 1, "{a:?}");
+    assert_eq!(a, b);
+}

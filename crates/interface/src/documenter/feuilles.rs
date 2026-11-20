@@ -90,6 +90,9 @@ fn table_zero(p: &modele::Projet, id: &str) -> Rendu {
 pub(crate) struct EtatFeuilles {
     /// Fenêtre d'export multiformat du jeu (n° 13).
     pub export: Option<crate::documenter::export_jeu::ExportJeu>,
+    /// Export de jeu : un seul PDF pour le jeu (sinon un par feuille) ; gardé pendant la
+    /// session.
+    pub pdf_groupe: bool,
     /// Pixels par mm du papier, position écran de l'origine du jeu (coin haut gauche de
     /// la première feuille) par rapport au coin de la vue.
     zoom: f32,

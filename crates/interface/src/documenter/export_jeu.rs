@@ -2,10 +2,11 @@
 //! par format, une case par couple ; un clic sur l'en-tête d'une colonne (ou d'une ligne)
 //! la coche ou la décoche en entier.
 //!
-//! Signification des formats : PDF et DXF (lu par AutoCAD ; le DWG, format fermé, n'est
-//! pas écrit) donnent un fichier par feuille cochée, au format du papier, cartouche
-//! compris. L'IFC est la maquette du projet, commune à toutes les feuilles : il suffit
-//! d'une feuille cochée en IFC pour l'écrire, une seule fois, nommée d'après le jeu.
+//! Signification des formats : DWG (2004) et DXF donnent un fichier par feuille cochée,
+//! au format du papier, cartouche compris. Le PDF aussi, ou un seul PDF pour le jeu
+//! (feuilles cochées dans l'ordre du jeu) si « PDF groupé » est coché. L'IFC est la
+//! maquette du projet, commune à toutes les feuilles : il suffit d'une feuille cochée en
+//! IFC pour l'écrire, une seule fois, nommée d'après le jeu.
 use crate::*;
 use std::collections::BTreeSet;
 
@@ -13,25 +14,28 @@ use std::collections::BTreeSet;
 pub(crate) enum Format {
     Ifc,
     Pdf,
+    Dwg,
     Dxf,
 }
 
 impl Format {
-    pub(crate) const TOUS: [Format; 3] = [Format::Ifc, Format::Pdf, Format::Dxf];
+    pub(crate) const TOUS: [Format; 4] = [Format::Ifc, Format::Pdf, Format::Dwg, Format::Dxf];
 
     fn libelle(self) -> &'static str {
         match self {
             Format::Ifc => "IFC",
             Format::Pdf => "PDF",
-            Format::Dxf => "DWG (DXF)",
+            Format::Dwg => "DWG",
+            Format::Dxf => "DXF",
         }
     }
 
     fn aide(self) -> &'static str {
         match self {
             Format::Ifc => "Maquette du projet, commune aux feuilles : un seul fichier, nommé d'après le jeu",
-            Format::Pdf => "Un PDF par feuille, au format du papier, cartouche compris",
-            Format::Dxf => "Un DXF par feuille (mm du papier), ouvert par AutoCAD et DWG TrueView ; le DWG n'est pas écrit",
+            Format::Pdf => "Un PDF par feuille, au format du papier, cartouche compris ; un seul pour le jeu si « PDF groupé » est coché",
+            Format::Dwg => "Un DWG 2004 par feuille (mm du papier, un calque par rôle : coupe, vu, poché, hachure, dessin)",
+            Format::Dxf => "Un DXF R12 par feuille (mm du papier), mêmes calques que le DWG",
         }
     }
 }
@@ -41,6 +45,10 @@ pub(crate) struct ExportJeu {
     pub jeu: String,
     pub cases: BTreeSet<(String, Format)>,
 }
+
+/// Fichier à écrire : nom, feuilles (aucune pour l'IFC, plusieurs pour un PDF groupé),
+/// format.
+pub(crate) type Fichier = (String, Vec<String>, Format);
 
 /// Coche toute la colonne `format` si elle ne l'est pas entièrement, sinon la décoche.
 pub(crate) fn basculer_colonne(cases: &mut BTreeSet<(String, Format)>, feuilles: &[String], format: Format) {
@@ -58,17 +66,22 @@ fn basculer_ligne(cases: &mut BTreeSet<(String, Format)>, feuille: &str, formats
     }
 }
 
-/// Fichiers à écrire : (nom de fichier, feuille ou None pour l'IFC, format).
-pub(crate) fn fichiers(cases: &BTreeSet<(String, Format)>, feuilles: &[(String, String)], jeu: &str) -> Vec<(String, Option<String>, Format)> {
+/// Fichiers à écrire ; `pdf_groupe` : un seul PDF pour le jeu (feuilles cochées dans
+/// l'ordre de `feuilles`).
+pub(crate) fn fichiers(cases: &BTreeSet<(String, Format)>, feuilles: &[(String, String)], jeu: &str, pdf_groupe: bool) -> Vec<Fichier> {
     let propre = |s: &str| -> String { s.chars().map(|c| if "\\/:*?\"<>|".contains(c) { '_' } else { c }).collect() };
     let mut v = Vec::new();
     if cases.iter().any(|(_, f)| *f == Format::Ifc) {
-        v.push((format!("{}.ifc", propre(jeu)), None, Format::Ifc));
+        v.push((format!("{}.ifc", propre(jeu)), Vec::new(), Format::Ifc));
+    }
+    let pdf: Vec<String> = feuilles.iter().filter(|(id, _)| cases.contains(&(id.clone(), Format::Pdf))).map(|(id, _)| id.clone()).collect();
+    if pdf_groupe && !pdf.is_empty() {
+        v.push((format!("{}.pdf", propre(jeu)), pdf, Format::Pdf));
     }
     for (id, nom) in feuilles {
-        for (format, ext) in [(Format::Pdf, "pdf"), (Format::Dxf, "dxf")] {
-            if cases.contains(&(id.clone(), format)) {
-                v.push((format!("{}.{ext}", propre(nom)), Some(id.clone()), format));
+        for (format, ext) in [(Format::Pdf, "pdf"), (Format::Dwg, "dwg"), (Format::Dxf, "dxf")] {
+            if (format != Format::Pdf || !pdf_groupe) && cases.contains(&(id.clone(), format)) {
+                v.push((format!("{}.{ext}", propre(nom)), vec![id.clone()], format));
             }
         }
     }
@@ -119,12 +132,13 @@ impl Application {
                 });
             });
             ui.separator();
-            let n = fichiers(&etat.cases, &feuilles, &etat.jeu).len();
+            ui.checkbox(&mut self.feuilles.pdf_groupe, "PDF groupé").on_hover_text("Coché : un seul PDF pour le jeu, feuilles dans l'ordre du jeu. Décoché : un PDF par feuille.");
+            let n = fichiers(&etat.cases, &feuilles, &etat.jeu, self.feuilles.pdf_groupe).len();
             exporter = ui.add_enabled(n > 0, egui::Button::new(format!("Exporter {n} fichier(s)…"))).clicked();
         });
         if exporter && let Some(dossier) = rfd::FileDialog::new().pick_folder() {
             // écrit en arrière-plan, un fichier après l'autre (`socle::taches`)
-            let a_ecrire = fichiers(&etat.cases, &feuilles, &etat.jeu);
+            let a_ecrire = fichiers(&etat.cases, &feuilles, &etat.jeu, self.feuilles.pdf_groupe);
             self.exporter_jeu_arriere_plan(ctx, etat.jeu, a_ecrire, dossier);
             return;
         }
@@ -148,13 +162,28 @@ mod tests {
         basculer_colonne(&mut cases, &ids, Format::Pdf);
         assert!(cases.is_empty());
         basculer_ligne(&mut cases, "a", &Format::TOUS);
-        assert_eq!(cases.len(), 3);
+        assert_eq!(cases.len(), 4);
         cases.remove(&("a".to_string(), Format::Pdf));
         cases.remove(&("a".to_string(), Format::Dxf));
+        cases.remove(&("a".to_string(), Format::Dwg));
         cases.insert(("b".into(), Format::Ifc));
         cases.insert(("b".into(), Format::Dxf));
+        cases.insert(("b".into(), Format::Dwg));
         let feuilles = vec![("a".into(), "A01 Plan".into()), ("b".into(), "A02 Coupe/Façade".into())];
-        let f = fichiers(&cases, &feuilles, "Permis");
-        assert_eq!(f.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["Permis.ifc", "A02 Coupe_Façade.dxf"]);
+        let f = fichiers(&cases, &feuilles, "Permis", false);
+        assert_eq!(f.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["Permis.ifc", "A02 Coupe_Façade.dwg", "A02 Coupe_Façade.dxf"]);
+    }
+
+    /// PDF groupé : un seul PDF nommé d'après le jeu, feuilles cochées dans l'ordre du
+    /// jeu ; séparé : un PDF par feuille.
+    #[test]
+    fn pdf_groupe_ou_separe() {
+        let feuilles: Vec<(String, String)> = vec![("a".into(), "A01".into()), ("b".into(), "A02".into()), ("c".into(), "A03".into())];
+        let cases: BTreeSet<(String, Format)> = [("c".to_string(), Format::Pdf), ("a".to_string(), Format::Pdf), ("a".to_string(), Format::Dwg)].into_iter().collect();
+        let g = fichiers(&cases, &feuilles, "DCE", true);
+        assert_eq!(g[0], ("DCE.pdf".to_string(), vec!["a".to_string(), "c".to_string()], Format::Pdf));
+        assert_eq!(g.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["DCE.pdf", "A01.dwg"]);
+        let s = fichiers(&cases, &feuilles, "DCE", false);
+        assert_eq!(s.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["A01.pdf", "A01.dwg", "A03.pdf"]);
     }
 }

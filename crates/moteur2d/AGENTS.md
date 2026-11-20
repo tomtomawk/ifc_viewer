@@ -15,6 +15,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage` (`com
 | `dao.rs` | `Trace`, `OutilDessin`, `accrocher`, `lire_saisie`… |
 | `feuilles.rs` | `dessin_vue`, `vue_placee`, `svg_feuille`, `pdf`, `pdf_jeu` |
 | `dxf.rs` | `dxf` : export DXF R12 (LINE, ARC, CIRCLE, SOLID) |
+| `dwg.rs` | `dwg` : DWG 2004 du DXF (relu et réécrit par `acadrust`, calques déclarés) |
 | `plans.rs` | `fond_plan`, `limite_haute_plan`, `pointilles_plage_haute` |
 
 Les points d'entrée sont ré-exportés à la racine (`moteur2d::coupe`, `moteur2d::svg_feuille`…) ; `dao` est un module public (`moteur2d::dao::Trace`). Tests dans le même fichier ou dans `tests.rs` (tests de `lib.rs`, `coupe.rs`, `vue.rs`). Un test qui a besoin d'`echanges` (ex. `depuis_ifc`) va dans la crate concernée, pas ici. Fichiers de 600 lignes au plus pour tout nouveau découpage ; `dao.rs` (795 lignes) ne doit pas grandir.

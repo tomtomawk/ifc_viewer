@@ -317,7 +317,7 @@ impl Application {
                     C::new("svg", "Dessin SVG", I::Exporter("SVG"), "Exporter le dessin de la vue en SVG (vue orthographique)", self.scene.is_some()),
                     C::new("pdf", "Dessin PDF", I::Exporter("PDF"), "Exporter le dessin de la vue en PDF (vue orthographique)", self.scene.is_some()),
                     C::new("ifc", "IFC4", I::Exporter("IFC"), "Exporter le projet natif en IFC4", self.natif.is_some()),
-                    C::new("jeu_pdf", "Jeu PDF", I::Exporter("PDF"), "Exporter le jeu de feuilles ouvert (sinon le premier) en un PDF, une page par feuille", self.natif.as_ref().is_some_and(|(p, _)| !p.feuilles.is_empty())),
+                    C::new("jeu_pdf", "Jeu de feuilles", I::Exporter("JEU"), "Exporter le jeu de feuilles ouvert (sinon le premier) : PDF (groupé ou un par feuille), DWG, DXF, IFC", self.natif.as_ref().is_some_and(|(p, _)| !p.feuilles.is_empty())),
                 ];
                 let partage_disponible=self.collaboration.as_ref().is_some_and(|c|!c.synchronisation_en_cours())&&self.loading.is_none()&&!self.saisie_active&&self.avant_saisie.is_none();
                 let collaboration=vec![

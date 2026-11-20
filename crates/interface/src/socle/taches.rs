@@ -98,17 +98,20 @@ fn pdf(p: &modele::Projet, source: &SourcePdf, c: &Controle) -> Result<Vec<u8>, 
 }
 
 /// Écrit les fichiers d'un export de jeu, un par un ; message final.
-fn ecrire_jeu(p: &modele::Projet, a_ecrire: &[(String, Option<String>, Format)], dossier: &Path, c: &Controle) -> Result<String, String> {
-    for (i, (nom, feuille, format)) in a_ecrire.iter().enumerate() {
+fn ecrire_jeu(p: &modele::Projet, a_ecrire: &[crate::documenter::export_jeu::Fichier], dossier: &Path, c: &Controle) -> Result<String, String> {
+    for (i, (nom, ids, format)) in a_ecrire.iter().enumerate() {
         if c.continuer().is_err() {
             return Err(format!("Export annulé : {i} fichier(s) écrit(s) sur {} dans {}.", a_ecrire.len(), dossier.display()));
         }
         c.etape(format!("Fichier {}/{} : {nom}", i + 1, a_ecrire.len()));
-        let f = feuille.as_ref().and_then(|id| p.feuilles.iter().find(|f| &f.id == id));
-        let octets = match (format, f) {
+        let feuilles: Vec<&modele::documentation::Feuille> = ids.iter().filter_map(|id| p.feuilles.iter().find(|f| &f.id == id)).collect();
+        let octets = match (format, feuilles.as_slice()) {
             (Format::Ifc, _) => echanges::export_ifc::exporter_fichier(p, nom)?.into_bytes(),
-            (Format::Pdf, Some(f)) => moteur2d::pdf(&moteur2d::svg_feuille(p, f)?)?,
-            (Format::Dxf, Some(f)) => moteur2d::dxf_feuille(p, f)?.into_bytes(),
+            (Format::Pdf, [f]) => moteur2d::pdf(&moteur2d::svg_feuille(p, f)?)?,
+            // PDF groupé : une page par feuille
+            (Format::Pdf, fs) if !fs.is_empty() => moteur2d::pdf_pages(&fs.iter().map(|f| moteur2d::svg_feuille(p, f)).collect::<Result<Vec<_>, _>>()?)?,
+            (Format::Dwg, [f]) => moteur2d::dwg_feuille(p, f)?,
+            (Format::Dxf, [f]) => moteur2d::dxf_feuille(p, f)?.into_bytes(),
             _ => continue,
         };
         c.ecrire(&dossier.join(nom), &octets)?;
@@ -209,7 +212,7 @@ impl Application {
     }
 
     /// Export multiformat d'un jeu (n° 13) : un fichier après l'autre.
-    pub(crate) fn exporter_jeu_arriere_plan(&mut self, ctx: &egui::Context, jeu: String, a_ecrire: Vec<(String, Option<String>, Format)>, dossier: PathBuf) {
+    pub(crate) fn exporter_jeu_arriere_plan(&mut self, ctx: &egui::Context, jeu: String, a_ecrire: Vec<crate::documenter::export_jeu::Fichier>, dossier: PathBuf) {
         let Some((projet, _)) = self.natif.clone() else { return };
         self.lancer_tache(ctx, "Export du jeu", move |c| {
             ecrire_jeu(&projet, &a_ecrire, &dossier, c).map(|m| Fin::Fichiers(format!("Jeu « {jeu} » : {m}")))
@@ -375,13 +378,15 @@ mod tests {
         let p = projet();
         let f = p.feuilles.first().expect("une feuille dans l'exemple");
         let a_ecrire = vec![
-            ("maison.ifc".to_string(), None, Format::Ifc),
-            ("A01.pdf".to_string(), Some(f.id.clone()), Format::Pdf),
-            ("A01.dxf".to_string(), Some(f.id.clone()), Format::Dxf),
+            ("maison.ifc".to_string(), Vec::new(), Format::Ifc),
+            ("A01.pdf".to_string(), vec![f.id.clone()], Format::Pdf),
+            ("A01.dxf".to_string(), vec![f.id.clone()], Format::Dxf),
+            ("A01.dwg".to_string(), vec![f.id.clone()], Format::Dwg),
+            ("jeu.pdf".to_string(), p.feuilles.iter().map(|f| f.id.clone()).collect(), Format::Pdf),
         ];
         let d = dossier("jeu");
         let m = ecrire_jeu(&p, &a_ecrire, &d, &Controle::default()).unwrap();
-        assert!(m.starts_with("3 fichier(s) écrit(s)"), "{m}");
+        assert!(m.starts_with("5 fichier(s) écrit(s)"), "{m}");
         // l'en-tête porte l'heure et le nom du fichier : la section DATA est comparée
         let donnees = |t: String| t[t.find("DATA;").unwrap()..].to_string();
         let ifc = std::fs::read_to_string(d.join("maison.ifc")).unwrap();
@@ -392,11 +397,15 @@ mod tests {
         let lignes = |t: String| { let mut l: Vec<String> = t.lines().map(str::to_string).collect(); l.sort(); l };
         assert_eq!(lignes(std::fs::read_to_string(d.join("A01.dxf")).unwrap()), lignes(moteur2d::dxf_feuille(&p, f).unwrap()));
         assert!(std::fs::read(d.join("A01.pdf")).unwrap().starts_with(b"%PDF"));
+        assert!(std::fs::read(d.join("A01.dwg")).unwrap().starts_with(b"AC1018"));
+        // PDF groupé : une page par feuille du projet
+        let groupe = std::fs::read(d.join("jeu.pdf")).unwrap();
+        assert_eq!(groupe.windows(10).filter(|w| w == b"/Type /Pag" || w == b"/Type/Page").count() >= p.feuilles.len(), true);
         let d = dossier("jeu-annule");
         let c = Controle::default();
         c.annule.store(true, Ordering::Relaxed);
         let e = ecrire_jeu(&p, &a_ecrire, &d, &c).unwrap_err();
-        assert!(e.starts_with("Export annulé : 0 fichier(s) écrit(s) sur 3"), "{e}");
+        assert!(e.starts_with("Export annulé : 0 fichier(s) écrit(s) sur 5"), "{e}");
         assert_eq!(std::fs::read_dir(&d).unwrap().count(), 0);
     }
 

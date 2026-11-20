@@ -40,7 +40,7 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 | X2 | IFC : alignements IFC4X3, textures ; `IfcSectionedSolid` autres que `IfcSectionedSolidHorizontal` ; faces B-spline découpées (bornes intérieures au domaine) facettisées par leurs arêtes ; paramètres de début et de fin d'un balayage ignorés hors directrice `IfcPolyline` ; surface de référence non plane prise pour un plan horizontal | P3 | `README.md` « Limites connues » |
 | L1 | Liens IFC, suite : propriétés IFC d'un élément lié dans Propriétés ; chemins relatifs au projet (un dossier de projet déplacé ou ouvert sur un autre poste perd ses liens : « Changer de fichier ») ; relecture automatique d'un fichier lié modifié ; coût de chaque reconstruction de la scène (géométrie liée recopiée et placée à chaque commande, à mesurer sur une grosse maquette liée) ; plusieurs liens d'un même fichier ; position par points de repère communs ; retrait du parcours « visionneuse IFC » devenu inutile (`LoadMsg::Done`, navigation IFC des fichiers IFC) | P2 | `crates/maillage/src/liens.rs`, `crates/interface/src/outils/modeliser/liens.rs` |
 | A12 | Textes des PDF, SVG et DXF en contours : non sélectionnables | P2 | `crates/moteur2d/` |
-| X4 | Feuilles Revit non exportées ; DWG non écrit (format fermé) ; arcs des arêtes de maillage et des vues Revit exportés en segments | P3 | `README.md` « Limites connues », `crates/moteur2d/src/dxf.rs` |
+| X4 | Feuilles Revit non exportées ; DWG à ouvrir dans AutoCAD et DWG TrueView (écrit en 2004 par `acadrust`, vérifié par relecture seulement) ; arcs des arêtes de maillage et des vues Revit exportés en segments | P3 | `README.md` « Limites connues », `crates/moteur2d/src/dxf.rs` |
 
 ## 4. Modéliser et modifier
 

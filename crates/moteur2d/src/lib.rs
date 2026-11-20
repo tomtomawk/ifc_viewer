@@ -7,9 +7,10 @@
 mod motifs;
 pub use motifs::*;
 mod feuilles;
-pub use feuilles::{dessin_vue, dxf_feuille, pdf, pdf_jeu, pdf_pages, svg_feuille, vue_placee};
+pub use feuilles::{dessin_vue, dwg_feuille, dxf_feuille, pdf, pdf_jeu, pdf_pages, svg_feuille, vue_placee};
 mod dxf;
 pub use dxf::dxf;
+pub mod dwg;
 mod plans;
 pub use plans::{aretes_plage_haute, dans_plage_haute, fond_plan, limite_haute_plan, pointilles_plage_haute};
 

@@ -226,6 +226,11 @@ pub fn dxf_feuille(p: &Projet, f: &Feuille) -> Result<String, String> {
     Ok(crate::dxf(&feuille(p, f)?))
 }
 
+/// DWG 2004 d'une feuille (mêmes entités et calques que son DXF).
+pub fn dwg_feuille(p: &Projet, f: &Feuille) -> Result<Vec<u8>, String> {
+    crate::dwg::dwg(&feuille(p, f)?)
+}
+
 pub fn pdf(svg: &str) -> Result<Vec<u8>, String> {
     let tree = svg2pdf::usvg::Tree::from_str(svg, &svg2pdf::usvg::Options::default())
         .map_err(|e| format!("SVG : {e}"))?;
