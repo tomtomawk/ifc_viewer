@@ -208,6 +208,10 @@ impl Application {
                         if ui.button("Nouveau").clicked() { action = Some("nouveau"); }
                         if ui.button("Dupliquer").clicked() { action = Some("dupliquer"); }
                     });
+                    ui.horizontal(|ui| {
+                        if ui.button("Dessiner un motif…").on_hover_text("Nouveau motif dessiné sur un carré répété (onglet)").clicked() { action = Some("dessiner"); }
+                        if ui.add_enabled(du_projet, egui::Button::new("Redessiner…")).on_hover_text("Ouvrir ce motif dans l'éditeur de hachures (un motif à familles de traits repart d'un carré vide)").clicked() { action = Some("redessiner"); }
+                    });
                     let libelle = if de_base && du_projet { "Rétablir" } else { "Supprimer" };
                     let possible = du_projet && (de_base || !utilise);
                     if ui.add_enabled(possible, egui::Button::new(libelle))
@@ -285,9 +289,11 @@ impl Application {
             }
         };
         match action {
+            Some("dessiner") => { self.ouvrir_editeur_hachure(None); return; }
+            Some("redessiner") => { self.ouvrir_editeur_hachure(Some(&choisi)); return; }
             Some("nouveau") => {
                 let n = libre(&p, "Motif");
-                p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }] });
+                p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }], tuile: None });
                 self.motif_choisi = Some(n);
                 change = true;
             }
@@ -321,6 +327,8 @@ impl Application {
                 }
             }
             _ if d != avant => {
+                // familles de traits modifiées à la main : le dessin d'origine ne vaut plus
+                if d.lignes != avant.lignes { d.tuile = None; }
                 match p.motifs.iter_mut().find(|x| x.nom == choisi) {
                     Some(x) => *x = d,
                     None => p.motifs.push(d),

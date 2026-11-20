@@ -445,6 +445,21 @@ impl Application {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(l, h)));
                 succes(&[])
             }
+            "motifs_hachures" => {
+                // motifs_hachures [nom] : ouvre la fenêtre des motifs (sur le motif nommé)
+                if !argument.trim().is_empty() { self.motif_choisi = Some(argument.trim().to_string()); }
+                self.editeur_motifs = true;
+                succes(&[])
+            }
+            "editeur_hachure" => {
+                // editeur_hachure [nom] : ouvre l'éditeur sur un nouveau motif ou le motif nommé
+                let nom = argument.trim();
+                self.ouvrir_editeur_hachure((!nom.is_empty()).then_some(nom));
+                match &self.editeur_hachure {
+                    Some(ed) => succes(&[("nom", texte(&ed.nom))]),
+                    None => erreur(self.error.as_deref().unwrap_or("éditeur non ouvert")),
+                }
+            }
             "position" => {
                 // position de la fenêtre (pixels de l'écran) : essais à plusieurs instances
                 let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();

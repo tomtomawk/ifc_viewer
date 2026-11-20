@@ -4,3 +4,4 @@ pub(crate) mod coupe;
 pub(crate) mod gabarits_vues;
 pub(crate) mod aimantation;
 pub(crate) mod export_jeu;
+pub(crate) mod editeur_hachure;

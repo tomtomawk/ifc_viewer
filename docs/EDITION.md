@@ -823,3 +823,17 @@ indépendante (`python -m pip install ifcopenshell pytest`). Les tests essentiel
 utilisent les exemples du dépôt ; les tests du corpus RVT externe continuent à être
 sautés lorsque ce corpus n'est pas disponible. Pour un serveur graphique de test
 sans multiéchantillonnage, `BIMEDIT_MSAA=0` désactive l'anticrénelage de la vue 3D.
+
+## Éditeur de hachures dessinées
+
+Fenêtre « Motifs de hachures » (matériau › Motifs de hachures…) : « Dessiner un motif… »
+(nouveau) ou « Redessiner… » (motif du projet) ouvre un onglet « Hachure ». La hachure
+occupe toute la vue : seul le carré central (la tuile) se dessine, le reste, grisé, en
+répète le dessin. Bandeau : Ligne (deux clics), Polyligne (traits enchaînés, clic droit
+ou Échap pour finir), Effacer (clic sur un trait), côté du carré (mm du papier),
+divisions de la grille d'accrochage (modifiables tant que le carré est vide), nom,
+Défaire (Ctrl+Z), Tout effacer, Annuler, Valider. Les extrémités s'accrochent aux nœuds
+de la grille ; Valider enregistre le motif dans le projet (familles de traits déduites
+de la tuile, matériaux suivis si le motif est renommé) et ferme l'onglet, comme sa croix
+ou Annuler (sans enregistrer).
+

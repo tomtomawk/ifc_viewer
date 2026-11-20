@@ -18,6 +18,7 @@ pub mod gabarits_vues;
 pub mod identifiants;
 pub mod importes;
 pub mod liens;
+pub mod motif_tuile;
 pub mod murs;
 pub mod soleil;
 pub mod unite;
@@ -450,13 +451,16 @@ fn origine_nulle_3d(o: &[f64; 3]) -> bool {
 /// Phase des éléments du site (terrains, limites de propriété), créée par défaut.
 pub const PHASE_EXISTANT: &str = "Existant";
 
-/// Motif de hachures nommé : familles de traits.
+/// Motif de hachures nommé : familles de traits ; un motif dessiné garde aussi sa tuile
+/// (dessin d'origine, réédité dans l'éditeur de hachures), dont `lignes` est déduit.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct DefinitionMotif {
     #[serde(default)]
     pub id: String,
     pub nom: String,
     pub lignes: Vec<LigneMotif>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tuile: Option<motif_tuile::TuileMotif>,
 }
 
 impl DefinitionMotif {
@@ -464,8 +468,8 @@ impl DefinitionMotif {
     pub fn base() -> Vec<DefinitionMotif> {
         let l = |angle: f64, pas: f64| LigneMotif { angle, pas, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() };
         vec![
-            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)] },
-            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)] },
+            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)], tuile: None },
+            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)], tuile: None },
         ]
     }
 }

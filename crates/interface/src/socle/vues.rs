@@ -145,6 +145,8 @@ impl Application {
         /// Identifiant de l'onglet de l'éditeur de familles (hors des documents).
         const ONGLET_FAMILLE: usize = usize::MAX;
         const ONGLET_FAMILLE_PLANE: usize = usize::MAX - 4;
+        /// Onglet de l'éditeur de hachures (hors des documents et des familles).
+        const ONGLET_HACHURE: usize = usize::MAX - 8;
         let est_famille = |id: usize| id >= ONGLET_FAMILLE_PLANE;
         let mut onglets = Vec::new();
         let mut titres = BTreeMap::new();
@@ -178,12 +180,19 @@ impl Application {
                 onglets.push((ONGLET_FAMILLE_PLANE, Some(ordre), format!("Famille {t}"), format!("Éditeur de familles — {t}")));
             }
         }
-        let famille_active = self.mode_famille();
+        if let Some(ed) = &self.editeur_hachure {
+            titres.insert(ONGLET_HACHURE, "Éditeur de hachures".into());
+            onglets.push((ONGLET_HACHURE, None, format!("Hachure {}", ed.nom), format!("Éditeur de hachures — {}", ed.nom)));
+        }
+        let hachure_active = self.hachure_active;
+        let famille_active = self.mode_famille() && !hachure_active;
         let ordre_actif = self.ordre_famille();
         let vue_famille_active = ordre_actif.and_then(|ordre| self.vues_onglet_famille(ordre))
             .and_then(|vues| vues.into_iter().find(|v| v.2).map(|v| v.0));
         let est_actif = |id: usize, vue: Option<usize>, doc: usize, active: Option<usize>| {
-            if est_famille(id) {
+            if id == ONGLET_HACHURE || hachure_active {
+                id == ONGLET_HACHURE && hachure_active
+            } else if est_famille(id) {
                 famille_active && vue == ordre_actif && (id == ONGLET_FAMILLE_PLANE || vue_famille_active == Some(ONGLET_FAMILLE - id))
             } else { !famille_active && id == doc && vue == active }
         };
@@ -278,6 +287,16 @@ impl Application {
         if reduire {
             self.garder_derniere_vue_par_document();
         }
+        // onglet de l'éditeur de hachures : activé ou fermé (sans enregistrer)
+        let activer = match activer {
+            Some((ONGLET_HACHURE, _)) => { self.hachure_active = true; self.famille_active = false; None }
+            Some(o) => { self.hachure_active = false; Some(o) }
+            None => None,
+        };
+        let fermer = match fermer {
+            Some((ONGLET_HACHURE, _)) => { self.fermer_editeur_hachure(); None }
+            autre => autre,
+        };
         if let Some((id, vue)) = activer
             && est_famille(id) && let Some(ordre) = vue {
                 if id == ONGLET_FAMILLE_PLANE { self.activer_famille(ordre); }
