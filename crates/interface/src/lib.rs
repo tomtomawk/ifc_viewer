@@ -956,6 +956,8 @@ impl eframe::App for Application {
                 self.status="Ajuster / prolonger : choisir une nouvelle limite, ou Échap pour terminer.".into();
             } else if self.transfo.outil.is_some() && self.transfo.reculer() {
                 // Déplacer, Copier, Tourner, Aligner : une étape en arrière
+            } else if self.bim.attache_toiture_active && self.reculer_attache_toiture() {
+                // Attacher au toit : le dernier mur choisi est retiré
             } else if self.bim.depart_structure.take().is_some() {
                 // Le premier clic d'une poutre est abandonné sans modifier le projet.
             } else if self.coupe_depart.is_some() {

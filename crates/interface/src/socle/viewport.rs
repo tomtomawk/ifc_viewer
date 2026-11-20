@@ -217,8 +217,8 @@ impl Application {
                     if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
                 }
             } else if mode_attache {
-                // clic droit : abandonne le texte en cours, sinon quitte l'outil (comme Échap)
-                if resp.clicked_by(PointerButton::Secondary) && self.bim.texte_saisi.take().is_none() { self.ruban_edition.annuler(); }
+                // clic droit : retire le dernier mur choisi, sinon quitte l'outil (comme Échap)
+                if resp.clicked_by(PointerButton::Secondary) && !self.reculer_attache_toiture() { self.ruban_edition.annuler(); }
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
                     let cible = pick(self, q).and_then(|(objet, _)| self.scene.as_ref()?.objects.get(objet as usize).map(|o| o.id))
                         .and_then(|id| self.cle_native(self.cible_clic(id)));
@@ -290,7 +290,8 @@ impl Application {
                     }
                 }
             } else if let Some(genre) = structure {
-                if resp.clicked_by(PointerButton::Secondary) { self.bim.depart_structure = None; }
+                // clic droit : abandonne le premier point d'une poutre, sinon quitte l'outil (comme Échap)
+                if resp.clicked_by(PointerButton::Secondary) && self.bim.depart_structure.take().is_none() { self.ruban_edition.annuler(); }
                 if resp.clicked() {
                     let point = altitude_structure.and_then(|alt| resp.interact_pointer_pos().and_then(|q| self.point_tracage(q, rect, shift, self.bim.depart_structure, alt)));
                     if let Some((point, _)) = point {
@@ -320,6 +321,8 @@ impl Application {
                     self.error = Some(e);
                 }
             } else if let Some(composant) = placement {
+                // clic droit : quitte l'outil, comme Échap
+                if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
                 if composant && ui.memory(|m| m.focused().is_none()) && ui.input(|i| i.key_pressed(egui::Key::Space)) {
                     self.bim.composant.rotation = (self.bim.composant.rotation + 90.0).rem_euclid(360.0);
                 }
@@ -489,7 +492,7 @@ impl Application {
             let texte = if self.bim.murs_a_attacher.is_empty() {
                 "Attacher au toit : cliquer un mur, puis une toiture".to_string()
             } else {
-                format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une toiture ou ajouter un mur", self.bim.murs_a_attacher.len())
+                format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une toiture ou ajouter un mur · Échap : retirer le dernier", self.bim.murs_a_attacher.len())
             };
             let painter = ui.painter().with_clip_rect(rect);
             if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, &texte); }
@@ -588,5 +591,15 @@ impl Application {
             self.poignees_boite(ui, rect);
         }
         self.voilage_vue(ui, rect, repere_plan);
+    }
+
+    /// Attacher au toit, une étape en arrière : retire le dernier mur choisi ; faux s'il
+    /// n'y en a plus (Échap ou clic droit quittent alors l'outil).
+    pub(crate) fn reculer_attache_toiture(&mut self) -> bool {
+        if self.bim.murs_a_attacher.pop().is_none() {
+            return false;
+        }
+        self.status = format!("Attacher au toit : {} mur(s) choisi(s).", self.bim.murs_a_attacher.len());
+        true
     }
 }

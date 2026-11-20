@@ -15,7 +15,7 @@ Toutes les fonctions suivent le même cycle :
 | 3. Saisie | Clics dans la vue, avec accrochage. À chaque étape, la **barre de commande** affiche la consigne et les champs numériques (distance, angle, nombre, facteur). Taper un nombre remplit le champ actif ; Tab passe au champ suivant. |
 | 4. Aperçu | Aperçu fantôme permanent, sans modifier le projet. |
 | 5. Validation | Clic final ou Entrée → **une seule transaction** (`Projet::executer`), donc un seul Ctrl+Z. |
-| 6. Sortie | Échap : revient à l'étape précédente, puis quitte la commande. La sélection est conservée. Clic droit : menu Valider / Annuler / Répéter. |
+| 6. Sortie | Échap : revient à l'étape précédente, puis quitte la commande. La sélection est conservée. Clic droit : comme Échap (placements de poteau, composant, arbre, pièce, texte ; Attacher au toit retire le dernier mur choisi) ; menu Valider / Annuler / Répéter à venir (M8). |
 | 7. Répétition | Entrée ou Espace sur une vue vide relance la dernière commande. |
 
 Options communes de la barre d'options :
