@@ -949,7 +949,9 @@ impl eframe::App for Application {
         }
         if projet_actif && self.ruban_edition.a_un_outil() && !self.saisie_active && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             // Échap : la saisie, puis le mur ou la dalle en cours, puis l'outil
-            if self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ajuster) && self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {
+            if self.bim.texte_saisi.take().is_some() {
+                // texte en cours abandonné, l'outil Texte reste actif
+            } else if self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ajuster) && self.ajustement.as_ref().is_some_and(|a|a.reference.is_some()) {
                 self.ajustement=Some(Default::default());
                 self.status="Ajuster / prolonger : choisir une nouvelle limite, ou Échap pour terminer.".into();
             } else if self.transfo.outil.is_some() && self.transfo.reculer() {

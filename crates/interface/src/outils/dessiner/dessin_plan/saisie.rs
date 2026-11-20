@@ -209,6 +209,7 @@ impl Application {
                 self.status = "Commande précédente arrêtée.".into();
             }
             self.dessin2d.commande_cle = cle;
+            self.bim.texte_saisi = None;
             // le mode « Suivre un trait » ne passe pas d'un outil à l'autre
             self.ruban_edition.suivre_trait = false;
             if cle != Some(crate::zones::ruban::Outil::Escalier) { self.dessin2d.giron_impose = None; }
@@ -495,6 +496,11 @@ impl Application {
     /// puis l'outil se ferme ; Annuler : tout ce qui est en cours est abandonné, puis
     /// l'outil se ferme.
     pub(crate) fn quitter_commande(&mut self, valider: bool) {
+        // texte en cours de saisie : créé par Valider, abandonné par Annuler
+        if valider && let Err(e) = self.valider_texte_saisi() {
+            self.error = Some(e);
+        }
+        self.bim.texte_saisi = None;
         if valider && self.transfo.outil == Some(crate::zones::ruban::Outil::Scinder) && self.transfo.element.is_some() {
             if !self.valider_coupe_surface() { return; }
         }

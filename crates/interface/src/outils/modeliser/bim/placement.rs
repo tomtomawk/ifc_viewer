@@ -35,18 +35,25 @@ impl Application {
         self.executer_saisie(commande);
     }
 
-    /// Texte : champs de l'outil et contenu ; le clic dans la vue place le texte (même
-    /// parcours que dans l'éditeur de famille).
+    /// Texte : champs de l'outil ; pendant une saisie dans la vue, son contenu et les
+    /// champs à insérer ({projet}, {vue}).
     pub(crate) fn parametres_texte(&mut self, ui: &mut egui::Ui) {
         self.ruban_edition.section_parametres(ui, Outil::Texte, self.natif.as_ref().map(|(p, _)| p));
         if self.vue_native_id().is_none() {
             ui.label(SANS_VUE);
             return;
         }
-        egui::Grid::new("contenu_texte").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-            ui.label("Contenu");
-            ui.text_edit_singleline(&mut self.bim.texte);
-            ui.end_row();
+        let Some(t) = self.bim.texte_saisi.as_mut() else { return };
+        titre_parametres(ui, "Texte en cours");
+        ui.add(egui::TextEdit::multiline(&mut t.contenu).desired_rows(2).desired_width(f32::INFINITY));
+        egui::ComboBox::from_id_salt("champ_texte_creation").selected_text("Insérer un champ").show_ui(ui, |ui| {
+            for &(cle, nom) in crate::outils::annoter::outils_texte::CHAMPS_PROJET {
+                if ui.button(nom).clicked() {
+                    t.contenu.push_str(cle);
+                    t.focus = true;
+                    ui.close();
+                }
+            }
         });
     }
 

@@ -44,7 +44,7 @@ impl Application {
         (c.w > 1e-6).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
     }
 
-    fn point_annotation(&self, rect: egui::Rect, q: egui::Pos2) -> Option<[f64; 2]> {
+    pub(crate) fn point_annotation(&self, rect: egui::Rect, q: egui::Pos2) -> Option<[f64; 2]> {
         let (o, u, h) = self.repere_annotation()?;
         let scene = self.scene.as_ref()?;
         let x = (q.x - rect.left()) / rect.width().max(1.0) * 2.0 - 1.0;
@@ -58,49 +58,6 @@ impl Application {
         let point = origine + direction * (n.dot(o - origine) / denominateur) - o;
         let q = DVec2::new(point.dot(u), point.dot(h));
         q.is_finite().then_some(q.to_array())
-    }
-
-    /// Outil Texte du projet, même parcours que dans l'éditeur de famille : un clic place
-    /// le texte dans la vue, puis il reste sélectionné pour régler son contenu, ses
-    /// champs, sa position et sa hauteur dans Propriétés.
-    pub(crate) fn placer_texte_vue(&mut self, rect: egui::Rect, q: egui::Pos2) -> Result<(), String> {
-        use modele::documentation::AnnotationForme;
-        let vue = self.vue_native_id().ok_or("Ouvrez un plan ou une coupe native pour annoter.")?;
-        // point accroché au survol (accrochages de la vue), sinon point libre sous le clic
-        let accroche = self.dessin2d.point.take().map(|(p, _)| p.to_array());
-        let point = accroche.or_else(|| self.point_annotation(rect, q)).ok_or("Le plan de la vue est vu par la tranche : ouvrir un plan, une coupe ou une élévation.")?;
-        let texte = if self.bim.texte.trim().is_empty() { "Texte".to_owned() } else { self.bim.texte.clone() };
-        let hauteur = self.bim.annotation_identique.as_ref()
-            .filter(|a| matches!(a.forme, AnnotationForme::Texte { .. }))
-            .map_or_else(|| self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Texte, 1), |a| a.hauteur);
-        self.executer_bim(commandes::Commande::Annoter {
-            annotation: Annotation { id: String::new(), vue, hauteur, forme: AnnotationForme::Texte { point, texte } },
-        })?;
-        // retour à la sélection : Propriétés montre le texte créé
-        self.ruban_edition.annuler();
-        self.status = "Texte placé — contenu, champs et hauteur dans Propriétés ; Ctrl+Z pour annuler.".into();
-        Ok(())
-    }
-
-    /// Outil Texte actif sur une vue native (onglet Annoter).
-    pub(crate) fn texte_annotation_actif(&self) -> bool {
-        self.onglet_ruban == OngletRuban::Annoter && self.natif.is_some() && self.loading.is_none()
-            && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Texte) && self.vue_native_id().is_some()
-    }
-
-    /// Survol de l'outil Texte : point accroché aux géométries de la vue (comme les
-    /// traits d'annotation), repère d'accrochage et aperçu du texte à ce point.
-    pub(crate) fn apercu_texte_vue(&mut self, ui: &egui::Ui, rect: egui::Rect, survol: Option<egui::Pos2>) {
-        let (maj, temps) = ui.input(|i| (i.modifiers.shift, i.time));
-        self.dessin2d.point = survol.and_then(|q| self.depuis_ecran(rect, q)).map(|c| self.point_dessin_depuis(rect, c, maj, temps, None));
-        let Some((point, accroche)) = self.dessin2d.point else { return };
-        let Some(e) = self.vers_ecran(rect, point) else { return };
-        let painter = ui.painter().with_clip_rect(rect);
-        let couleur = Color32::from_rgb(55, 130, 200);
-        crate::saisie::moteur_accrochage::peindre_marqueur(&painter, e, accroche);
-        // aperçu du texte, ancré comme le texte créé
-        let contenu = if self.bim.texte.trim().is_empty() { "Texte" } else { self.bim.texte.as_str() };
-        painter.text(e, egui::Align2::LEFT_BOTTOM, contenu, egui::FontId::proportional(12.0), couleur);
     }
 
     /// Accroche seulement les traits de la sélection et les rectangles de texte.

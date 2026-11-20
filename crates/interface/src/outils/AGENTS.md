@@ -7,7 +7,7 @@ Rôle : outils de la vue, rangés par métier comme `crates/commandes/src/`. L'e
 | `modeliser/` | `bim/` (placement d'éléments, emplacements de la palette de création `palettes.rs`, `placement.rs`, Créer à l'identique dans `identique.rs`), `murs_courbes.rs`, `garde_corps.rs` (sélecteur et éditeur de types), `escalier.rs` (création d'escaliers et garde-corps), `liens.rs` (Modéliser > Lien IFC, rubrique Liens de l'arborescence, refus d'ouvrir un IFC ; lecture en arrière-plan dans `socle::taches`) |
 | `modifier/` | `transformer.rs` (Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle, Aligner, Décaler, Scinder), `ajuster.rs`, `options_modifier.rs` (barre d'options de Modifier, jonctions, annotations natives, export IFC/PDF, fenêtre documentation) |
 | `dessiner/` | `dessin_plan/` : DAO 2D commune (tracés, accrochages, contours, courbures, options de tracé) |
-| `annoter/` | `cotation.rs`, `cotes_aretes.rs`, `outils_texte.rs`, `types_traits.rs` |
+| `annoter/` | `cotation.rs`, `cotes_aretes.rs`, `outils_texte.rs`, `texte_vue.rs` (outil Texte : champ de saisie au point cliqué, Entrée valide, outil reste actif), `types_traits.rs` |
 | `bandeau.rs` | bandeau de dessin commun (`bandeau` : options, Valider/Annuler, hauteur pour les messages) ; seul composant de ce rôle, appelé par la vue, le cartouche et l'éditeur de familles |
 
 Dépendances typiques : `saisie/`, `zones/ruban/` (`Outil`), `socle/`. `annoter/` et `modeliser/escalier.rs` utilisent des éléments `pub(crate)` de `dessiner/dessin_plan/mod.rs` (`EtatDessin2D`, `vers_ecran`, `champ_valeur`, `HautEscalier`).

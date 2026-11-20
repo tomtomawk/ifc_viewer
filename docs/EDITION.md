@@ -540,9 +540,14 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Les éléments horizontaux (dalle, sol, plafond, toiture) l'utilisent aussi :
   polygone, rectangle ou cercle sur le plan de leur altitude.
 - **Documenter** crée aussi textes, zones rectangulaires, cotes et étiquettes
-  dans la vue native ouverte. Le texte se place au clic sur le point accroché
+  dans la vue native ouverte. **Texte** (Annoter) : un clic sur le point accroché
   aux géométries de la vue (extrémités, milieux, intersections, comme les traits
-  d'annotation ; repère orange au survol). Avec un mur sélectionné, une cote référence ses
+  d'annotation ; repère orange au survol) ouvre un champ de saisie à cet endroit, à
+  la taille du texte imprimé ; on y tape le contenu (Maj+Entrée : nouvelle ligne),
+  Entrée ou Valider le crée (une étape d'annulation), Échap ou le clic droit
+  abandonnent ce texte, un clic ailleurs le crée et en commence un autre. L'outil
+  reste actif ; un second Échap le quitte. Pendant la saisie, Propriétés montre le
+  même contenu et « Insérer un champ » ({projet}, {vue}). Avec un mur sélectionné, une cote référence ses
   extrémités ; sinon ses points sont fixes. Une référence supprimée est signalée
   en rouge, sans supprimer silencieusement la cote.
 - **Feuilles** (Documenter, groupe Documents, ou l'arborescence) ouvre un jeu de

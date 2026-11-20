@@ -75,6 +75,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | U6 | Revue des parcours : clic droit sans effet pendant Composant, Arbre, Pièce, Poteau (Échap quitte) ; Attacher au toit : Échap quitte au lieu de revenir d'une étape | P1 | `socle/viewport.rs` |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
 | U8 | Revue des parcours : Spline et Cercle sans type de trait à la création (« Générique »), alors qu'il existe à la sélection | P2 | `zones/palette_creation.rs` |
+| U10 | Texte : modifier un texte existant dans la vue (double-clic : même champ de saisie que la création) ; dans la fiche d'un texte sélectionné, chaque frappe du contenu est peut-être une étape d'annulation (lu dans le code, non vérifié) | P2 | `outils/annoter/texte_vue.rs`, `zones/fiche_selection.rs` |
 | U9 | Sélecteurs simples (terrain, arbre, composant, pièce, poutre, sélection multiple) : vignettes ; Renommer et Dupliquer pour composant et poutre ; éditeur de type de terrain (couches) depuis le sélecteur | P3 | `zones/ruban/selecteur.rs` (`simple`) |
 
 ## 5. Familles

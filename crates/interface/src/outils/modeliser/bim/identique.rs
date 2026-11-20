@@ -99,9 +99,9 @@ impl Application {
                 return Err("Ouvrez la vue de l'annotation pour la créer à l'identique.".into());
             }
             let outil = match &annotation.forme {
-                F::Texte { point, texte } => {
+                // contenu et hauteur repris de `annotation_identique` à la saisie
+                F::Texte { point, .. } => {
                     self.bim.points[0] = *point;
-                    self.bim.texte = texte.clone();
                     Outil::Texte
                 }
                 // une ligne se recrée comme une polyligne d'un segment

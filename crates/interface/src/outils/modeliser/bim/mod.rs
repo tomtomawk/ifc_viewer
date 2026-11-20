@@ -37,7 +37,8 @@ pub(crate) struct EtatBim {
     pub(crate) supprimer: bool,
     pub documentation: bool,
     pub nomenclature: usize,
-    pub texte: String,
+    /// Texte en cours de saisie dans la vue (outil Texte).
+    pub(crate) texte_saisi: Option<crate::outils::annoter::texte_vue::TexteSaisi>,
     pub points: [[f64; 2]; 2],
     pub(crate) attache_toiture_active: bool,
     pub(crate) murs_a_attacher: Vec<String>,
@@ -81,7 +82,7 @@ impl Default for EtatBim {
             supprimer: false,
             documentation: false,
             nomenclature: 0,
-            texte: "Texte".into(),
+            texte_saisi: None,
             points: [[0.0, 0.0], [3000.0, 0.0]],
             attache_toiture_active: false,
             murs_a_attacher: Vec::new(),

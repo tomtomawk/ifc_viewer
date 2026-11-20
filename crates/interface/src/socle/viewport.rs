@@ -217,7 +217,8 @@ impl Application {
                     if let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
                 }
             } else if mode_attache {
-                if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
+                // clic droit : abandonne le texte en cours, sinon quitte l'outil (comme Échap)
+                if resp.clicked_by(PointerButton::Secondary) && self.bim.texte_saisi.take().is_none() { self.ruban_edition.annuler(); }
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
                     let cible = pick(self, q).and_then(|(objet, _)| self.scene.as_ref()?.objects.get(objet as usize).map(|o| o.id))
                         .and_then(|id| self.cle_native(self.cible_clic(id)));
@@ -311,7 +312,8 @@ impl Application {
                     }
                 }
             } else if texte_annotation {
-                if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
+                // clic droit : abandonne le texte en cours, sinon quitte l'outil (comme Échap)
+                if resp.clicked_by(PointerButton::Secondary) && self.bim.texte_saisi.take().is_none() { self.ruban_edition.annuler(); }
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos()
                     && let Err(e) = self.placer_texte_vue(rect, q)
                 {
