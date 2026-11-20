@@ -126,7 +126,6 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
 | U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
 | Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
-| Échap des tracés | Un contour de dalle interrompu demande deux Échap de plus pour être abandonné (« Échap à nouveau pour l'abandonner »), et reste en attente si le pilote lance `outil aucun` (vérifié ; changement d'onglet non essayé) (poignées des autres éléments bloquées). Garder, ou abandonner le contour quand l'outil est quitté ? |
 | Commits | `AGENTS.md` demande de pousser sur `master` ; la session cloud était configurée pour une branche de travail. Les commits du 20/11/2026 ont été poussés sur `master` selon `AGENTS.md` : à confirmer pour les sessions autonomes suivantes |
 
 ## 10. Études des évolutions
