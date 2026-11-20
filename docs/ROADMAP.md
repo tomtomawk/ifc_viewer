@@ -15,9 +15,9 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| A1b | Résorber les avertissements clippy restants (133 au 20/11/2026 après correction automatique : 49 types complexes, 11 champs assignés après `Default::default()`, 9 fonctions à plus de 7 arguments, 8 comparaisons niées sur des flottants, 8 éléments après un module de test…), puis rendre clippy bloquant dans la CI | P2 | `.github/workflows/ci.yml`, tâche `debug` |
+| A1b | Résorber les avertissements clippy restants (131 au 20/11/2026 après correction automatique : 49 types complexes, 11 champs assignés après `Default::default()`, 9 fonctions à plus de 7 arguments, 8 comparaisons niées sur des flottants, 8 éléments après un module de test…), puis rendre clippy bloquant dans la CI | P2 | `.github/workflows/ci.yml`, tâche `debug` |
 | T1 | Tests de fichiers malformés : fait pour les cas d'A3 ; restent le balayage aléatoire (fuzzing) d'IFC et de RVT, les fichiers `rvt/{vues,feuilles,nomenclatures,parametres,annexes,zones}.rs` non relus, et `Projet::verifier()` sur un `.modele.json` malformé ; `scene` sans test | P2 | `crates/formats/src/ifc/bornes.rs` |
-| T2 | Les 20 scripts `tools/test-*.py` (clics simulés) ne tournent pas en CI | P2 | `tools/` |
+| T2 | Les 18 scripts `tools/test-*.py` (clics simulés) ne tournent pas en CI. Lancés sous Linux et Xvfb le 20/11/2026 (`xvfb-run -a python3 tools/<script>.py --exe target/debug/bimedit`) : 12 réussis ; 6 en échec, déjà avec le binaire de `1be261c` (scripts à remettre à jour ou défauts à chercher) : `test-ajustements-ui` (délai dépassé, l. 82), `test-angle-volets-familles` (`zoom` absent de la réponse, l. 154), `test-deplacement-mixte` (`centre` absent de la forme, l. 90), `test-murs-courbes` (le trait sélectionné ne donne pas de mur, l. 101), `test-pilote` (deux clics ne tracent pas de mur, l. 94), `test_partage_ui` (délai dépassé) | P2 | `tools/` |
 
 ## 2. Réactivité
 

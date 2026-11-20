@@ -2,6 +2,13 @@
 use commandes::Execution;
 use crate::*;
 
+/// Nombre pour une réponse JSON écrite à la main : `null` s'il n'est pas fini (la vue
+/// n'a pas encore de taille avant sa première image : largeur −∞, JSON invalide).
+fn nombre(x: impl Into<f64>, decimales: usize) -> String {
+    let x: f64 = x.into();
+    if x.is_finite() { format!("{x:.decimales$}") } else { "null".into() }
+}
+
 impl Application {
     /// Traite les commandes du pilote ; répond aux ouvertures terminées.
     pub(crate) fn piloter(&mut self, ctx: &egui::Context) {
@@ -187,16 +194,16 @@ impl Application {
         }
         if let (Some((a, b)), Some(s)) = (self.boite, &self.scene) {
             let (a, b) = (a.as_dvec3() + s.origin, b.as_dvec3() + s.origin);
-            p.push(("zone_de_coupe", objet(&[("active", self.boite_active.to_string()), ("min", format!("[{:.3},{:.3},{:.3}]", a.x, a.y, a.z)), ("max", format!("[{:.3},{:.3},{:.3}]", b.x, b.y, b.z))])));
+            p.push(("zone_de_coupe", objet(&[("active", self.boite_active.to_string()), ("min", format!("[{},{},{}]", nombre(a.x, 3), nombre(a.y, 3), nombre(a.z, 3))), ("max", format!("[{},{},{}]", nombre(b.x, 3), nombre(b.y, 3), nombre(b.z, 3)))])));
         }
         let c = &self.camera;
         p.push((
             "camera",
             objet(&[
-                ("lacet_deg", format!("{:.2}", c.yaw.to_degrees())),
-                ("tangage_deg", format!("{:.2}", c.pitch.to_degrees())),
-                ("distance", format!("{:.3}", c.dist)),
-                ("cible", format!("[{:.3},{:.3},{:.3}]", c.target.x, c.target.y, c.target.z)),
+                ("lacet_deg", nombre(c.yaw.to_degrees(), 2)),
+                ("tangage_deg", nombre(c.pitch.to_degrees(), 2)),
+                ("distance", nombre(c.dist, 3)),
+                ("cible", format!("[{},{},{}]", nombre(c.target.x, 3), nombre(c.target.y, 3), nombre(c.target.z, 3))),
                 ("ortho", c.ortho.to_string()),
             ]),
         ));
@@ -205,9 +212,9 @@ impl Application {
             objet(&[
                 ("actif", self.plan_coupe().is_some().to_string()),
                 ("style", texte(self.style.nom())),
-                ("coupe_z", self.plan_coupe().map_or("null".into(), |c| format!("{:.3}", c.w))),
+                ("coupe_z", self.plan_coupe().map_or("null".into(), |c| nombre(c.w, 3))),
                 ("niveau", self.coupe_niveau.map_or("null".into(), |n| self.decrire(n))),
-                ("hauteur", format!("{:.3}", self.coupe_hauteur)),
+                ("hauteur", nombre(self.coupe_hauteur, 3)),
                 ("poche", texte(self.poche.nom())),
                 ("echelle", self.echelle.to_string()),
             ]),
@@ -225,7 +232,7 @@ impl Application {
         if let Some(id) = self.selected {
             p.push(("selection", self.decrire(id)));
         }
-        p.push(("vue_px", format!("[{:.0},{:.0}]", self.rect_vue.width(), self.rect_vue.height())));
+        p.push(("vue_px", format!("[{},{}]", nombre(self.rect_vue.width(), 0), nombre(self.rect_vue.height(), 0))));
         p.push(("panneaux", objet(&Panneau::TOUS.map(|q| (q.nom(), texte(self.ancrages[q as usize].nom()))))));
         p.push(("visibilite_ouverte", self.voir_visibilite.to_string()));
         pilote::succes(&p)
@@ -947,5 +954,17 @@ impl Application {
             }
             _ => erreur(&format!("commande inconnue : {commande}")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_nombre {
+    /// Un nombre non fini s'écrit `null`, sinon avec le nombre de décimales demandé.
+    #[test]
+    fn nombres_json() {
+        assert_eq!(super::nombre(f32::NEG_INFINITY, 0), "null");
+        assert_eq!(super::nombre(f64::NAN, 3), "null");
+        assert_eq!(super::nombre(1.5f32, 3), "1.500");
+        assert_eq!(super::nombre(659.6f32, 0), "660");
     }
 }
