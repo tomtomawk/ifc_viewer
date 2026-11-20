@@ -423,7 +423,10 @@ impl Application {
                 let haut = (self.ruban_edition.outil()!=Some(crate::zones::ruban::Outil::Ouverture)).then(|| resp.interact_pointer_pos().and_then(|q| self.objet_plage_haute(rect, q))).flatten();
                 let hit = match haut {
                     Some(obj) => Some((obj, self.scene.as_ref().map_or(Vec3::ZERO, |s| s.objects[obj as usize].min))),
-                    None => resp.interact_pointer_pos().and_then(|p| pick(self, p)),
+                    None => resp.interact_pointer_pos().and_then(|p| pick(self, p))
+                        // option « Sélectionner par les faces vues » décochée : face vue seule refusée
+                        .filter(|(obj, _)| self.options.selection_faces_vues || self.natif.is_none()
+                            || resp.interact_pointer_pos().is_some_and(|q| self.objet_coupe(*obj) || self.arete_vue_proche(rect, q, *obj))),
                 };
                 let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
                 self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);

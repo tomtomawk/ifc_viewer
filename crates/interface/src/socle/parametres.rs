@@ -103,6 +103,9 @@ impl Application {
                                 ui.label("Le déplacement des extrémités des murs utilise les mêmes accrochages que le tracé.");
                                 ui.label("Maj : contraindre aux axes du plan. Échap : abandonner le déplacement.");
                                 if ui.button("Rétablir 0,8 seconde").clicked(){p.brouillon.delai_accrochage=0.8;}
+                                ui.add_space(12.0);
+                                ui.checkbox(&mut p.brouillon.selection_faces_vues,"Sélectionner par les faces vues");
+                                ui.label(RichText::new("Décoché : un élément se sélectionne seulement près de ses arêtes vues ou dans sa partie coupée ; un clic sur la surface vue d'une dalle ou d'un terrain ne le sélectionne plus.").small().weak());
                             }
                             "raccourcis"=>{
                                 ui.heading("Raccourcis clavier");

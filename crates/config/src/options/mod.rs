@@ -64,6 +64,9 @@ pub struct Options {
     pub raccourcis:std::collections::BTreeMap<String,String>,
     /// Arborescence spatiale, classes et attributs IFC pour les modèles Revit et natifs.
     pub navigation_ifc: bool,
+    /// Un élément se sélectionne aussi par un clic sur ses faces vues (dalle, terrain vus
+    /// sous la coupe…) ; faux : seulement près de ses arêtes vues ou dans sa partie coupée.
+    pub selection_faces_vues: bool,
     pub unite: Unite,
     /// Mémoire de l'historique d'annulation de chaque document (Mo) : au-delà, les étapes
     /// les plus anciennes sont oubliées (10 restent toujours).
@@ -73,7 +76,7 @@ pub struct Options {
     pub gabarit: Option<PathBuf>,
 }
 impl Default for Options {
-    fn default()->Self {Self{theme_interface:ThemeInterface::default(),navigation_ifc:false,unite:Unite::default(),gabarit:None,delai_accrochage:0.8,historique_mo:64,raccourcis:Default::default()}}
+    fn default()->Self {Self{theme_interface:ThemeInterface::default(),navigation_ifc:false,selection_faces_vues:true,unite:Unite::default(),gabarit:None,delai_accrochage:0.8,historique_mo:64,raccourcis:Default::default()}}
 }
 
 /// `%APPDATA%\bimedit\options.json`, `$XDG_CONFIG_HOME/bimedit/options.json` ou `~/.config/bimedit/options.json`.

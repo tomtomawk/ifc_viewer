@@ -33,7 +33,7 @@ impl Application {
     pub(crate) fn contexte_cycle(&self, rect: egui::Rect) -> u64 {
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
         let mut v: Vec<u64> = vp.to_cols_array().iter().map(|x| x.to_bits() as u64).collect();
-        v.extend([self.bim.revision, self.vue_active.map_or(u64::MAX, |x| x as u64), self.visible.iter().filter(|x| **x).count() as u64]);
+        v.extend([self.bim.revision, self.vue_active.map_or(u64::MAX, |x| x as u64), self.visible.iter().filter(|x| **x).count() as u64, u64::from(self.options.selection_faces_vues)]);
         v.extend([rect.min.x, rect.min.y, rect.max.x, rect.max.y].map(|x| x.to_bits() as u64));
         crate::saisie::cycle::empreinte(&v)
     }
@@ -106,7 +106,13 @@ impl Application {
                     }
                 }
             }
+            // option « Sélectionner par les faces vues » décochée : un objet n'est retenu que
+            // coupé, ou près d'une de ses arêtes vues
+            let par_faces = self.options.selection_faces_vues;
             for (obj, (rang, t, point)) in objets {
+                if !par_faces && !self.objet_coupe(obj) && !self.arete_vue_proche(rect, q, obj) {
+                    continue;
+                }
                 let id = s.objects[obj as usize].id;
                 let point = Some(point.as_dvec3() + s.origin);
                 // couche d'un mur composé : le mur composé d'abord, la couche ensuite (Tab)
@@ -130,6 +136,43 @@ impl Application {
         liste.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
         let mut vus = Vec::new();
         liste.into_iter().filter(|(_, _, c)| !vus.contains(&c.cible) && { vus.push(c.cible.clone()); true }).map(|(_, _, c)| c).collect()
+    }
+
+    /// L'objet est coupé par le plan de coupe actif (sa boîte est de part et d'autre).
+    pub(crate) fn objet_coupe(&self, obj: u32) -> bool {
+        let (Some(s), Some(c)) = (&self.scene, self.plan_coupe()) else { return false };
+        let o = &s.objects[obj as usize];
+        let n = c.truncate();
+        let cotes: Vec<f32> = (0..8).map(|k| {
+            let p = glam::Vec3::new([o.min.x, o.max.x][k & 1], [o.min.y, o.max.y][(k >> 1) & 1], [o.min.z, o.max.z][k >> 2]);
+            n.dot(p) + c.w
+        }).collect();
+        cotes.iter().any(|d| *d > 0.0) && cotes.iter().any(|d| *d < 0.0)
+    }
+
+    /// Une arête de l'objet (hors partie retirée par la coupe) passe à moins de
+    /// `RAYON_OBJETS` pixels du point écran `q`.
+    pub(crate) fn arete_vue_proche(&self, rect: egui::Rect, q: egui::Pos2, obj: u32) -> bool {
+        let Some(s) = &self.scene else { return false };
+        let o = &s.objects[obj as usize];
+        let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
+        let coupe = self.plan_coupe();
+        let ecran = |p: glam::Vec3| {
+            let c = vp * p.extend(1.0);
+            (c.w > 1e-6).then(|| egui::pos2(rect.left() + (c.x / c.w + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - c.y / c.w) * 0.5 * rect.height()))
+        };
+        s.primitives_montrees(o.aretes, 2, self.affichage()).any(|v| {
+            let (mut a, mut b) = (glam::Vec3::from(v[0].pos), glam::Vec3::from(v[1].pos));
+            if let Some(c) = coupe {
+                let (sa, sb) = (c.truncate().dot(a) + c.w, c.truncate().dot(b) + c.w);
+                if sa < 0.0 && sb < 0.0 { return false; }
+                if sa < 0.0 { a = a + (b - a) * (sa / (sa - sb)); } else if sb < 0.0 { b = a + (b - a) * (sa / (sa - sb)); }
+            }
+            let (Some(a), Some(b)) = (ecran(a), ecran(b)) else { return false };
+            let d = b - a;
+            let t = if d.length_sq() > 0.0 { ((q - a).dot(d) / d.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+            q.distance(a + d * t) <= RAYON_OBJETS
+        })
     }
 
     /// Sélectionne la cible d'un clic (Ctrl : ajoute ou retire).

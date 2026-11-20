@@ -305,6 +305,9 @@ impl Application {
                                 "theme_interface" => {
                                     o.theme_interface=serde_json::from_value(v.clone()).map_err(|e|e.to_string())?
                                 }
+                                "selection_faces_vues" => {
+                                    o.selection_faces_vues = v.as_bool().ok_or("Booléen selection_faces_vues requis")?
+                                }
                                 "navigation_ifc" => {
                                     o.navigation_ifc =
                                         v.as_bool().ok_or("Booléen navigation_ifc requis")?

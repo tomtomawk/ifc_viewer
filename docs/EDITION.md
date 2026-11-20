@@ -236,14 +236,18 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   quadrillages se sélectionnent aussi en plan, ainsi que les annotations dans leur
   vue ; en coupe et en élévation, les niveaux et les limites de propriété se
   sélectionnent sur leur trait ; leurs propriétés sont accessibles dans Modifier.
-  **Présélection et Tab** (comme Revit) : au survol, l'élément qui serait pris est
-  surligné en bleu (pas dans le style Réaliste) ; s'il y en a plusieurs sous le curseur, une bulle « nom · 1/3 ·
+  **Présélection et Tab** (comme Revit) : au survol, l'élément qui serait pris a ses
+  arêtes vues et ses contours coupés surlignés en bleu, sans teinte de ses surfaces
+  (pas dans le style Réaliste) ; s'il y en a plusieurs sous le curseur, une bulle « nom · 1/3 ·
   Tab » l'indique, Tab passe au suivant (couche d'un mur composé comprise) et le clic
   prend celui qui est surligné. Un objet se vise à 6 pixels près (rayons lancés
   autour du curseur) ; en plan, un élément horizontal (dalle, terrain, toiture) passe
   après un mur ou un poteau proche : cliquer près d'un mur posé sur une dalle prend le
   mur, Tab donne la dalle. Même cycle dans l'éditeur de familles (textes et traits,
-  cotes, formes, volumes, plans de référence).
+  cotes, formes, volumes, plans de référence). Paramètres → Dessin → « Sélectionner
+  par les faces vues » (coché par défaut) : décoché, un élément ne se prend que près
+  de ses arêtes vues ou s'il est coupé ; un clic sur la surface vue d'une dalle ou d'un
+  terrain sous la coupe ne le sélectionne plus.
   Un élément 2D (trait, polyligne, cote, niveau) se vise à moins de 5 pixels de son
   tracé, un texte dans son cadre : l'intérieur d'une polyligne ou d'une région ne
   vise rien et laisse sélectionner ce qui est dessous ; la fenêtre de sélection

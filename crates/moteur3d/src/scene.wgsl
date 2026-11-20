@@ -862,9 +862,7 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         if e.selection == 3u {
             return vec4f(mix(vec3f(1.0), DEMOLI, 0.3), 1.0);
         }
-        if e.selection == 4u {
-            return vec4f(mix(vec3f(1.0), SURVOL, 0.35), 1.0);
-        }
+        // survol (4) : seules les arêtes vues et coupées sont surlignées (fs_plat)
         return vec4f(select(vec3f(1.0), vec3f(1.0, 0.82, 0.62), e.selection == 1u), 1.0);
     }
     // premier plan (4 bits bas : 0 aucun, 15 uni, sinon motif de la table) et arrière-plan
@@ -1013,14 +1011,26 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
     if e.selection == 3u {
         c = mix(c, DEMOLI, 0.55);
     }
-    if e.selection == 4u {
-        c = mix(c, SURVOL, 0.55);
-        a = max(a, 0.7);
-    }
     return vec4f(c, a);
 }
 
-// Traits et tracé de la coupe : sans ombrage.
+// Poché de la coupe : sans ombrage ; le survol n'y est pas montré (seulement sur les
+// traits, `fs_plat`).
+@fragment
+fn fs_coupe(e: Varie) -> @location(0) vec4f {
+    if retire(e) {
+        discard;
+    }
+    if e.selection == 2u {
+        return vec4f(mix(e.c.rgb, MAGENTA, 0.8), 1.0);
+    }
+    if e.selection == 3u {
+        return vec4f(mix(e.c.rgb, DEMOLI, 0.8), 1.0);
+    }
+    return vec4f(select(e.c.rgb, mix(e.c.rgb, vec3f(1.0, 0.55, 0.1), 0.65), e.selection == 1u), 1.0);
+}
+
+// Traits et contours de la coupe : sans ombrage.
 @fragment
 fn fs_plat(e: Varie) -> @location(0) vec4f {
     if retire(e) {

@@ -474,7 +474,7 @@ impl Renderer {
         let opaque_aretes = scene("opaques sous arêtes", "vs_main", &tampons_scene, "fs_main", Some((64, 1.0)), false);
         let transparent = scene("transparents", "vs_main", &tampons_scene, "fs_main", Some((1, 1.0)), true);
         let traits = scene("traits", "vs_trait", &tampons_segment, "fs_plat", None, false);
-        let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_plat", Some((1, 1.0)), false);
+        let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_coupe", Some((1, 1.0)), false);
         // fond de ciel : sans tampon de sommets ni écriture de profondeur
         let pipeline_ciel = scene("ciel", "vs_ciel", &[], "fs_ciel", None, true);
         let pipeline_herbe = scene("herbe", "vs_herbe", &tampons_scene, "fs_herbe", None, false);
