@@ -72,7 +72,7 @@ pub(super) fn capuchon(contour: &[[f64; 2]]) -> Option<(Vec<[f64; 2]>, Vec<[usiz
     let coins: Vec<usize> = (0..n).filter(|&i| croix(i)).collect();
     if coins.len() < 3 { return None; }
     let coords: Vec<f64> = coins.iter().flat_map(|&i| contour[i]).collect();
-    let indices = earcutr::earcut(&coords, &[], 2).ok()?;
+    let indices = noyau::geometrie::earcut(&coords, &[], 2)?;
     let suivant = |k: usize| coins[(coins.iter().position(|&c| c == k).unwrap() + 1) % coins.len()];
     let mut ajoutes = Vec::new();
     let mut tris = Vec::new();

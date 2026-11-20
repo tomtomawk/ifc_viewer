@@ -332,7 +332,7 @@ fn domaines_concaves(contours:&[Vec<[f64;2]>],plans:&[Plan])->Result<Option<Vec<
         // Trianguler les domaines éventuellement concaves ; les consommateurs reçoivent
         // toujours des morceaux convexes, comme pour le calcul par enveloppe de plans.
         let coords:Vec<_>=poly.iter().flat_map(|p|[p.x-origine.x,p.y-origine.y]).collect();
-        let indices=earcutr::earcut(&coords,&[],2).map_err(|e|e.to_string())?;
+        let indices=noyau::geometrie::earcut(&coords,&[],2).ok_or("Triangulation impossible.")?;
         for t in indices.chunks_exact(3) {
             let mut tri=vec![poly[t[0]],poly[t[1]],poly[t[2]]];
             if aire(&tri)<0.0 {tri.swap(1,2);}faces.push((*q,tri));

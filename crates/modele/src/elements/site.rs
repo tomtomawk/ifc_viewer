@@ -67,7 +67,7 @@ impl Terrain {
         let valide = crate::creation::contour_valide(&contour)?;
         if valide.len() != contour.len() { return Err("Le contour du terrain comporte des points répétés.".into()); }
         let coords: Vec<f64> = contour.iter().flatten().copied().collect();
-        let indices = earcutr::earcut(&coords, &[], 2).map_err(|_| "Triangulation du terrain impossible.")?;
+        let indices = noyau::geometrie::earcut(&coords, &[], 2).ok_or("Triangulation du terrain impossible.")?;
         if indices.is_empty() || indices.len() % 3 != 0 { return Err("Triangulation du terrain impossible.".into()); }
         let mut sommets: Vec<DVec3> = self.contour.iter().copied().map(DVec3::from_array).collect();
         let mut faces: Vec<[usize; 3]> = indices.chunks_exact(3).map(|t| [t[0], t[1], t[2]]).collect();

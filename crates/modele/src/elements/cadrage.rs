@@ -41,7 +41,7 @@ pub fn decouper(primitives: Vec<Primitive>, contour: &[[f64; 2]]) -> Result<Vec<
     if contour.is_empty() { return Ok(primitives); }
     let contour = crate::creation::contour_valide(contour)?;
     let coords: Vec<f64> = contour.iter().flat_map(|p| [p[0] * 0.001, p[1] * 0.001]).collect();
-    let indices = earcutr::earcut(&coords, &[], 2).map_err(|_| "Triangulation du cadrage impossible.")?;
+    let indices = noyau::geometrie::earcut(&coords, &[], 2).ok_or("Triangulation du cadrage impossible.")?;
     if indices.is_empty() || indices.len() % 3 != 0 { return Err("Triangulation du cadrage impossible.".into()); }
     let triangles: Vec<[DVec2; 3]> = indices.chunks_exact(3).map(|t| {
         let mut p = t.iter().map(|&i| DVec2::new(coords[2*i], coords[2*i+1])).collect::<Vec<_>>();

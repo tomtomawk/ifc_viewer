@@ -18,6 +18,22 @@ fn dedans(p: [f64; 2], c: &[[f64; 2]]) -> bool {
     d
 }
 
+/// Triangulation `earcutr` protégée : coordonnées finies, contour extérieur et trous
+/// d'au moins 3 sommets, débuts de trous croissants ; sinon, ou si `earcutr` panique
+/// (contour dégénéré), `None`. Mêmes arguments et indices que `earcutr::earcut`.
+pub fn earcut(coords: &[f64], trous: &[usize], dim: usize) -> Option<Vec<usize>> {
+    let n = coords.len() / dim.max(1);
+    if dim < 2 || !coords.len().is_multiple_of(dim) || !coords.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    let mut debut = 0;
+    for &t in trous.iter().chain(std::iter::once(&n)) {
+        if t < debut + 3 || t > n { return None; }
+        debut = t;
+    }
+    std::panic::catch_unwind(|| earcutr::earcut(coords, trous, dim)).ok()?.ok()
+}
+
 /// Triangule des contours plans par parité ; les îlots et trous sont permis.
 /// `aire_min` est exprimée dans les unités du plan au carré. Les contours
 /// dégénérés ou non finis sont ignorés. Les contours ne doivent pas se croiser.
@@ -36,7 +52,7 @@ pub fn trianguler_contours(mut contours: Vec<Vec<[f64; 2]>>, aire_min: f64) -> V
             if k > 0 { indices_trous.push(coords.len() / 2); }
             coords.extend(contours[c].iter().flatten().copied());
         }
-        if let Ok(idx) = earcutr::earcut(&coords, &indices_trous, 2) {
+        if let Some(idx) = earcut(&coords, &indices_trous, 2) {
             let pt = |k: usize| [coords[2*k], coords[2*k+1]];
             out.extend(idx.chunks_exact(3).map(|t| [pt(t[0]), pt(t[1]), pt(t[2])]));
         }

@@ -86,10 +86,17 @@ impl Topologie {
 
 /// Tolérance de fusion des sommets, mm.
 const TOL: f64 = 0.5;
+/// Nombre de segments de contour d'une zone au-delà duquel sa surface n'est pas calculée.
+const SEGMENTS_ZONE_MAX: usize = 5_000;
 
 /// Surface (mm²) et périmètre (mm) de la face contenant `p`, None si `p` n'est dans
 /// aucune face fermée.
 pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
+    // segments lus dans le fichier : finis et en nombre borné (intersections de toutes
+    // les paires : coût quadratique)
+    if segments.len() > SEGMENTS_ZONE_MAX || !segments.iter().all(|(a, b)| a.is_finite() && b.is_finite()) {
+        return None;
+    }
     // découpe des segments à leurs intersections et contacts
     let mut coupes: Vec<Vec<f64>> = vec![vec![0.0, 1.0]; segments.len()];
     for i in 0..segments.len() {
@@ -124,7 +131,7 @@ pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
         let cle = ((q.x / TOL).round() as i64, (q.y / TOL).round() as i64);
         for dx in -1..=1 {
             for dy in -1..=1 {
-                if let Some(&k) = index.get(&(cle.0 + dx, cle.1 + dy))
+                if let Some(&k) = index.get(&(cle.0.saturating_add(dx), cle.1.saturating_add(dy)))
                     && sommets[k].distance(q) < TOL {
                         return k;
                     }
@@ -224,6 +231,22 @@ pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// T1 : segments non finis ou trop nombreux (fichier malformé) : pas de surface.
+    #[test]
+    fn segments_malformes() {
+        let v = |x: f64, y: f64| DVec2::new(x, y);
+        let carre = [(v(0., 0.), v(10., 0.)), (v(10., 0.), v(10., 10.)), (v(10., 10.), v(0., 10.)), (v(0., 10.), v(0., 0.))];
+        assert!(surface(&carre, v(5., 5.)).is_some());
+        let mut nan = carre.to_vec();
+        nan.push((v(f64::NAN, 0.), v(1e300, 5.)));
+        assert!(surface(&nan, v(5., 5.)).is_none());
+        let trop = vec![(v(0., 0.), v(1., 1.)); SEGMENTS_ZONE_MAX + 1];
+        assert!(surface(&trop, v(5., 5.)).is_none());
+        // coordonnées démesurées mais finies : pas de dépassement d'entier
+        let loin = [(v(1e300, 0.), v(-1e300, 0.)), (v(0., 1e300), v(0., -1e300))];
+        let _ = surface(&loin, v(0., 0.));
+    }
 
     #[test]
     fn carre_coupe_et_ilot() {

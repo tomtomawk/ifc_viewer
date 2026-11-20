@@ -68,8 +68,20 @@ fn corps<'r, 's>(r: &'r Record<'s>, v: &'r Val<'s>) -> Option<&'r Obj<'s>> {
     r.deref(v).map(|b| &b.obj).or(v.obj())
 }
 
-/// Arbre d'une expression.
+/// Profondeur maximale d'une expression lue dans le fichier (comme les objets imbriqués,
+/// `champs`).
+const PROFONDEUR_MAX: usize = 64;
+
+/// Arbre d'une expression ; None au-delà de `PROFONDEUR_MAX` niveaux.
 pub fn lire(r: &Record, o: &Obj) -> Option<Expr> {
+    lire_borne(r, o, 0)
+}
+
+fn lire_borne(r: &Record, o: &Obj, profondeur: usize) -> Option<Expr> {
+    if profondeur > PROFONDEUR_MAX {
+        return None;
+    }
+    let lire = |r: &Record, x: &Obj| lire_borne(r, x, profondeur + 1);
     let sous = |k: &str| o.get(k).and_then(|v| corps(r, v)).and_then(|x| lire(r, x)).map(Box::new);
     let int = |k: &str| o.get(k).and_then(Val::int).unwrap_or(-1);
     Some(match o.class_name() {

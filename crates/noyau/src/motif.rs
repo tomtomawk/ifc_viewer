@@ -66,7 +66,7 @@ pub fn hachures_plan(tris: &[[[f64; 2]; 3]], m: &Motif, f: f64, max: usize) -> V
         let s: Vec<f64> = tris.iter().flatten().map(|q| (q[0] - o[0]) * nr[0] + (q[1] - o[1]) * nr[1]).collect();
         let (smin, smax) = s.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
         let (k0, k1) = ((smin / dec).floor() as i64, (smax / dec).ceil() as i64);
-        if k1 < k0 || (k1 - k0) as usize > max {
+        if k1.checked_sub(k0).and_then(|d| usize::try_from(d).ok()).is_none_or(|d| d > max) {
             continue;
         }
         let tirets: Vec<f64> = g.tirets.iter().map(|x| x * f).collect();
@@ -88,7 +88,9 @@ pub fn hachures_plan(tris: &[[[f64; 2]; 3]], m: &Motif, f: f64, max: usize) -> V
                 if periode > 1e-6 {
                     // tirets : phase 0 au point p de la ligne
                     let mut m0 = (a / periode).floor() * periode;
-                    while m0 < b && morceaux.len() < max {
+                    // m0 + periode == m0 : période sous la précision des réels à cette
+                    // distance (coordonnées démesurées), la boucle n'avancerait plus
+                    while m0 < b && morceaux.len() < max && m0 + periode > m0 {
                         let mut x = m0;
                         for (i, l) in tirets.iter().enumerate() {
                             if i % 2 == 0 && x + l > a && x < b {
@@ -112,4 +114,21 @@ pub fn hachures_plan(tris: &[[[f64; 2]; 3]], m: &Motif, f: f64, max: usize) -> V
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// T1 : géométrie ou motif démesurés (fichier malformé) : ni dépassement d'entier, ni
+    /// boucle sans fin ; au plus `max` morceaux.
+    #[test]
+    fn hachures_demesurees_bornees() {
+        let grille = |decalage: f64, tirets: Vec<f64>| GrilleMotif { angle: 0.3, origine: [0.0, 0.0], glissement: 0.0, decalage, tirets };
+        let m = Motif { nom: "x".into(), modele: true, grilles: vec![grille(1e-300, vec![0.0, 1.0]), grille(1.0, vec![0.0, 1e-300]), grille(1.0, vec![0.0, 1.0])] };
+        let loin = [[[-1e300, -1e300], [1e300, -1e300], [0.0, 1e300]]];
+        assert!(hachures_plan(&loin, &m, 1.0, 1000).len() <= 3000);
+        let pres = [[[1e17, 0.0], [1e17 + 10.0, 0.0], [1e17, 10.0]]];
+        assert!(hachures_plan(&pres, &m, 1.0, 1000).len() <= 3000);
+    }
 }

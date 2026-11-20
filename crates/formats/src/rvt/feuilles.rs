@@ -256,9 +256,16 @@ pub fn masques_par_categorie(m: &Maquette, v: &Vue) -> Vec<i64> {
     if v.categories_masquees.is_empty() {
         return Vec::new();
     }
-    let ids = m.murs.iter().map(|x| x.id).chain(m.dalles.iter().map(|x| x.id)).chain(m.toits.iter().map(|x| x.id)).chain(m.escaliers.iter().map(|x| x.id));
-    let ids = ids.chain(m.garde_corps.iter().map(|x| x.id)).chain(m.instances.iter().map(|x| x.id)).chain(m.pieces.iter().map(|x| x.id));
-    ids.filter(|&id| categorie(m, id).is_some_and(|c| v.categories_masquees.contains(&c))).collect()
+    // catégorie de chaque collection connue d'avance (un appel à `categorie` par élément
+    // parcourait toutes les collections : coût quadratique sur un gros modèle)
+    let masquee = |c: i64| v.categories_masquees.contains(&c);
+    let mut out: Vec<i64> = m.instances.iter().filter(|i| m.types.get(&i.type_id).and_then(|t| m.familles.get(&t.famille)).is_some_and(|f| masquee(f.categorie))).map(|i| i.id).collect();
+    if masquee(-2_000_011) { out.extend(m.murs.iter().map(|x| x.id)); }
+    out.extend(m.dalles.iter().filter(|d| masquee(if d.classe == "Ceiling" { -2_000_038 } else { -2_000_032 })).map(|x| x.id));
+    for (c, ids) in [(-2_000_035, m.toits.iter().map(|x| x.id).collect::<Vec<_>>()), (-2_000_120, m.escaliers.iter().map(|x| x.id).collect()), (-2_000_126, m.garde_corps.iter().map(|x| x.id).collect()), (-2_000_160, m.pieces.iter().map(|x| x.id).collect())] {
+        if masquee(c) { out.extend(ids); }
+    }
+    out
 }
 
 /// Élément visible dans la vue `v` comme dans Revit : pas masqué dans la vue ; une cote

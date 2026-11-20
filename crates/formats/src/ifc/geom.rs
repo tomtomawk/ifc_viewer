@@ -1092,7 +1092,7 @@ fn triangulate_2d_idx(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Vec<[usize; 3]> 
         hole_idx.push(k);
         k += h.len();
     }
-    let Ok(idx) = earcutr::earcut(&flat, &hole_idx, 2) else { return vec![] };
+    let Some(idx) = noyau::geometrie::earcut(&flat, &hole_idx, 2) else { return vec![] };
     idx.chunks_exact(3).map(|c| orient([c[0], c[1], c[2]])).collect()
 }
 

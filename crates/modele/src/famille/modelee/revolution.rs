@@ -105,7 +105,7 @@ impl Revolution {
         }
         if !ferme {
             let coords: Vec<_> = contour.iter().flatten().copied().collect();
-            let Ok(indices) = earcutr::earcut(&coords, &[], 2) else { return Vec::new(); };
+            let Some(indices) = noyau::geometrie::earcut(&coords, &[], 2) else { return Vec::new(); };
             for t in indices.chunks_exact(3) {
                 let mut ids = [t[0],t[1],t[2]];
                 let a = DVec2::from_array(contour[ids[0]]);

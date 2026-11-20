@@ -14,3 +14,6 @@ scene = { path = "../scene" }
 formats = { path = "../formats" }
 glam.workspace = true
 rayon.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

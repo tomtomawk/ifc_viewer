@@ -163,7 +163,7 @@ fn trianguler(exterieur: &[[f64; 2]], trous: &[&Vec<[f64; 2]>]) -> Vec<[DVec2; 3
         debuts.push(coords.len() / 2);
         coords.extend(t.iter().flatten());
     }
-    let Ok(indices) = earcutr::earcut(&coords, &debuts, 2) else { return Vec::new() };
+    let Some(indices) = noyau::geometrie::earcut(&coords, &debuts, 2) else { return Vec::new() };
     let p = |i: usize| DVec2::new(coords[2 * i], coords[2 * i + 1]);
     indices
         .chunks_exact(3)

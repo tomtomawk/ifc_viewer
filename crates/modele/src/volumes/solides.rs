@@ -61,7 +61,7 @@ pub fn prisme(contour: &[[f64; 2]], bas: f64, haut: f64) -> Vec<Tri> {
     }
     let mut out = Vec::new();
     let coords: Vec<f64> = contour.iter().flatten().copied().collect();
-    let Ok(indices) = earcutr::earcut(&coords, &[], 2) else {
+    let Some(indices) = noyau::geometrie::earcut(&coords, &[], 2) else {
         return out;
     };
     let p = |i: usize, z: f64| DVec3::new(contour[i][0], contour[i][1], z);

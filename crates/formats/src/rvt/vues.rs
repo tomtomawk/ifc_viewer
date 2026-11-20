@@ -358,7 +358,9 @@ fn polyligne(c: &Obj) -> Option<Vec<DVec3>> {
         "GArc" => {
             let (ce, x, y) = (vec3(c.get("m_center"))?, vec3(c.get("m_xVec"))?, vec3(c.get("m_yVec"))?);
             let r = c.get("m_radius")?.real()?;
-            let n = (((t1 - t0).abs() / 5f64.to_radians()).ceil() as usize).max(2);
+            // paramètres lus dans le fichier : dix tours au plus (comme `geometrie::polyligne`)
+            if !(t0.is_finite() && t1.is_finite()) { return None; }
+            let n = (((t1 - t0).abs() / 5f64.to_radians()).ceil() as usize).clamp(2, 720);
             Some((0..=n).map(|k| t0 + (t1 - t0) * k as f64 / n as f64).map(|t| (ce + r * (t.cos() * x + t.sin() * y)) * FT).collect())
         }
         _ => None,

@@ -171,7 +171,7 @@ pub fn definition(r: &Record) -> Option<Definition> {
         .unwrap_or_default()
         .iter()
         .filter_map(|v| corps(r, v))
-        .map(|f| Filtre { champ: id_champ(f.get("m_fieldId")), genre: int(f, "m_filterType") - 2, valeur: valeur_filtre(f.get("m_value").and_then(Val::obj)) })
+        .map(|f| Filtre { champ: id_champ(f.get("m_fieldId")), genre: int(f, "m_filterType").saturating_sub(2), valeur: valeur_filtre(f.get("m_value").and_then(Val::obj)) })
         .collect();
     let tris = s
         .get("m_sortFieldArr")
@@ -179,6 +179,9 @@ pub fn definition(r: &Record) -> Option<Definition> {
         .unwrap_or_default()
         .iter()
         .filter_map(|v| corps(r, v))
+        // niveaux de tri lus dans le fichier : bornés (chaque niveau est une récursion de
+        // `composer`)
+        .take(TRIS_MAX)
         .map(|t| {
             let d = int(t, "m_groupingFlags");
             Tri { champ: id_champ(t.get("m_fieldId")), decroissant: int(t, "m_sortOrder") != 0, entete: d & 2 != 0, pied: d & 4 != 0, ligne_vide: d & 16 != 0, titre_pied: d & 32 != 0, nombre_pied: d & 64 != 0 }
@@ -232,7 +235,7 @@ type Totaux = HashMap<i64, HashMap<String, f64>>;
 
 /// Groupe d'un élément pour un total de pourcentage.
 fn groupe_pourcentage(m: &Maquette, element: i64, d: &Definition, par: i64) -> String {
-    match d.champs.iter().find(|c| c.id == par).and_then(|c| valeur(m, element, d, c, &Totaux::new(), 1)) {
+    match d.champs.iter().find(|c| c.id == par).and_then(|c| valeur(m, element, d, c, &Totaux::new(), &[])) {
         Some(Valeur::Texte(s)) => s,
         Some(Valeur::Nombre(x)) => x.to_string(),
         None => String::new(),
@@ -242,15 +245,22 @@ fn groupe_pourcentage(m: &Maquette, element: i64, d: &Definition, par: i64) -> S
 /// Valeur d'un champ pour un élément ; un champ calculé évalue sa formule, dont les
 /// variables sont d'autres champs de la nomenclature ou des paramètres ; un pourcentage
 /// est la part de l'élément dans le total de son groupe.
-fn valeur(m: &Maquette, element: i64, d: &Definition, c: &Champ, totaux: &Totaux, profondeur: usize) -> Option<Valeur> {
-    if profondeur > 16 {
+/// `pile` : champs en cours d'évaluation ; un champ qui s'y trouve déjà (formule
+/// circulaire lue dans le fichier) ou une pile de plus de 16 champs donne None.
+/// Niveaux de tri et de regroupement retenus d'une nomenclature (Revit en propose
+/// quelques-uns).
+const TRIS_MAX: usize = 8;
+
+fn valeur(m: &Maquette, element: i64, d: &Definition, c: &Champ, totaux: &Totaux, pile: &[i64]) -> Option<Valeur> {
+    if pile.len() > 16 || pile.contains(&c.id) {
         return None;
     }
+    let pile: Vec<i64> = pile.iter().copied().chain([c.id]).collect();
     let champ = |id: i64| d.champs.iter().find(|c| c.id == id);
     match c.genre {
         GenreChamp::Formule => {
             let var = |x: &Expr| match x {
-                Expr::Champ(k) => champ(*k).and_then(|c| valeur(m, element, d, c, totaux, profondeur + 1)),
+                Expr::Champ(k) => champ(*k).and_then(|c| valeur(m, element, d, c, totaux, &pile)),
                 Expr::Param(p) => parametre(m, element, *p),
                 _ => None,
             };
@@ -258,7 +268,7 @@ fn valeur(m: &Maquette, element: i64, d: &Definition, c: &Champ, totaux: &Totaux
         }
         GenreChamp::Pourcentage => {
             let (de, par) = c.pourcentage?;
-            let x = valeur(m, element, d, champ(de)?, totaux, profondeur + 1)?.nombre()?;
+            let x = valeur(m, element, d, champ(de)?, totaux, &pile)?.nombre()?;
             let t = *totaux.get(&c.id)?.get(&groupe_pourcentage(m, element, d, par))?;
             (t != 0.0).then(|| Valeur::Nombre(x / t))
         }
@@ -345,42 +355,29 @@ fn passe(m: &Maquette, element: i64, d: &Definition, f: &Filtre) -> bool {
     }
 }
 
-/// Comparaison « naturelle » : nombres par valeur, textes sans casse, chiffres
-/// compris (« R+2 » avant « R+10 »).
-fn naturel(a: &str, b: &str) -> Ordering {
-    if let (Ok(x), Ok(y)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) {
-        return x.partial_cmp(&y).unwrap_or(Ordering::Equal);
-    }
-    let (mut i, mut j) = (a.chars().peekable(), b.chars().peekable());
-    loop {
-        match (i.peek().copied(), j.peek().copied()) {
-            (None, None) => return Ordering::Equal,
-            (None, _) => return Ordering::Less,
-            (_, None) => return Ordering::Greater,
-            (Some(x), Some(y)) if x.is_ascii_digit() && y.is_ascii_digit() => {
-                let lire = |it: &mut std::iter::Peekable<std::str::Chars>| {
-                    let mut s = String::new();
-                    while let Some(c) = it.peek().copied().filter(char::is_ascii_digit) {
-                        s.push(c);
-                        it.next();
-                    }
-                    s.parse::<u64>().unwrap_or(0)
-                };
-                let (n, o) = (lire(&mut i), lire(&mut j));
-                if n != o {
-                    return n.cmp(&o);
-                }
-            }
-            (Some(x), Some(y)) => {
-                let o = x.to_lowercase().cmp(y.to_lowercase());
-                if o != Ordering::Equal {
-                    return o;
-                }
-                i.next();
-                j.next();
-            }
+/// Morceau d'une clé de tri naturelle : suite de chiffres (comparée par valeur : longueur
+/// sans zéros de tête, puis chiffres) ou caractère sans casse. L'ordre des clés est total.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Morceau {
+    Nombre(usize, String),
+    Caractere(char),
+}
+
+/// Clé de tri naturelle d'un texte (« R+2 » avant « R+10 »).
+fn morceaux(t: &str) -> Vec<Morceau> {
+    let mut out = Vec::new();
+    let mut it = t.chars().peekable();
+    while let Some(c) = it.next() {
+        if c.is_ascii_digit() {
+            let mut n = String::from(c);
+            while let Some(d) = it.peek().copied().filter(char::is_ascii_digit) { n.push(d); it.next(); }
+            let n = n.trim_start_matches('0').to_string();
+            out.push(Morceau::Nombre(n.len(), n));
+        } else {
+            out.extend(c.to_lowercase().map(Morceau::Caractere));
         }
     }
+    out
 }
 
 /// Lignes d'un niveau de regroupement : groupes consécutifs de même valeur du champ de
@@ -454,7 +451,7 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
         let Some(cd) = d.champs.iter().find(|x| x.id == de) else { continue };
         let mut t: HashMap<String, f64> = HashMap::new();
         for &e in &els {
-            if let Some(x) = valeur(m, e, d, cd, &Totaux::new(), 1).and_then(|v| v.nombre()) {
+            if let Some(x) = valeur(m, e, d, cd, &Totaux::new(), &[]).and_then(|v| v.nombre()) {
                 *t.entry(groupe_pourcentage(m, e, d, par)).or_default() += x;
             }
         }
@@ -464,7 +461,7 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
     let cellule = |e: i64, c: &Champ| -> (String, Option<f64>) {
         match c.genre {
             GenreChamp::Nombre => ("1".into(), Some(1.0)),
-            GenreChamp::Formule | GenreChamp::Pourcentage => match valeur(m, e, d, c, &totaux, 0) {
+            GenreChamp::Formule | GenreChamp::Pourcentage => match valeur(m, e, d, c, &totaux, &[]) {
                 Some(v) => (texte_formule(m, c, &v), v.nombre().filter(|_| !c.spec.contains("spec.bool"))),
                 None => (String::new(), None),
             },
@@ -486,12 +483,17 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
         };
         (texte, altitude.or(n))
     };
+    // ordre total (sinon `sort_by` peut paniquer) : nombres d'abord, entre eux par
+    // `total_cmp`, puis textes par ordre naturel ; clés calculées une fois par élément
+    let cles: std::collections::HashMap<i64, Vec<(Vec<Morceau>, Option<f64>)>> = els.iter().map(|&e| (e, d.tris.iter().map(|t| { let (texte, n) = cle_tri(e, t); (morceaux(&texte), n.or_else(|| texte.trim().parse::<f64>().ok())) }).collect())).collect();
     els.sort_by(|&a, &b| {
-        for t in &d.tris {
-            let (x, y) = (cle_tri(a, t), cle_tri(b, t));
+        for (k, t) in d.tris.iter().enumerate() {
+            let (x, y) = (&cles[&a][k], &cles[&b][k]);
             let o = match (x.1, y.1) {
-                (Some(u), Some(v)) => u.partial_cmp(&v).unwrap_or(Ordering::Equal),
-                _ => naturel(&x.0, &y.0),
+                (Some(u), Some(v)) => u.total_cmp(&v),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => x.0.cmp(&y.0),
             };
             let o = if t.decroissant { o.reverse() } else { o };
             if o != Ordering::Equal {
@@ -581,4 +583,21 @@ pub fn texte_tris(d: &Definition) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ; ")
+}
+
+#[cfg(test)]
+mod tests_tri {
+    use super::*;
+
+    /// T1 : clé de tri naturelle, ordre total (« R+2 » avant « R+10 », casse ignorée,
+    /// zéros de tête sans effet).
+    #[test]
+    fn cle_naturelle() {
+        assert!(morceaux("R+2") < morceaux("R+10"));
+        assert!(morceaux("a") == morceaux("A"));
+        assert!(morceaux("007") == morceaux("7"));
+        let mut v = vec!["b10", "B2", "a", "10", "9", ""];
+        v.sort_by_key(|t| morceaux(t));
+        assert_eq!(v, ["", "9", "10", "a", "B2", "b10"]);
+    }
 }

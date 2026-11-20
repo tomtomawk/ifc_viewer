@@ -232,7 +232,15 @@ impl<'s> Lecteur<'s, '_> {
 
     fn value(&mut self, t: &Type, depth: u32) -> Result<Val<'s>, String> {
         let n = match t.sub & 0xF0 {
-            0x10 => t.count as usize,
+            // compte du schéma : borné comme un conteneur (au plus un élément par octet
+            // restant), sinon un compte démesuré d'éléments sans octet alloue sans fin
+            0x10 => {
+                let n = t.count as usize;
+                if n > self.b.len() - self.o {
+                    return Err(format!("tableau de {n} éléments à {}", self.o));
+                }
+                n
+            }
             0x50 => {
                 let n = self.u32()? as usize;
                 if n > self.b.len() - self.o {

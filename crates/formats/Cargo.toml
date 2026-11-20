@@ -10,7 +10,6 @@ path = "src/lib.rs"
 noyau = { path = "../noyau" }
 ifc_base = { path = "../ifc_base" }
 scene = { path = "../scene" }
-earcutr.workspace = true
 glam.workspace = true
 miniz_oxide.workspace = true
 png.workspace = true

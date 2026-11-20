@@ -14,7 +14,6 @@ scene = { path = "../scene" }
 eframe.workspace = true
 glam.workspace = true
 image.workspace = true
-earcutr.workspace = true
 
 [dev-dependencies]
 maillage = { path = "../maillage" }

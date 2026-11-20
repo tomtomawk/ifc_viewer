@@ -444,3 +444,65 @@ pub fn etat_de_phase(ordre: &[i64], cree: i64, demoli: i64, phase: i64) -> usize
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Deux dalles carrées de 10 m, à z = 0 et z = 3 (objets 0 et 1, deux triangles
+    /// chacune, normales vers le haut).
+    fn scene() -> Scene {
+        let model = IfcModel::new(ifc_base::step::StepFile::parse(b"ISO-10303-21;\nDATA;\n#1=IFCPROJECT('0',$,'P',$,$,$,$,$,$);\nENDSEC;\nEND-ISO-10303-21;\n").unwrap());
+        let mut vertices = Vec::new();
+        let mut objects = Vec::new();
+        for (k, z) in [0.0f32, 3.0].into_iter().enumerate() {
+            let p = |x: f32, y: f32| Vertex { pos: [x, y, z], normal: [0, 0, 127, 0], color: [200; 4], obj: k as u32 };
+            let debut = vertices.len() as u32;
+            vertices.extend([p(0., 0.), p(10., 0.), p(10., 10.), p(0., 0.), p(10., 10.), p(0., 10.)]);
+            let vide = Range { start: 0, count: 0 };
+            objects.push(SceneObject { id: k as Id + 1, class: "IFCSLAB".into(), storey: None, opaque: Range { start: debut, count: 6 }, transparent: vide, lines: vide, aretes: vide, min: Vec3::new(0., 0., z), max: Vec3::new(10., 10., z) });
+        }
+        Scene {
+            model, vertices, couleurs_rendu: Vec::new(), motifs_surface: Vec::new(), visibilite: Vec::new(), table_motifs: Vec::new(), apparences: Vec::new(),
+            objects, object_of: IdMap::default(), origin: DVec3::ZERO, min: Vec3::ZERO, max: Vec3::new(10., 10., 3.), triangles: 4, unsupported: Vec::new(),
+            load_ms: 0, file_name: String::new(), navigateur: None, partage: None, couches_coupe: IdMap::default(),
+        }
+    }
+
+    /// T1 : sélection au rayon : dalle haute d'abord ; une coupe horizontale qui la
+    /// retire laisse la dalle basse ; un objet masqué n'est pas pris ; tous les objets
+    /// traversés, du plus proche au plus lointain.
+    #[test]
+    fn selection_au_rayon() {
+        let s = scene();
+        let (o, d) = (Vec3::new(5., 5., 10.), Vec3::NEG_Z);
+        assert_eq!(s.pick(o, d, &[true, true], None, None).map(|x| x.0), Some(1));
+        // plan de coupe z <= 2 gardé (n · x + w >= 0 avec n = -Z, w = 2)
+        assert_eq!(s.pick(o, d, &[true, true], Some(Vec4::new(0., 0., -1., 2.)), None).map(|x| x.0), Some(0));
+        assert_eq!(s.pick(o, d, &[true, false], None, None).map(|x| x.0), Some(0));
+        assert_eq!(s.pick_tous(o, d, &[true, true], None, None).iter().map(|x| x.0).collect::<Vec<_>>(), [1, 0]);
+        assert!(s.pick(Vec3::new(20., 5., 10.), d, &[true, true], None, None).is_none());
+    }
+
+    /// Sol sous un point (vue piéton) : le dessus le plus haut sous `z_max`.
+    #[test]
+    fn sol_sous_le_pieton() {
+        let s = scene();
+        assert_eq!(s.sol_sous(5., 5., 2.), Some(0.0));
+        assert_eq!(s.sol_sous(5., 5., 4.), Some(3.0));
+        assert_eq!(s.sol_sous(50., 5., 4.), None);
+    }
+
+    /// État de phase (`GetPhaseStatus`) d'après l'ordre des phases.
+    #[test]
+    fn etats_de_phase() {
+        let ordre = [10, 20, 30];
+        assert_eq!(etat_de_phase(&ordre, 10, -1, 20), 2); // existant
+        assert_eq!(etat_de_phase(&ordre, 10, 20, 20), 3); // démoli dans la phase
+        assert_eq!(etat_de_phase(&ordre, 20, -1, 20), 4); // nouveau
+        assert_eq!(etat_de_phase(&ordre, 20, 20, 20), 5); // temporaire
+        assert_eq!(etat_de_phase(&ordre, 30, -1, 20), 6); // futur
+        assert_eq!(etat_de_phase(&ordre, 10, 20, 30), 1); // passé (démoli avant)
+        assert_eq!(etat_de_phase(&ordre, 99, -1, 20), 0); // phase inconnue
+    }
+}

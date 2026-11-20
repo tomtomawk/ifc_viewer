@@ -53,7 +53,7 @@ pub fn objets(
     }
     let triangles: Vec<[glam::Vec2; 3]> = if contour.len() >= 3 {
         let coords: Vec<f64> = contour.iter().flat_map(|p| [p.x as f64, p.y as f64]).collect();
-        earcutr::earcut(&coords, &[], 2).unwrap_or_default().chunks_exact(3).map(|t| {
+        noyau::geometrie::earcut(&coords, &[], 2).unwrap_or_default().chunks_exact(3).map(|t| {
             let mut p = [contour[t[0]], contour[t[1]], contour[t[2]]];
             if (p[1]-p[0]).perp_dot(p[2]-p[0]) < 0.0 { p.swap(1, 2); }
             p

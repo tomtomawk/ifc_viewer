@@ -1049,7 +1049,6 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 name = "formats"
 version = "0.1.0"
 dependencies = [
- "earcutr",
  "glam",
  "ifc_base",
  "miniz_oxide 0.8.9",
@@ -1685,6 +1684,7 @@ dependencies = [
  "noyau",
  "rayon",
  "scene",
+ "serde_json",
 ]
 
 [[package]]
@@ -1732,7 +1732,6 @@ dependencies = [
 name = "modele"
 version = "0.1.0"
 dependencies = [
- "earcutr",
  "geo-straight-skeleton",
  "glam",
  "noyau",
@@ -1762,7 +1761,6 @@ dependencies = [
 name = "moteur3d"
 version = "0.1.0"
 dependencies = [
- "earcutr",
  "eframe",
  "glam",
  "image",
