@@ -38,6 +38,7 @@
   "types_dalles": [
     {
       "id": "dalle200",
+      "sorte": "dalle",
       "nom": "Dalle béton 200",
       "couches": [
         {
@@ -51,6 +52,7 @@
     },
     {
       "id": "toit200",
+      "sorte": "toiture",
       "nom": "Toiture 200",
       "couches": [
         {

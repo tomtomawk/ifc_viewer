@@ -126,6 +126,7 @@
  "types_dalles": [
   {
    "id": "dalle250",
+   "sorte": "dalle",
    "nom": "Dalle béton 250",
    "couches": [
     {
@@ -139,6 +140,7 @@
   },
   {
    "id": "dalle300",
+   "sorte": "dalle",
    "nom": "Dalle béton 300",
    "couches": [
     {
@@ -152,6 +154,7 @@
   },
   {
    "id": "ardoise200",
+   "sorte": "toiture",
    "nom": "Toiture ardoise 200",
    "couches": [
     {
@@ -165,6 +168,7 @@
   },
   {
    "id": "enrobe120",
+   "sorte": "sol",
    "nom": "Enrobé 120",
    "couches": [
     {
@@ -178,6 +182,7 @@
   },
   {
    "id": "paves120",
+   "sorte": "sol",
    "nom": "Pavés 120",
    "couches": [
     {
@@ -774,9 +779,9 @@
   {
    "id": "type-vegetal-ilot-1",
    "nom": "Charme fastigié 12 m",
-   "largeur": 2800.0,
-   "profondeur": 2800.0,
-   "hauteur": 12000.0,
+   "largeur": 2800,
+   "profondeur": 2800,
+   "hauteur": 12000,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -1276,9 +1281,9 @@
   {
    "id": "type-vegetal-ilot-2",
    "nom": "Pin 12,299 m",
-   "largeur": 4500.0,
-   "profondeur": 4500.0,
-   "hauteur": 12299.0,
+   "largeur": 4500,
+   "profondeur": 4500,
+   "hauteur": 12299,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -1738,9 +1743,9 @@
   {
    "id": "type-vegetal-ilot-3",
    "nom": "Pin 12,55 m",
-   "largeur": 4500.0,
-   "profondeur": 4500.0,
-   "hauteur": 12550.0,
+   "largeur": 4500,
+   "profondeur": 4500,
+   "hauteur": 12550,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -2200,9 +2205,9 @@
   {
    "id": "type-vegetal-ilot-4",
    "nom": "Pin 12,945 m",
-   "largeur": 4500.0,
-   "profondeur": 4500.0,
-   "hauteur": 12945.0,
+   "largeur": 4500,
+   "profondeur": 4500,
+   "hauteur": 12945,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -2662,9 +2667,9 @@
   {
    "id": "type-vegetal-ilot-5",
    "nom": "Pin 13,203 m",
-   "largeur": 4500.0,
-   "profondeur": 4500.0,
-   "hauteur": 13203.0,
+   "largeur": 4500,
+   "profondeur": 4500,
+   "hauteur": 13203,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -3124,9 +3129,9 @@
   {
    "id": "type-vegetal-ilot-6",
    "nom": "Pin 13,213 m",
-   "largeur": 4500.0,
-   "profondeur": 4500.0,
-   "hauteur": 13213.0,
+   "largeur": 4500,
+   "profondeur": 4500,
+   "hauteur": 13213,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -3586,9 +3591,9 @@
   {
    "id": "type-vegetal-ilot-7",
    "nom": "Pin 13,403 m",
-   "largeur": 4500.0,
-   "profondeur": 4500.0,
-   "hauteur": 13403.0,
+   "largeur": 4500,
+   "profondeur": 4500,
+   "hauteur": 13403,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -4048,9 +4053,9 @@
   {
    "id": "type-vegetal-ilot-8",
    "nom": "Pommier 6 m",
-   "largeur": 4500.0,
-   "profondeur": 4500.0,
-   "hauteur": 6000.0,
+   "largeur": 4500,
+   "profondeur": 4500,
+   "hauteur": 6000,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -4550,9 +4555,9 @@
   {
    "id": "type-vegetal-ilot-9",
    "nom": "Tilleul 8 m",
-   "largeur": 5500.0,
-   "profondeur": 5500.0,
-   "hauteur": 8000.0,
+   "largeur": 5500,
+   "profondeur": 5500,
+   "hauteur": 8000,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -5052,9 +5057,9 @@
   {
    "id": "type-vegetal-ilot-10",
    "nom": "Tilleul 8,8 m",
-   "largeur": 5500.0,
-   "profondeur": 5500.0,
-   "hauteur": 8800.0,
+   "largeur": 5500,
+   "profondeur": 5500,
+   "hauteur": 8800,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -5554,9 +5559,9 @@
   {
    "id": "type-vegetal-ilot-11",
    "nom": "Tilleul 9,6 m",
-   "largeur": 5500.0,
-   "profondeur": 5500.0,
-   "hauteur": 9600.0,
+   "largeur": 5500,
+   "profondeur": 5500,
+   "hauteur": 9600,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -6056,9 +6061,9 @@
   {
    "id": "type-vegetal-ilot-12",
    "nom": "Érable 10 m",
-   "largeur": 7000.0,
-   "profondeur": 7000.0,
-   "hauteur": 10000.0,
+   "largeur": 7000,
+   "profondeur": 7000,
+   "hauteur": 10000,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -6558,9 +6563,9 @@
   {
    "id": "type-vegetal-ilot-13",
    "nom": "Érable 10,5 m",
-   "largeur": 7000.0,
-   "profondeur": 7000.0,
-   "hauteur": 10500.0,
+   "largeur": 7000,
+   "profondeur": 7000,
+   "hauteur": 10500,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -7060,9 +7065,9 @@
   {
    "id": "type-vegetal-ilot-14",
    "nom": "Érable 11 m",
-   "largeur": 7000.0,
-   "profondeur": 7000.0,
-   "hauteur": 11000.0,
+   "largeur": 7000,
+   "profondeur": 7000,
+   "hauteur": 11000,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -7562,9 +7567,9 @@
   {
    "id": "type-vegetal-ilot-15",
    "nom": "Érable 11,5 m",
-   "largeur": 7000.0,
-   "profondeur": 7000.0,
-   "hauteur": 11500.0,
+   "largeur": 7000,
+   "profondeur": 7000,
+   "hauteur": 11500,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [
@@ -8064,9 +8069,9 @@
   {
    "id": "type-vegetal-ilot-16",
    "nom": "Érable 12 m",
-   "largeur": 7000.0,
-   "profondeur": 7000.0,
-   "hauteur": 12000.0,
+   "largeur": 7000,
+   "profondeur": 7000,
+   "hauteur": 12000,
    "modele": {
     "categorie": "vegetation",
     "elements_2d": [

@@ -662,8 +662,8 @@ pub struct TypeCompose {
     pub categorie: Option<CategorieMur>,
     pub origine: Option<Origine>,
     /// Sorte d'élément horizontal du type (`types_dalles` : dalle, sol, toiture, plafond,
-    /// terre-plein), pour le ranger dans l'onglet de sa sorte ; absente : type d'un mur, ou
-    /// type d'élément horizontal antérieur (rangé d'après les éléments qui l'utilisent).
+    /// terre-plein), pour le ranger dans l'onglet de sa sorte ; absente : type d'un mur ou d'un
+    /// terrain (un type d'élément horizontal sans sorte n'apparaît dans aucun onglet).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sorte: Option<SorteDalle>,
 }

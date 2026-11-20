@@ -467,7 +467,7 @@ impl Projet {
         if self.niveaux.is_empty() {
             self.niveaux.push(Niveau { id: niveau.clone(), nom: "Niveau 0".into(), altitude: 0.0, origine: None });
         }
-        let type_dalle = match self.types_dalles.iter().find(|x| (!t.id.is_empty() && x.id == t.id) || (x.nom == t.nom && x.couches == t.couches && x.sorte.is_none_or(|s| s == p.sorte))) {
+        let type_dalle = match self.types_dalles.iter().find(|x| (!t.id.is_empty() && x.id == t.id) || (x.nom == t.nom && x.couches == t.couches && x.sorte == Some(p.sorte))) {
             Some(x) => x.id.clone(),
             None => {
                 let mut k = self.types_dalles.len() + 1;

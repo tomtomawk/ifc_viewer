@@ -251,8 +251,8 @@ def type_mur(id, nom, materiau, epaisseur):
     return {"id": id, "nom": nom, "couches": [{"materiau": materiau, "epaisseur": epaisseur, "fonction": "structure"}], "couches_detaillees": True, "origine": None}
 
 
-def type_dalle(id, nom, materiau, epaisseur):
-    return {"id": id, "nom": nom, "couches": [{"materiau": materiau, "epaisseur": epaisseur, "fonction": "structure"}], "couches_detaillees": True, "origine": None}
+def type_dalle(id, nom, materiau, epaisseur, sorte):
+    return {"id": id, "sorte": sorte, "nom": nom, "couches": [{"materiau": materiau, "epaisseur": epaisseur, "fonction": "structure"}], "couches_detaillees": True, "origine": None}
 
 
 NIVEAUX = [{"id": f"n{k}", "nom": "RDC" if k == 0 else f"R+{k}", "altitude": 3000 * k, "origine": None} for k in range(5)]
@@ -455,11 +455,11 @@ def projet():
             type_mur("bois200", "Bardage bois 200", "Bardage bois", 200),
         ],
         "types_dalles": [
-            type_dalle("dalle250", "Dalle béton 250", "Béton banché", 250),
-            type_dalle("dalle300", "Dalle béton 300", "Béton banché", 300),
-            type_dalle("ardoise200", "Toiture ardoise 200", "Ardoise", 200),
-            type_dalle("enrobe120", "Enrobé 120", "Enrobé", 120),
-            type_dalle("paves120", "Pavés 120", "Pavés", 120),
+            type_dalle("dalle250", "Dalle béton 250", "Béton banché", 250, "dalle"),
+            type_dalle("dalle300", "Dalle béton 300", "Béton banché", 300, "dalle"),
+            type_dalle("ardoise200", "Toiture ardoise 200", "Ardoise", 200, "toiture"),
+            type_dalle("enrobe120", "Enrobé 120", "Enrobé", 120, "sol"),
+            type_dalle("paves120", "Pavés 120", "Pavés", 120, "sol"),
         ],
         "types_ouvertures": [],
         "types_terrains": [{"id": "pelouse", "nom": "Pelouse", "epaisseur": 1000, "materiau": "Pelouse"}],

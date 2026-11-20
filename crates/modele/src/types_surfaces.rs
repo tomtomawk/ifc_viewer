@@ -27,12 +27,10 @@ impl TypeCompose {
 }
 
 impl Projet {
-    /// Types du projet pour une sorte : ceux qui portent cette sorte, et ceux sans sorte
-    /// qu'utilise un élément de cette sorte (projets antérieurs au champ). Aucun : le type
-    /// par défaut du code.
+    /// Types du projet qui portent cette sorte. Aucun : le type par défaut du code.
     pub fn types_surface(&self, sorte: SorteDalle) -> Vec<TypeCompose> {
         let types: Vec<TypeCompose> = self.types_dalles.iter()
-            .filter(|t| t.sorte == Some(sorte) || (t.sorte.is_none() && self.dalles.iter().any(|d| d.sorte == sorte && d.type_dalle == t.id)))
+            .filter(|t| t.sorte == Some(sorte))
             .cloned()
             .collect();
         if types.is_empty() { vec![TypeCompose::surface_par_defaut(sorte)] } else { types }

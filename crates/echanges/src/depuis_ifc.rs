@@ -284,7 +284,7 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             .entry(cle_type.clone())
             .or_insert_with(|| {
                 let tid = identifiant("type_dalle", &format!("{fichier}:{cle_type}"));
-                c.projet.types_dalles.push(TypeCompose { sorte: None, id: tid.clone(), nom: nom_type, couches, categorie: None, couches_detaillees: detaillees, origine: None });
+                c.projet.types_dalles.push(TypeCompose { sorte: Some(SorteDalle::Dalle), id: tid.clone(), nom: nom_type, couches, categorie: None, couches_detaillees: detaillees, origine: None });
                 tid
             })
             .clone();

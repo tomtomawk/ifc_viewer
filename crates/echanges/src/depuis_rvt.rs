@@ -234,7 +234,7 @@ pub fn convertir_maquette(m: &Maquette, c: &mut Conversion) {
             .or_insert_with(|| {
                 let id = ident("type_dalle", d.type_id);
                 let (couches, couches_detaillees) = couches_type(m, d.type_id, e);
-                c.projet.types_dalles.push(TypeCompose { sorte: None, id: id.clone(), nom: nom_type(d.type_id), couches, categorie: None, couches_detaillees, origine: origine(d.type_id, "FloorType") });
+                c.projet.types_dalles.push(TypeCompose { sorte: Some(sorte), id: id.clone(), nom: nom_type(d.type_id), couches, categorie: None, couches_detaillees, origine: origine(d.type_id, "FloorType") });
                 id
             })
             .clone();
