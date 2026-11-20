@@ -204,9 +204,8 @@ Horizontales, Béton, Brique, Bois (fil), Terre dans le gabarit par défaut).
 avec aperçu, Nouveau, Dupliquer, Supprimer (motif du projet non utilisé) ou Rétablir (motif
 du gabarit modifié) ; nom (renommer met à jour les matériaux), familles de traits (angle,
 pas, glissement, origine, tirets) et aperçu de 3 × 3 cm du papier. En 3D, les motifs de
-surface sont tracés en traits continus (deux familles au plus). Un nouveau projet reprend les types de murs du gabarit ; dans un projet
-existant, ceux qui manquent sont proposés en bas du sélecteur de type de mur et copiés
-dans le projet au choix.
+surface sont tracés avec toutes leurs familles (16 par motif, 96 par scène au plus), glissements et tirets (deux paires trait / blanc au plus). Un nouveau projet reprend les types de murs du gabarit ; ensuite, le sélecteur de type
+de mur ne propose que les types du projet (le gabarit n'est plus relu).
 
 ## Jonctions et édition des murs
 
