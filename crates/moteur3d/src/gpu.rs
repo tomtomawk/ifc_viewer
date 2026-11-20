@@ -73,6 +73,7 @@ struct Globales {
     divers: [f32; 4],
     cadrage: [[f32; 4]; 4],
     table_motifs: [[f32; 4]; 14],
+    familles_motifs: [[f32; 4]; 3 * noyau::constantes::FAMILLES_MOTIFS_MAX],
     contour: [[f32; 4]; 64],
     selection: [u32; 4],
     inv_vp: [f32; 16],
@@ -279,10 +280,12 @@ pub struct FrameParams {
     /// Graphique : faces blanches (dessin au trait) et éclairage des faces.
     pub faces_blanches: bool,
     pub eclairage: bool,
-    /// Unités de la scène par mm du papier (motifs de surface) et table des motifs de la
-    /// scène (angle, pas, angle, pas).
+    /// Unités de la scène par mm du papier (motifs de surface), table des motifs de la
+    /// scène (première famille, nombre de familles) et leurs familles de traits (trois
+    /// `vec4` chacune : `scene::Scene::familles_motifs`).
     pub mm: f32,
     pub table_motifs: Vec<[f32; 4]>,
+    pub familles_motifs: Vec<[f32; 4]>,
     /// Plan de coupe du mode dessin (n, d ; n·p + d ≥ 0 gardé) et tracé de la coupe.
     pub coupe: Option<Vec4>,
     /// Ombres portées : direction du soleil (vers lui), matrice
@@ -1031,6 +1034,9 @@ impl Renderer {
         }
         for (k, t) in p.table_motifs.iter().take(14).enumerate() {
             g.table_motifs[k] = *t;
+        }
+        for (k, f) in p.familles_motifs.iter().take(g.familles_motifs.len()).enumerate() {
+            g.familles_motifs[k] = *f;
         }
         for (k, q) in p.contour_vue.iter().take(128).enumerate() {
             g.contour[k / 2][2 * (k % 2)..2 * (k % 2) + 2].copy_from_slice(&[q.x, q.y]);

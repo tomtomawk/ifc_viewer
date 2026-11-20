@@ -157,6 +157,7 @@ impl Application {
         params.passes.clear();
         params.soleil = None;
         params.table_motifs.clear();
+        params.familles_motifs.clear();
         params.mm = mm;
         let renderer = self.renderer_famille.as_mut()?;
         let n = scene.vertices.len();

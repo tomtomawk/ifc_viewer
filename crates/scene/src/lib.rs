@@ -272,8 +272,11 @@ pub struct Scene {
     /// (`VisibiliteElement::masque`, éléments des familles) ; vide : tout visible.
     pub visibilite: Vec<u8>,
     /// Motifs de surface de la scène, indexés par les codes des sommets (moins un) :
-    /// deux familles de traits (angle en radians, pas en mm du papier).
+    /// indice de la première famille dans `familles_motifs` et nombre de familles.
     pub table_motifs: Vec<[f32; 4]>,
+    /// Familles de traits des motifs de surface, trois `vec4` chacune (voir
+    /// `maillage::materiaux::familles_gpu`).
+    pub familles_motifs: Vec<[f32; 4]>,
     /// Apparences de rendu des matériaux, indexées par l'alpha des couleurs de rendu
     /// (128 + rang).
     pub apparences: Vec<modele::Apparence>,
@@ -466,7 +469,7 @@ mod tests {
             objects.push(SceneObject { id: k as Id + 1, class: "IFCSLAB".into(), storey: None, opaque: Range { start: debut, count: 6 }, transparent: vide, lines: vide, aretes: vide, min: Vec3::new(0., 0., z), max: Vec3::new(10., 10., z) });
         }
         Scene {
-            model, vertices, couleurs_rendu: Vec::new(), motifs_surface: Vec::new(), visibilite: Vec::new(), table_motifs: Vec::new(), apparences: Vec::new(),
+            model, vertices, couleurs_rendu: Vec::new(), motifs_surface: Vec::new(), visibilite: Vec::new(), table_motifs: Vec::new(), familles_motifs: Vec::new(), apparences: Vec::new(),
             objects, object_of: IdMap::default(), origin: DVec3::ZERO, min: Vec3::ZERO, max: Vec3::new(10., 10., 3.), triangles: 4, unsupported: Vec::new(),
             load_ms: 0, file_name: String::new(), navigateur: None, partage: None, couches_coupe: IdMap::default(),
         }

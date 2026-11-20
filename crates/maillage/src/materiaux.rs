@@ -39,10 +39,47 @@ pub(crate) fn rendu_materiau(m: &modele::Materiau, couleur: [f32; 4], table: &mu
     [r, g, b, 128.0 + rang as f32]
 }
 
+/// Familles de traits d'un motif de surface au plus (rendu 3D).
+pub const FAMILLES_PAR_MOTIF: usize = 16;
+
+/// Motifs de surface de la scène en construction : nom et familles encodées
+/// (`familles_gpu`), dans l'ordre des codes (rang + 1).
+pub(crate) type TableMotifs = Vec<(String, Vec<[f32; 4]>)>;
+
+/// Familles d'un motif pour le shader, trois `vec4` chacune : (angle en radians, pas,
+/// glissement, 0), (origine x, origine y, période des tirets, 0), (trait, blanc, trait,
+/// blanc) ; mm du papier ; période nulle : trait continu. Deux paires de tirets au plus.
+pub(crate) fn familles_gpu(d: &modele::DefinitionMotif) -> Vec<[f32; 4]> {
+    d.lignes.iter().take(FAMILLES_PAR_MOTIF).flat_map(|l| {
+        let t: Vec<f32> = l.tirets.iter().map(|x| x.abs() as f32).collect();
+        let tirets = [0, 1, 2, 3].map(|k| t.get(k).copied().unwrap_or(0.0));
+        let periode = if t.len() >= 2 { tirets.iter().sum() } else { 0.0 };
+        [
+            [l.angle.to_radians() as f32, l.pas as f32, l.glissement as f32, 0.0],
+            [l.origine[0] as f32, l.origine[1] as f32, periode, 0.0],
+            tirets,
+        ]
+    }).collect()
+}
+
+/// Table des motifs pour le GPU : en-têtes (indice de la première famille, nombre de
+/// familles) dans l'ordre des codes, et familles mises bout à bout (au plus
+/// `noyau::constantes::FAMILLES_MOTIFS_MAX` en tout).
+pub(crate) fn table_gpu(table: TableMotifs) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+    let (mut entetes, mut familles) = (Vec::new(), Vec::new());
+    for (_, f) in table {
+        let debut = familles.len() / 3;
+        let n = (f.len() / 3).min(noyau::constantes::FAMILLES_MOTIFS_MAX.saturating_sub(debut));
+        familles.extend_from_slice(&f[..n * 3]);
+        entetes.push([debut as f32, n as f32, 0.0, 0.0]);
+    }
+    (entetes, familles)
+}
+
 /// Motifs de surface d'un matériau pour le rendu : [premier plan | arrière-plan << 4,
 /// couleur du premier plan]. Premier plan : 0 aucun, 15 uni, sinon rang + 1 dans la
 /// table ; arrière-plan : 0 uni (couleur des faces), sinon rang + 1 dans la table.
-pub(crate) fn motif_surface(projet: &Projet, m: &modele::Materiau, table: &mut Vec<(String, [f32; 4])>) -> Option<[u8; 4]> {
+pub(crate) fn motif_surface(projet: &Projet, m: &modele::Materiau, table: &mut TableMotifs) -> Option<[u8; 4]> {
     use modele::MotifCoupe;
     let mut rang = |x: &MotifCoupe| -> u8 {
         let Some(d) = projet.definition_motif(x) else { return 0 };
@@ -52,9 +89,7 @@ pub(crate) fn motif_surface(projet: &Projet, m: &modele::Materiau, table: &mut V
         if table.len() >= 14 {
             return 1;
         }
-        let f = |k: usize| d.lignes.get(k).map_or([0.0, 0.0], |l| [l.angle.to_radians() as f32, l.pas as f32]);
-        let ([a, b], [c, e]) = (f(0), f(1));
-        table.push((d.nom.clone(), [a, b, c, e]));
+        table.push((d.nom.clone(), familles_gpu(&d)));
         table.len() as u8
     };
     let premier = match &m.surface_motif {

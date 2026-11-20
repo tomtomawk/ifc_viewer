@@ -370,18 +370,44 @@ fn retire(e: Varie) -> bool {
     return false;
 }
 
-// motifs de surface des matériaux : part d'un trait d'une famille (angle en radians, pas
-// en mm ; pas nul : aucune) au point uv du plan de la face (anticrénelé avec les dérivées
-// dx, dy calculées hors des branches)
-fn famille(uv: vec2f, dx: vec2f, dy: vec2f, angle: f32, pas_mm: f32) -> f32 {
-    if pas_mm <= 0.0 {
+// motifs de surface des matériaux : part d'un trait de la famille n° k au point uv du plan
+// de la face (anticrénelé avec les dérivées dx, dy calculées hors des branches). Famille :
+// angle, pas (nul : aucune), glissement d'un trait au suivant, origine, tirets (deux paires
+// trait / blanc au plus ; période nulle : trait continu), comme en plan (mm du papier).
+fn famille(uv: vec2f, dx: vec2f, dy: vec2f, k: i32) -> f32 {
+    let a = g.familles_motifs[3 * k];
+    let b = g.familles_motifs[3 * k + 1];
+    let t = g.familles_motifs[3 * k + 2];
+    if a.y <= 0.0 {
         return 0.0;
     }
-    let pas = pas_mm * g.divers.x;
-    let nrm = vec2f(-sin(angle), cos(angle));
-    let f = dot(uv, nrm) / pas;
+    let mm = g.divers.x;
+    let pas = a.y * mm;
+    let dir = vec2f(cos(a.x), sin(a.x));
+    let nrm = vec2f(-dir.y, dir.x);
+    let q = uv - b.xy * mm;
+    let f = dot(q, nrm) / pas;
     let w = (abs(dot(dx, nrm)) + abs(dot(dy, nrm))) / pas;
-    return 1.0 - min(abs(fract(f + 0.5) - 0.5) / max(w, 1e-6), 1.0);
+    let ligne = 1.0 - min(abs(fract(f + 0.5) - 0.5) / max(w, 1e-6), 1.0);
+    let periode = b.z * mm;
+    if periode <= 0.0 || ligne <= 0.0 {
+        return ligne;
+    }
+    // position le long du trait de la ligne n° round(f), dont le départ glisse d'un
+    // glissement par ligne
+    let s = dot(q, dir) - round(f) * a.z * mm;
+    let m = s - floor(s / periode) * periode;
+    let l = abs(dot(dx, dir)) + abs(dot(dy, dir));
+    // part couverte par un tiret [x0, x1] autour de m (anticrénelée sur un pixel)
+    let t1 = t.x * mm;
+    let b1 = t.y * mm;
+    let t2 = t.z * mm;
+    let c1 = clamp((min(m + l * 0.5, t1) - max(m - l * 0.5, 0.0)) / max(l, 1e-9), 0.0, 1.0);
+    let x2 = t1 + b1;
+    let c2 = clamp((min(m + l * 0.5, x2 + t2) - max(m - l * 0.5, x2)) / max(l, 1e-9), 0.0, 1.0);
+    // tiret à cheval sur la fin de période (repris au début)
+    let c3 = clamp((min(m + l * 0.5 - periode, t1) - max(m - l * 0.5 - periode, 0.0)) / max(l, 1e-9), 0.0, 1.0);
+    return ligne * min(c1 + c2 + c3, 1.0);
 }
 
 fn traits_motif(code: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> f32 {
@@ -389,7 +415,13 @@ fn traits_motif(code: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> f32 {
         return 0.0;
     }
     let t = g.table_motifs[code - 1];
-    return max(famille(uv, dx, dy, t.x, t.y), famille(uv, dx, dy, t.z, t.w));
+    let debut = i32(t.x + 0.5);
+    let n = i32(t.y + 0.5);
+    var c = 0.0;
+    for (var k = 0; k < n; k++) {
+        c = max(c, famille(uv, dx, dy, debut + k));
+    }
+    return c;
 }
 
 // part du soleil reçue en p (0 : à l'ombre) dans la cascade k : 16 échantillons d'un

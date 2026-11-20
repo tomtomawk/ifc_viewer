@@ -17,7 +17,11 @@ struct Globales {
     // zw : taille de l'image (pixels)
     divers: vec4f,
     cadrage: array<vec4f, 4>,
+    // motifs de surface : x première famille, y nombre de familles
     table_motifs: array<vec4f, 14>,
+    // familles des motifs, trois vec4 chacune : (angle, pas, glissement, -),
+    // (origine x, origine y, période des tirets, -), (trait, blanc, trait, blanc) ; mm
+    familles_motifs: array<vec4f, 288>,
     // contour de la vue : deux points par élément
     contour: array<vec4f, 64>,
     // x : nombre d'objets de la texture de sélection

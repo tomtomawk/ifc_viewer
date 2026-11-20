@@ -264,6 +264,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         motifs_surface,
         visibilite,
         table_motifs: Vec::new(),
+        familles_motifs: Vec::new(),
         apparences: Vec::new(),
         objects,
         object_of,

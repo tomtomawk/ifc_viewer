@@ -70,6 +70,7 @@ impl Application {
             eclairage: self.eclairage,
             mm: (self.echelle / 1000.0) as f32,
             table_motifs: self.scene.as_ref().map(|s| s.table_motifs.clone()).unwrap_or_default(),
+            familles_motifs: self.scene.as_ref().map(|s| s.familles_motifs.clone()).unwrap_or_default(),
             soleil: self.ombres_portees.then(|| self.soleil(aspect)).flatten(),
             direction_soleil: self.direction_soleil(),
             ciel: (self.style == StyleVisuel::Realiste).then(|| {

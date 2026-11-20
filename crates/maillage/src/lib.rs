@@ -119,7 +119,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     let mut vegetaux: Vec<noyau::Id> = Vec::new();
     // matériau de chaque partie des éléments (jonctions sans arête entre mêmes matériaux)
     let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
-    let mut table_motifs: Vec<(String, [f32; 4])> = Vec::new();
+    let mut table_motifs: materiaux::TableMotifs = Vec::new();
     // apparences de rendu (onglet Apparence) indexées par les couleurs de rendu
     let mut table_apparences: Vec<(String, modele::Apparence)> = Vec::new();
     // jonctions (noyaux prolongés) ; les couches moins prioritaires s'arrêtent sur les
@@ -518,7 +518,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     }
     scene.couches_coupe.extend(couches_coupe);
     scene.unsupported.extend(ignores_liens);
-    scene.table_motifs = table_motifs.into_iter().map(|t| t.1).collect();
+    (scene.table_motifs, scene.familles_motifs) = materiaux::table_gpu(table_motifs);
     // textures en chemin relatif : depuis le dossier du projet
     let dossier = path.parent().map(|d| d.to_path_buf()).unwrap_or_default();
     scene.apparences = table_apparences
