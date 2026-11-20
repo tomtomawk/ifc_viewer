@@ -232,3 +232,17 @@ fn polyligne_segments_d_arc() {
     let invalide = format!("{}0.5,{}", &json[..k], &json[k..]);
     assert!(invalide != json && Projet::lire_json(&invalide).and_then(|q| q.verifier()).is_err());
 }
+
+/// Deux exports de la même feuille donnent le même SVG (comparaisons de fichiers, tests).
+#[test]
+fn svg_feuille_deterministe() {
+    let p = Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap();
+    let f = &p.feuilles[0];
+    let premier = svg_feuille(&p, f).unwrap();
+    for _ in 0..4 {
+        assert!(svg_feuille(&p, f).unwrap() == premier, "deux exports de la feuille diffèrent");
+    }
+    // pas de trait réduit à un point (arête verticale vue en plan)
+    let nuls = premier.split('M').filter(|m| m.split_once('L').is_some_and(|(a, b)| a.trim() == b.split(['M', '"']).next().unwrap_or("").trim())).count();
+    assert_eq!(nuls, 0, "segments de longueur nulle dans le SVG");
+}

@@ -22,6 +22,18 @@ pub struct Aretes {
     pub douces: Vec<([DVec3; 2], DVec3, DVec3)>,
 }
 
+impl Aretes {
+    /// Range les arêtes dans un ordre stable (coordonnées croissantes) : le résultat ne
+    /// dépend plus de l'ordre de parcours des tables de hachage ni du parallélisme, et
+    /// deux exports du même projet sont identiques.
+    pub fn ordonner(&mut self) {
+        let cle = |s: &[DVec3; 2]| [s[0].x, s[0].y, s[0].z, s[1].x, s[1].y, s[1].z];
+        let comparer = |a: &[DVec3; 2], b: &[DVec3; 2]| cle(a).iter().zip(cle(b)).map(|(x, y)| x.total_cmp(&y)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal);
+        self.vives.sort_by(comparer);
+        self.douces.sort_by(|a, b| comparer(&a.0, &b.0));
+    }
+}
+
 /// Arêtes d'un maillage (soupe de triangles, repère du fichier) : bords des régions planes
 /// ou courbes douces, sans les diagonales de triangulation ni les découpes des faces
 /// coplanaires (jonctions en T de la CSG comprises), et arêtes douces des surfaces
@@ -35,7 +47,9 @@ pub struct Aretes {
 /// les deux facettes ne sont pas coplanaires donne une arête douce.
 pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
     let (vives, douces) = aretes_proprietaires(tris.iter().map(|t| (*t, 0)), false);
-    Aretes { vives: vives.into_iter().map(|(s, _)| s).collect(), douces: douces.into_iter().map(|(d, _)| d).collect() }
+    let mut a = Aretes { vives: vives.into_iter().map(|(s, _)| s).collect(), douces: douces.into_iter().map(|(d, _)| d).collect() };
+    a.ordonner();
+    a
 }
 
 /// Arêtes d'éléments d'un même matériau pris ensemble, chacune rendue à l'élément

@@ -162,6 +162,10 @@ pub(super) fn vu_limites(scene: &Scene, visible: &[bool], affichage: Affichage, 
                     b = a + (b - a) * (sa / (sa - sb));
                 }
             }
+            // arête vue en bout (verticale en plan) : un point, pas un trait
+            if (proj(b) - proj(a)).truncate().length_squared() < 1e-12 {
+                continue;
+            }
             segs.push([a, b]);
         }
         if !segs.is_empty() {

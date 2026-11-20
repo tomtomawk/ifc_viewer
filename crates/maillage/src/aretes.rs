@@ -28,6 +28,8 @@ pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<Stri
             if let Some(a) = par_objet.get_mut(&geoms[k].id) { a.douces.push(d); }
         }
     }
+    // groupes traités dans un ordre quelconque (table de hachage, parallélisme)
+    par_objet.values_mut().for_each(noyau::aretes::Aretes::ordonner);
     par_objet
 }
 
@@ -105,6 +107,7 @@ pub(crate) fn aretes_silhouette(tris: &[[glam::DVec3; 3]]) -> noyau::aretes::Are
             _ => out.vives.push(seg),
         }
     }
+    out.ordonner();
     out
 }
 
