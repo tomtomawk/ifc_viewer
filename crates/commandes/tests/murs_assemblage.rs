@@ -7,7 +7,7 @@ use modele::murs::assemblage::*;
 
 fn type_trois_couches() -> TypeCompose {
     let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false, ossature: None };
-    TypeCompose {
+    TypeCompose { sorte: None,
         id: "t".into(),
         nom: "Mur isolé".into(),
         couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Laine de verre", 100.0, FonctionCouche::Isolation)],

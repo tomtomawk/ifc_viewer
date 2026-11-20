@@ -315,7 +315,7 @@ fn tremie_interieure_et_exterieure() {
     let mut p = Projet::nouveau("Trémie");
     let params = creation::ParametresDalle {
         sorte: SorteDalle::Dalle,
-        type_dalle: TypeCompose {
+        type_dalle: TypeCompose { sorte: None,
             id: "t".into(),
             nom: "Dalle".into(),
             couches: vec![Couche {

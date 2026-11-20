@@ -344,7 +344,7 @@ impl Application {
                 // surface type <nom> | surface pente oui|non | surface <paramètre> <valeur> (outil actif)
                 let (cle, reste) = argument.split_once(' ').map_or((argument, ""), |(a, b)| (a, b.trim()));
                 let r = match cle {
-                    "type" => self.ruban_edition.choisir_type_surface(reste),
+                    "type" => self.ruban_edition.choisir_type_surface(self.natif.as_ref().map(|(p, _)| p), reste),
                     "pente" => { self.ruban_edition.definir_pente_toiture(reste != "non"); Ok(()) }
                     _ => match reste.parse::<f64>() {
                         Ok(v) => self.ruban_edition.regler_surface(cle, v),

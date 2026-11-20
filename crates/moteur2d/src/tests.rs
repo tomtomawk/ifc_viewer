@@ -99,7 +99,7 @@ fn isolant_suit_le_mur_courbe_dans_la_coupe_native() {
     use modele::{Axe, Couche, FonctionCouche, Projet, TypeCompose};
     use modele::creation::ParametresMur;
     let mut projet = Projet::nouveau("Mur courbe");
-    projet.types_murs.push(TypeCompose { id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 100.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
+    projet.types_murs.push(TypeCompose { sorte: None, id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 100.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
     let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
     projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();
     projet.completer_materiaux();
@@ -121,7 +121,7 @@ fn ossature_coupee_en_plan_montants_et_travees() {
     use modele::murs::ossature::Ossature;
     let mut projet = Projet::nouveau("Ossature");
     let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature { materiau: Some("Sapin".into()), ..Default::default() }), ..Default::default() };
-    projet.types_murs.push(TypeCompose { id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
+    projet.types_murs.push(TypeCompose { sorte: None, id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
     projet.materiaux.push(Materiau { nom: "Sapin".into(), couleur: [200, 150, 90], ..Default::default() });
     projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], motif: modele::MotifCoupe::Isolation, ..Default::default() });
     let options = ParametresMur { type_mur: Some("mob".into()), ..Default::default() };
@@ -394,7 +394,7 @@ fn isolant_ossature_couvre_chaque_travee_en_coupe() {
         let mut projet = Projet::depuis_gabarit("Ossature", &modele::gabarit::Gabarit::defaut());
         for n in &mut projet.niveaux { n.altitude += altitude; }
         let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature { materiau: Some("Sapin".into()), horizontale, ..Default::default() }), ..Default::default() };
-        projet.types_murs.push(TypeCompose { id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
+        projet.types_murs.push(TypeCompose { sorte: None, id: "mob".into(), nom: "MOB".into(), couches: vec![couche], categorie: None, couches_detaillees: true, origine: None });
         projet.materiaux.push(Materiau { nom: "Sapin".into(), couleur: [200, 150, 90], ..Default::default() });
         projet.materiaux.push(Materiau { nom: "Laine".into(), couleur: [250, 230, 120], motif: modele::MotifCoupe::Isolation, ..Default::default() });
         projet.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &ParametresMur { type_mur: Some("mob".into()), ..Default::default() }).unwrap();

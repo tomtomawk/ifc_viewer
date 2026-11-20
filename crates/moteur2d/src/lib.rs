@@ -176,7 +176,7 @@ mod test_isolant_arc {
     fn isolant_d_un_mur_courbe_reel() {
         let mut p = Projet::nouveau("Arc");
         let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false, ossature: None };
-        p.types_murs.push(TypeCompose { id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Isolant", 100.0, FonctionCouche::Isolation), c("Béton", 200.0, FonctionCouche::Structure)], categorie: None, couches_detaillees: true, origine: None });
+        p.types_murs.push(TypeCompose { sorte: None, id: "t".into(), nom: "Mur".into(), couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Isolant", 100.0, FonctionCouche::Isolation), c("Béton", 200.0, FonctionCouche::Structure)], categorie: None, couches_detaillees: true, origine: None });
         let o = ParametresMur { type_mur: Some("t".into()), ..Default::default() };
         p.ajouter_mur_axe(Axe::Arc { debut: [5000.0, 0.0], fin: [0.0, 5000.0], centre: [0.0, 0.0], direct: true }, &o).unwrap();
         let s = maillage::depuis_natif(&p, std::path::Path::new("t.json")).unwrap();

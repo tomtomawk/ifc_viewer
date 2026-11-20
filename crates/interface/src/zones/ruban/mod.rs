@@ -95,6 +95,8 @@ pub(crate) enum Outil {
 }
 
 impl Outil {
+    /// Outils des sortes d'élément horizontal (une par sorte).
+    pub(crate) const TOUTES_SURFACES: [Outil; 5] = [Outil::Dalle, Outil::Sol, Outil::Plafond, Outil::Toiture, Outil::TerrePlein];
     /// Tous les outils, pour les contrôles de cohérence (palette de création).
     #[cfg(test)]
     pub(crate) const TOUS: &'static [Outil] = &[
@@ -362,10 +364,12 @@ fn sorte_surface(o: Outil) -> Option<modele::SorteDalle> {
     }
 }
 
-/// Types d'éléments horizontaux du gabarit, couches du haut vers le bas.
-fn types_surface(o: Outil) -> Vec<(String, Vec<modele::Couche>)> {
+/// Types d'éléments horizontaux du projet pour l'outil (couches du haut vers le bas) ;
+/// sans projet ou sans type de cette sorte : le type par défaut du code. Le gabarit n'est
+/// pas relu (il n'amorce que la création d'un projet).
+fn types_surface(projet: Option<&modele::Projet>, o: Outil) -> Vec<modele::TypeCompose> {
     let Some(sorte) = sorte_surface(o) else { return Vec::new() };
-    modele::gabarit::actif().surfaces(sorte).into_iter().map(|t| (t.nom.clone(), t.couches.clone())).collect()
+    projet.map_or_else(|| vec![modele::TypeCompose::surface_par_defaut(sorte)], |p| p.types_surface(sorte))
 }
 
 /// Pictogramme d'une catégorie de mur, vu en plan : un trait épais (mur), plusieurs
@@ -597,7 +601,9 @@ pub struct RubanEdition {
     /// Forme tracée par les éléments horizontaux : polygone (défaut), rectangle, cercle.
     pub forme_dalle: moteur2d::dao::OutilDessin,
     /// Type prédéfini choisi pour chaque sorte d'élément horizontal (indice).
-    type_surface: BTreeMap<Outil, usize>,
+    /// Type choisi pour chaque sorte d'élément horizontal (recopié du projet à chaque
+    /// affichage du sélecteur ; absent : le premier type de la sorte).
+    type_surface: BTreeMap<Outil, modele::TypeCompose>,
     surface_identique: Option<(Outil, modele::TypeCompose)>,
     /// Type composé en cours d'édition (fenêtre « Type de mur »).
     editeur_type: Option<EditeurType>,
@@ -620,6 +626,8 @@ struct EditeurType {
     glisse: Option<usize>,
     /// Type de terrain édité (même fenêtre) : profondeur, couche variable ; None : type de mur.
     terrain: Option<TerrainEdite>,
+    /// Type d'élément horizontal édité (même fenêtre) : sa sorte ; None : type de mur.
+    surface: Option<modele::SorteDalle>,
 }
 
 /// Données propres à un type de terrain dans l'éditeur de type composé.
@@ -849,8 +857,7 @@ impl RubanEdition {
     pub fn dalle_active(&self) -> Option<modele::creation::ParametresDalle> {
         let outil = self.selection?;
         let sorte = sorte_surface(outil)?;
-        let types = types_surface(outil);
-        let (nom, couches) = types.get(self.type_surface.get(&outil).copied().unwrap_or(0))?.clone();
+        let choisi = self.type_surface.get(&outil).cloned().unwrap_or_else(|| modele::TypeCompose::surface_par_defaut(sorte));
         let nombre = |k| match (self.valeurs.get(&(outil, k)), champs(outil).get(k)) {
             (Some(Valeur::Nombre(v)), _) => *v,
             (_, Some(Champ::Nombre(_, d, _))) => *d,
@@ -864,7 +871,7 @@ impl RubanEdition {
         };
         Some(modele::creation::ParametresDalle {
             sorte,
-            type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or_else(|| modele::TypeCompose { id: String::new(), nom, couches, categorie: None, couches_detaillees: true, origine: None }),
+            type_dalle: self.surface_identique.as_ref().filter(|(o,_)| *o == outil).map(|(_,t)| t.clone()).unwrap_or(choisi),
             pente,
             niveau: self.niveau_dalle.clone(),
             decalage: nombre(1),
@@ -949,11 +956,11 @@ impl RubanEdition {
         self.activer_surface(modele::SorteDalle::Dalle);
     }
 
-    /// Choisit le type de la sorte active par son nom (gabarit).
-    pub fn choisir_type_surface(&mut self, nom: &str) -> Result<(), String> {
+    /// Choisit le type de la sorte active par son nom (types du projet).
+    pub fn choisir_type_surface(&mut self, projet: Option<&modele::Projet>, nom: &str) -> Result<(), String> {
         let o = self.selection.filter(|o| sorte_surface(*o).is_some()).ok_or("Aucun outil d'élément horizontal actif.")?;
-        let i = types_surface(o).iter().position(|(n, _)| n == nom).ok_or_else(|| format!("Type « {nom} » absent du gabarit."))?;
-        self.type_surface.insert(o, i);
+        let t = types_surface(projet, o).into_iter().find(|t| t.nom == nom).ok_or_else(|| format!("Type « {nom} » absent du projet."))?;
+        self.type_surface.insert(o, t);
         self.surface_identique = None;
         Ok(())
     }

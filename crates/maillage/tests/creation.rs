@@ -42,7 +42,7 @@ fn mur_contraintes_phases_et_sous_projets_persistes() {
 fn dalle_creation_contour_et_relecture() {
     let mut p = Projet::nouveau("Dalle");
     let c = |m: &str, e: f64| Couche { materiau: Some(m.into()), epaisseur: e, ..Default::default() };
-    let t = TypeCompose { id: String::new(), nom: "Dalle BA 230 + chape".into(), couches: vec![c("Chape ciment", 50.0), c("Béton armé", 230.0)], categorie: None, couches_detaillees: true, origine: None };
+    let t = TypeCompose { sorte: None, id: String::new(), nom: "Dalle BA 230 + chape".into(), couches: vec![c("Chape ciment", 50.0), c("Béton armé", 230.0)], categorie: None, couches_detaillees: true, origine: None };
     let o = ParametresDalle { sorte: SorteDalle::Dalle, type_dalle: t, pente: None, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
     // contour en sens horaire, point de fermeture répété : réorienté et nettoyé
     let id = p.ajouter_dalle(&[[0.0, 0.0], [0.0, 4000.0], [5000.0, 4000.0], [5000.0, 0.0], [0.0, 0.0]], &o).unwrap();
@@ -76,7 +76,7 @@ fn plafond_et_toiture_en_pente() {
     assert_eq!(p.niveaux.len(), 1);
     let type_de = |sorte| {
         let t = g.surfaces(sorte)[0];
-        TypeCompose { id: String::new(), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None }
+        TypeCompose { sorte: None, id: String::new(), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None }
     };
     let rect = [[0.0, 0.0], [10_000.0, 0.0], [10_000.0, 6_000.0], [0.0, 6_000.0]];
     let plafond = ParametresDalle { sorte: SorteDalle::Plafond, type_dalle: type_de(SorteDalle::Plafond), pente: None, niveau: None, decalage: 2500.0, phase: None, sous_projet: None, variante: None };

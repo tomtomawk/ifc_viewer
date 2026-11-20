@@ -295,7 +295,7 @@ mod tests {
         let mut p = Projet::nouveau("Ossature");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
         let couche = Couche { materiau: Some("Laine".into()), epaisseur: 145.0, fonction: FonctionCouche::Structure, ossature: Some(Ossature::default()), ..Default::default() };
-        p.types_murs.push(TypeCompose { id: "mob".into(), nom: "MOB 145".into(), couches: vec![couche], couches_detaillees: true, categorie: None, origine: None });
+        p.types_murs.push(TypeCompose { sorte: None, id: "mob".into(), nom: "MOB 145".into(), couches: vec![couche], couches_detaillees: true, categorie: None, origine: None });
         let id = p.ajouter_mur([0.0, 0.0], [3000.0, 0.0], &ParametresMur { type_mur: Some("mob".into()), niveau: Some("n".into()), ..Default::default() }).unwrap();
         (p, id)
     }

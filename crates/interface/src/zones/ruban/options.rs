@@ -69,40 +69,63 @@ impl RubanEdition {
         let projet_apercu = projet.unwrap_or(&projet_vide);
         ui.add_space(6.0);
         {
-            let types = types_surface(surface);
-            let k = self.type_surface.get(&surface).copied().unwrap_or(0).min(types.len().saturating_sub(1));
+            let types = types_surface(projet, surface);
+            // type choisi : recopié du projet, ses couches suivent les modifications
+            let courant = self.type_surface.get(&surface)
+                .and_then(|c| types.iter().find(|t| (!c.id.is_empty() && t.id == c.id) || t.nom == c.nom))
+                .cloned().unwrap_or_else(|| types[0].clone());
+            self.type_surface.insert(surface, courant.clone());
             let identique = self.surface_identique.as_ref().filter(|(o, _)| *o == surface).map(|(_, t)| t);
-            let (nom_type, couches_type) = identique.map(|t| (t.nom.clone(), t.couches.clone())).or_else(|| types.get(k).cloned()).unwrap_or_default();
+            let affiche = identique.unwrap_or(&courant);
             let unite = modele::unite::unite();
-            let epaisseur = |c: &[modele::Couche]| c.iter().map(|c| c.epaisseur).sum::<f64>();
-            let titre = format!("{} · {nom_type}", surface.nom());
+            let titre = format!("{} · {}", surface.nom(), affiche.nom);
             let vignette = |p: &egui::Painter, r: egui::Rect, c: Color32| icone(p, r, surface, c);
-            let detail = (!couches_type.is_empty()).then(|| unite.afficher(epaisseur(&couches_type)));
+            let detail = (!affiche.couches.is_empty()).then(|| unite.afficher(affiche.epaisseur()));
             let bouton = selecteur::entete(ui, &titre, detail.as_deref(), &format!("{titre}
 Type des prochains éléments horizontaux."), Some(&vignette));
             let liste = if surface == Outil::TerrePlein { TERRE_PLEIN } else { SURFACES };
             let sortes: Vec<Outil> = liste.iter().map(|(o, _)| *o).collect();
-            let rangs = sortes.iter().map(|o| types_surface(*o).len()).max().unwrap_or(0);
-            let noms: Vec<String> = sortes.iter().flat_map(|o| types_surface(*o)).map(|t| t.0).collect();
-            let largeur_liste = selecteur::largeur_liste(ui, noms.iter(), 64.0, sortes.len(), 74.0);
+            let rangs = sortes.iter().map(|o| types_surface(projet, *o).len()).max().unwrap_or(0) + 1;
+            let noms: Vec<String> = sortes.iter().flat_map(|o| types_surface(projet, *o)).map(|t| t.nom).collect();
+            let largeur_liste = selecteur::largeur_liste(ui, noms.iter(), 90.0, sortes.len(), 74.0);
             let aide = SURFACES.iter().chain(TERRE_PLEIN).find(|(o, _)| *o == surface).map_or("", |(_, a)| *a);
-            let mut choix_type: Option<(Outil, usize)> = None;
+            let actions: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci"), (selecteur::ActionType::Modifier, "Modifier le type : couches, matériaux, épaisseurs")];
+            let mut choix_onglet: Option<Outil> = None;
+            let mut choix_type: Option<modele::TypeCompose> = None;
+            let mut editer: Option<(modele::TypeCompose, bool)> = None;
+            let mut nouveau = false;
             selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
                 if let Some(o) = selecteur::onglets(ui, &sortes, surface, 74.0, |o| o.nom().into(), aide, icone) {
-                    choix_type = Some((o, self.type_surface.get(&o).copied().unwrap_or(0)));
+                    choix_onglet = Some(o);
                 }
-                for (i, (nom, couches)) in types.iter().enumerate() {
-                    let l = selecteur::Ligne { nom, courant: identique.is_none() && i == k, etiquette: None, sous_titre: None, detail: Some(unite.afficher(epaisseur(couches))), actions: &[] };
-                    let mut pile = |ui: &mut egui::Ui, r: egui::Rect| pile_couches(ui, egui::Rect::from_center_size(r.center(), egui::vec2(26.0, 16.0)), projet_apercu, couches);
-                    if selecteur::ligne(ui, &l, Some(&mut pile)).choisi {
-                        choix_type = Some((surface, i));
+                for t in &types {
+                    let l = selecteur::Ligne { nom: &t.nom, courant: identique.is_none() && t.nom == courant.nom && t.id == courant.id, etiquette: t.id.is_empty().then_some("par défaut"), sous_titre: None, detail: Some(unite.afficher(t.epaisseur())), actions };
+                    let mut pile = |ui: &mut egui::Ui, r: egui::Rect| pile_couches(ui, egui::Rect::from_center_size(r.center(), egui::vec2(26.0, 16.0)), projet_apercu, &t.couches);
+                    let clic = selecteur::ligne(ui, &l, Some(&mut pile));
+                    match clic.action {
+                        Some(selecteur::ActionType::Modifier) => editer = Some((t.clone(), false)),
+                        Some(selecteur::ActionType::Dupliquer) => editer = Some((t.clone(), true)),
+                        None if clic.choisi => choix_type = Some(t.clone()),
+                        None => {}
                     }
                 }
+                nouveau = selecteur::ligne_ajout(ui, &format!("Nouveau type de {}…", surface.nom().to_lowercase()));
             });
-            if let Some((sorte, i)) = choix_type {
-                surface = sorte;
-                self.type_surface.insert(sorte, i);
+            if let Some(o) = choix_onglet {
+                surface = o;
                 self.surface_identique = None;
+            }
+            if let Some(t) = choix_type {
+                self.type_surface.insert(surface, t);
+                self.surface_identique = None;
+            }
+            // éditeur des types de murs, en mode élément horizontal
+            if let (Some(p), Some(sorte)) = (projet, sorte_surface(surface)) {
+                if let Some((t, copie)) = editer {
+                    self.ouvrir_editeur_type_surface(p, sorte, &t, copie);
+                } else if nouveau {
+                    self.ouvrir_editeur_type_surface(p, sorte, &modele::TypeCompose::surface_par_defaut(sorte), true);
+                }
             }
         }
         self.selection = Some(surface);
@@ -119,8 +142,9 @@ Type des prochains éléments horizontaux."), Some(&vignette));
         let unite = modele::unite::unite();
         {
             // composition du type choisi, du haut vers le bas
-            let types = types_surface(surface);
-            if let Some((_, couches)) = types.get(self.type_surface.get(&surface).copied().unwrap_or(0)) {
+            let types = types_surface(projet, surface);
+            let choisi = self.type_surface.get(&surface).and_then(|c| types.iter().find(|t| t.nom == c.nom && t.id == c.id)).or(types.first());
+            if let Some(couches) = choisi.map(|t| &t.couches) {
                 ui.add_space(4.0);
                 for c in couches {
                     ui.horizontal(|ui| {
@@ -176,9 +200,9 @@ Type des prochains éléments horizontaux."), Some(&vignette));
             .num_columns(2)
             .striped(true)
             .show(ui, |ui| {
-                let epaisseur_type: Option<f64> = self.surface_identique.as_ref().filter(|(o,_)| *o == surface).map(|(_, t)| t.epaisseur()).or_else(|| types_surface(surface)
-                    .get(self.type_surface.get(&surface).copied().unwrap_or(0))
-                    .map(|(_, cs)| cs.iter().map(|c| c.epaisseur).sum()));
+                let epaisseur_type: Option<f64> = self.surface_identique.as_ref().filter(|(o,_)| *o == surface).map(|(_, t)| t.epaisseur())
+                    .or_else(|| self.type_surface.get(&surface).map(|t| t.epaisseur()))
+                    .or_else(|| types_surface(projet, surface).first().map(|t| t.epaisseur()));
                 for (indice, champ) in champs(surface).into_iter().enumerate() {
                     if surface == Outil::Toiture && nom_champ(&champ) == "Pente" && self.toiture_plate {
                         continue;

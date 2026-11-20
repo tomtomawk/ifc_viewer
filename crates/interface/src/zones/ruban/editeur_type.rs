@@ -64,7 +64,7 @@ impl RubanEdition {
                 materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
             }
         }
-        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, categorie: existant.map_or(modele::CategorieMur::Compose, |t| t.categorie_mur()), couches, materiaux, erreur: None, glisse: None, terrain: None });
+        self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, categorie: existant.map_or(modele::CategorieMur::Compose, |t| t.categorie_mur()), couches, materiaux, erreur: None, glisse: None, terrain: None, surface: None });
     }
 
     /// Ouvre l'éditeur sur un type de terrain : ses couches de haut en bas (sans couche :
@@ -87,6 +87,34 @@ impl RubanEdition {
         self.editeur_type = Some(EditeurType {
             id: Some(t.id.clone()), nom: t.nom.clone(), categorie: modele::CategorieMur::Compose, couches, materiaux, erreur: None, glisse: None,
             terrain: Some(TerrainEdite { profondeur: t.epaisseur, materiau: t.materiau.clone(), variables }),
+            surface: None,
+        });
+    }
+
+    /// Ouvre l'éditeur sur un type d'élément horizontal (couches du dessus vers le
+    /// dessous) : le type du projet `source`, ou, avec `copie` ou pour un type absent du
+    /// projet (type par défaut), un nouveau type d'après lui.
+    pub(super) fn ouvrir_editeur_type_surface(&mut self, projet: &modele::Projet, sorte: modele::SorteDalle, source: &modele::TypeCompose, copie: bool) {
+        let existant = (!copie && !source.id.is_empty() && projet.types_dalles.iter().any(|t| t.id == source.id)).then(|| source.id.clone());
+        let mut nom = source.nom.clone();
+        if existant.is_none() {
+            let base = if copie && !source.id.is_empty() { format!("{} (copie)", source.nom) } else { source.nom.clone() };
+            nom = base.clone();
+            let mut k = 2;
+            while projet.types_dalles.iter().any(|t| t.nom == nom) {
+                nom = format!("{base} {k}");
+                k += 1;
+            }
+        }
+        let mut materiaux = projet.materiaux.clone();
+        for m in source.couches.iter().filter_map(|c| c.materiau.as_ref()) {
+            if !materiaux.iter().any(|x| &x.nom == m) {
+                materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
+            }
+        }
+        self.editeur_type = Some(EditeurType {
+            id: existant, nom, categorie: modele::CategorieMur::Compose, couches: source.couches.clone(), materiaux, erreur: None, glisse: None,
+            terrain: None, surface: Some(sorte),
         });
     }
 
@@ -105,8 +133,15 @@ impl RubanEdition {
         let (mut ouvert, mut enregistrer, mut annuler) = (true, false, false);
         let terrain = ed.terrain.is_some();
         let mut variable_clic: Option<usize> = None;
-        let titre = match (terrain, ed.id.is_some()) { (true, _) => "Modifier le type de terrain", (false, true) => "Modifier le type de mur", (false, false) => "Nouveau type de mur" };
-        egui::Window::new(titre)
+        let surface = ed.surface;
+        let titre = match (terrain, surface, ed.id.is_some()) {
+            (true, _, _) => "Modifier le type de terrain".to_string(),
+            (_, Some(s), true) => format!("Modifier le type de {}", s.nom().to_lowercase()),
+            (_, Some(s), false) => format!("Nouveau type de {}", s.nom().to_lowercase()),
+            (_, None, true) => "Modifier le type de mur".to_string(),
+            (_, None, false) => "Nouveau type de mur".to_string(),
+        };
+        egui::Window::new(&titre)
             .id(egui::Id::unique("editeur_type_mur"))
             .open(&mut ouvert)
             .collapsible(false)
@@ -120,7 +155,7 @@ impl RubanEdition {
                     if let Some(t) = ed.terrain.as_mut() {
                         ui.label("Profondeur nominale").on_hover_text("Du point le plus bas du terrain naturel au fond plat, pour tous les terrains de ce type");
                         ui.add(egui::DragValue::new(&mut t.profondeur).speed(10.0).range(1.0..=1e6).dimensions());
-                    } else {
+                    } else if surface.is_none() {
                         egui::ComboBox::from_id_salt("categorie_type_mur").selected_text(ed.categorie.nom()).show_ui(ui, |ui| {
                             for c in modele::CategorieMur::TOUTES {
                                 ui.selectable_value(&mut ed.categorie, c, c.nom());
@@ -130,12 +165,14 @@ impl RubanEdition {
                 });
                 ui.add_space(4.0);
                 bande_couches_brouillon(ui, projet, &ed.materiaux, &ed.couches, 18.0);
-                ui.label(RichText::new(if terrain { "Dessus (terrain naturel)" } else { "Extérieur" }).small().weak());
+                ui.label(RichText::new(if terrain { "Dessus (terrain naturel)" } else if surface.is_some() { "Dessus" } else { "Extérieur" }).small().weak());
                 let mut action: Option<(usize, i32)> = None; // (couche, 0 supprimer)
                 // glisser-déposer : lignes (hauteur) et relâchement de la poignée
                 let mut lignes: Vec<egui::Rangef> = Vec::new();
                 let mut lacher = false;
-                let entetes: &[&str] = if terrain { &["", "Matériau", "", "Motif", "Épaisseur", "Variable", ""] } else { &["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", "Retour", "Ossature", ""] };
+                let entetes: &[&str] = if terrain { &["", "Matériau", "", "Motif", "Épaisseur", "Variable", ""] }
+                    else if surface.is_some() { &["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", "Ossature", ""] }
+                    else { &["", "Fonction", "Matériau", "", "Motif", "Épaisseur", "Plume", "Retour", "Ossature", ""] };
                 egui::Grid::new("couches_type_mur").num_columns(entetes.len()).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
                     for t in entetes {
                         ui.label(RichText::new(*t).small().weak());
@@ -232,9 +269,12 @@ impl RubanEdition {
                         if n_plume != c.plume() {
                             c.plume = Some(n_plume);
                         }
-                        ui.add_enabled(c.fonction != FonctionCouche::Structure, egui::Checkbox::without_text(&mut c.retour))
-                            .on_hover_text("Retour aux insertions : la couche tourne dans les tableaux et le linteau des ouvertures, jusqu'au plan « Retour extérieur » ou « Retour intérieur » de leur famille")
-                            .on_disabled_hover_text("Une couche de structure ne se retourne pas");
+                        // retour aux insertions : murs seulement
+                        if surface.is_none() {
+                            ui.add_enabled(c.fonction != FonctionCouche::Structure, egui::Checkbox::without_text(&mut c.retour))
+                                .on_hover_text("Retour aux insertions : la couche tourne dans les tableaux et le linteau des ouvertures, jusqu'au plan « Retour extérieur » ou « Retour intérieur » de leur famille")
+                                .on_disabled_hover_text("Une couche de structure ne se retourne pas");
+                        }
                         // ossature : montants dans l'épaisseur de la couche, réglés dans un menu
                         let resume = c.ossature.as_ref().map_or("—".to_string(), |o| format!("{:.0} / {:.0}", o.largeur, o.entraxe));
                         let bouton = ui.button(resume).on_hover_text("Ossature : montants à entraxe régulier dans la couche (largeur / entraxe, mm). Le matériau de la couche remplit les travées.");
@@ -277,7 +317,7 @@ impl RubanEdition {
                         ui.end_row();
                     }
                 });
-                ui.label(RichText::new(if terrain { "Fond" } else { "Intérieur" }).small().weak());
+                ui.label(RichText::new(if terrain { "Fond" } else if surface.is_some() { "Dessous" } else { "Intérieur" }).small().weak());
                 if let (Some(k), Some(t)) = (variable_clic, ed.terrain.as_mut()) {
                     let avant = t.variables.get(k).copied().unwrap_or(false);
                     t.variables.iter_mut().enumerate().for_each(|(j, v)| *v = j == k && !avant);
@@ -322,7 +362,9 @@ impl RubanEdition {
                 if let Some(e) = &ed.erreur {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }
-                ui.label(RichText::new(if terrain {
+                ui.label(RichText::new(if surface.is_some() {
+                    "Couches du dessus vers le dessous. Les éléments déjà tracés de ce type suivent ses couches ; l'épaisseur de l'élément est leur somme."
+                } else if terrain {
                     "Couches de haut en bas sous la surface du terrain ; la couche variable (à défaut, la dernière) comble jusqu'au fond plat. Tous les terrains de ce type suivent."
                 } else {
                     "Chaque couche sera tracée comme un mur indépendant, regroupé avec les autres en assemblage. Les murs déjà tracés gardent leurs couches."
@@ -363,6 +405,16 @@ impl RubanEdition {
             ed.erreur = Some("Ossature : l'entraxe doit dépasser la largeur des montants.".into());
             return false;
         }
+        if let Some(sorte) = ed.surface {
+            let id = enregistrer_surface(projet, ed, nom, sorte);
+            if let Some(t) = id.and_then(|id| projet.types_dalles.iter().find(|t| t.id == id)).cloned() {
+                let outil = Outil::TOUTES_SURFACES.into_iter().find(|o| sorte_surface(*o) == Some(sorte));
+                if let Some(o) = outil { self.type_surface.insert(o, t); }
+                self.editeur_type = None;
+                return true;
+            }
+            return false;
+        }
         if projet.types_murs.iter().any(|t| t.nom == nom && Some(&t.id) != ed.id.as_ref()) {
             ed.erreur = Some("Un autre type porte déjà ce nom.".into());
             return false;
@@ -378,7 +430,7 @@ impl RubanEdition {
             }
             None => {
                 let id = noyau::uuid::uuid();
-                projet.types_murs.push(modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
+                projet.types_murs.push(modele::TypeCompose { sorte: None, id: id.clone(), nom, couches: ed.couches.clone(), categorie: Some(ed.categorie), couches_detaillees: true, origine: None });
                 id
             }
         };
@@ -426,4 +478,31 @@ fn enregistrer_terrain(projet: &mut modele::Projet, ed: &mut EditeurType, nom: S
     }
     projet.completer_materiaux();
     true
+}
+
+/// Enregistre le brouillon d'un type d'élément horizontal dans `types_dalles`, avec sa
+/// sorte ; renvoie son identifiant. Les éléments du type suivent ses couches.
+fn enregistrer_surface(projet: &mut modele::Projet, ed: &mut EditeurType, nom: String, sorte: modele::SorteDalle) -> Option<String> {
+    if projet.types_dalles.iter().any(|t| t.nom == nom && Some(&t.id) != ed.id.as_ref()) {
+        ed.erreur = Some("Un autre type d'élément horizontal porte déjà ce nom.".into());
+        return None;
+    }
+    let id = match ed.id.as_ref().and_then(|id| projet.types_dalles.iter_mut().find(|t| &t.id == id)) {
+        Some(t) => {
+            (t.nom, t.couches, t.couches_detaillees, t.sorte) = (nom, ed.couches.clone(), true, Some(sorte));
+            t.id.clone()
+        }
+        None => {
+            let id = format!("type-dalle-{}", noyau::uuid::uuid());
+            projet.types_dalles.push(modele::TypeCompose { id: id.clone(), nom, couches: ed.couches.clone(), categorie: None, couches_detaillees: true, origine: None, sorte: Some(sorte) });
+            id
+        }
+    };
+    for m in &ed.materiaux {
+        if ed.couches.iter().any(|c| c.materiau.as_ref() == Some(&m.nom)) && projet.materiau(&m.nom).is_none() {
+            projet.materiaux.push(m.clone());
+        }
+    }
+    projet.completer_materiaux();
+    Some(id)
 }

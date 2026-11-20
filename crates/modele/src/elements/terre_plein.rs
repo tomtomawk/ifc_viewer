@@ -731,7 +731,7 @@ mod tests {
     pub(super) fn projet(talus: Option<f64>) -> (Projet, Dalle) {
         let mut p = Projet::nouveau("TP");
         p.niveaux.push(crate::Niveau { id: "n0".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
-        p.types_dalles.push(crate::TypeCompose { id: "tp".into(), nom: "Grave".into(), couches: vec![crate::Couche { epaisseur: 200.0, ..Default::default() }], categorie: Default::default(), couches_detaillees: true, origine: None });
+        p.types_dalles.push(crate::TypeCompose { sorte: None, id: "tp".into(), nom: "Grave".into(), couches: vec![crate::Couche { epaisseur: 200.0, ..Default::default() }], categorie: Default::default(), couches_detaillees: true, origine: None });
         // terrain plat à -1 m, 60 × 60 m
         p.terrains.push(Terrain { id: "t".into(), nom: "TN".into(), contour: vec![[-30_000., -30_000., -1000.], [30_000., -30_000., -1000.], [30_000., 30_000., -1000.], [-30_000., 30_000., -1000.]], points: vec![], type_terrain: None });
         let mut d = Dalle { variante: None, phase: None, sous_projet: None, id: "d".into(), nom: "Terre-plein".into(), type_dalle: "tp".into(), niveau: "n0".into(), sorte: SorteDalle::TerrePlein, decalage: 200.0, contours: vec![vec![[0., 0.], [10_000., 0.], [10_000., 10_000.], [0., 10_000.]]], pentes: vec![], talus_dessus: false, remblais: Vec::new(), type_remblai: None, origine: None };

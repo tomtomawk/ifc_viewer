@@ -45,7 +45,7 @@ impl Default for ParametresMur {
 impl ParametresMur {
     /// Type tracé : celui choisi, sinon une couche de l'épaisseur saisie.
     pub fn gabarit(&self, projet: &Projet) -> TypeCompose {
-        self.type_mur.as_ref().and_then(|id| projet.type_mur(id)).cloned().unwrap_or_else(|| TypeCompose {
+        self.type_mur.as_ref().and_then(|id| projet.type_mur(id)).cloned().unwrap_or_else(|| TypeCompose { sorte: None,
             id: String::new(),
             nom: String::new(),
             couches: vec![Couche { materiau: None, epaisseur: self.epaisseur, ..Default::default() }],
@@ -467,7 +467,7 @@ impl Projet {
         if self.niveaux.is_empty() {
             self.niveaux.push(Niveau { id: niveau.clone(), nom: "Niveau 0".into(), altitude: 0.0, origine: None });
         }
-        let type_dalle = match self.types_dalles.iter().find(|x| x.nom == t.nom && x.couches == t.couches) {
+        let type_dalle = match self.types_dalles.iter().find(|x| (!t.id.is_empty() && x.id == t.id) || (x.nom == t.nom && x.couches == t.couches && x.sorte.is_none_or(|s| s == p.sorte))) {
             Some(x) => x.id.clone(),
             None => {
                 let mut k = self.types_dalles.len() + 1;
@@ -476,7 +476,7 @@ impl Projet {
                     if self.types_dalles.iter().all(|x| x.id != id) { break id; }
                     k += 1;
                 };
-                self.types_dalles.push(TypeCompose { id: id.clone(), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None });
+                self.types_dalles.push(TypeCompose { sorte: Some(p.sorte), id: id.clone(), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None });
                 id
             }
         };
@@ -593,7 +593,7 @@ impl Projet {
             self.niveaux.push(Niveau { id: niveau.clone(), nom: "Niveau 0".into(), altitude: 0.0, origine: None });
         }
         if existant.is_none() {
-            self.types_murs.push(TypeCompose { id: type_mur.clone(), nom: format!("Mur · {} mm", p.epaisseur), couches: vec![Couche { materiau: None, epaisseur: p.epaisseur, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
+            self.types_murs.push(TypeCompose { sorte: None, id: type_mur.clone(), nom: format!("Mur · {} mm", p.epaisseur), couches: vec![Couche { materiau: None, epaisseur: p.epaisseur, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
         }
         let compose = compose.is_some_and(|t| t.couches.len() > 1);
         if self.phases.is_empty() { self.phases.push(p.phase.clone().unwrap_or_else(|| "Projet".into())); }
@@ -673,7 +673,7 @@ mod tests {
         for implantation in [Implantation::Axe,Implantation::Exterieure,Implantation::Interieure] {
             for fin in [false,true] {
                 let mut p=Projet::nouveau("Poignée composée");
-                p.types_murs.push(TypeCompose{id:"t".into(),nom:"Mur".into(),couches:vec![c("Enduit",20.,FonctionCouche::Finition),c("Béton",200.,FonctionCouche::Structure),c("Isolant",100.,FonctionCouche::Isolation)],categorie:None,couches_detaillees:true,origine:None});
+                p.types_murs.push(TypeCompose{ sorte: None,id:"t".into(),nom:"Mur".into(),couches:vec![c("Enduit",20.,FonctionCouche::Finition),c("Béton",200.,FonctionCouche::Structure),c("Isolant",100.,FonctionCouche::Isolation)],categorie:None,couches_detaillees:true,origine:None});
                 let id=p.ajouter_mur([0.,0.],[4000.,0.],&ParametresMur{implantation,type_mur:Some("t".into()),..Default::default()}).unwrap();
                 let (a,b,_)=p.ligne_justification(&id).unwrap();
                 let epaisseurs=|p:&Projet|p.couches_assemblage(&id).iter().map(|m|match m.axe{Axe::Droit{debut,fin}=>(debut[0]-fin[0]).hypot(debut[1]-fin[1]),_=>0.}).collect::<Vec<_>>();
@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn dalle_a_plusieurs_contours_parties_et_tremie() {
         let mut p = Projet::nouveau("D");
-        let t = TypeCompose { id: String::new(), nom: "Dalle".into(), couches: vec![Couche { epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None };
+        let t = TypeCompose { sorte: None, id: String::new(), nom: "Dalle".into(), couches: vec![Couche { epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None };
         let o = ParametresDalle { sorte: SorteDalle::Dalle, type_dalle: t, pente: None, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
         let rect = |x: f64, y: f64, l: f64| vec![[x, y], [x + l, y], [x + l, y + l], [x, y + l]];
         // partie principale, trémie à l'intérieur, seconde partie à l'extérieur

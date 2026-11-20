@@ -178,7 +178,7 @@ impl Projet {
         }
         let id = noyau::uuid::uuid();
         let nom = format!("{} · {} mm", c.materiau.as_deref().unwrap_or("Couche"), noyau::nombres::format_real(c.epaisseur));
-        self.types_murs.push(TypeCompose { id: id.clone(), nom, couches: vec![c.clone()], categorie: None, couches_detaillees: true, origine: None });
+        self.types_murs.push(TypeCompose { sorte: None, id: id.clone(), nom, couches: vec![c.clone()], categorie: None, couches_detaillees: true, origine: None });
         id
     }
 
@@ -326,7 +326,7 @@ mod tests {
 
     fn type_trois_couches() -> TypeCompose {
         let c = |m: &str, e: f64, f| Couche { materiau: Some(m.into()), epaisseur: e, fonction: f, plume: None, retour: false, ossature: None };
-        TypeCompose {
+        TypeCompose { sorte: None,
             id: "t".into(),
             nom: "Mur isolé".into(),
             couches: vec![c("Enduit", 20.0, FonctionCouche::Finition), c("Béton", 200.0, FonctionCouche::Structure), c("Laine de verre", 100.0, FonctionCouche::Isolation)],

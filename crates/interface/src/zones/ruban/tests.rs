@@ -104,7 +104,7 @@ fn apercu_des_couches_dessine_le_motif_de_coupe() {
 fn crayon_du_type_courant_ouvre_son_editeur() {
     let ctx = egui::Context::default();
     let mut projet = modele::Projet::nouveau("Test");
-    projet.types_murs.push(modele::TypeCompose {
+    projet.types_murs.push(modele::TypeCompose { sorte: None,
         id: "mur-test".into(), nom: "Mur test".into(),
         couches: vec![modele::Couche { epaisseur: 200.0, ..Default::default() }],
         categorie: None, couches_detaillees: true, origine: None,
@@ -284,7 +284,7 @@ fn selecteur_surfaces_et_reglages_independants() {
             .shapes
             .iter()
             .filter_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.text() == "Dalle · Dalle BA 200" => Some(t.pos),
+                egui::Shape::Text(t) if t.galley.text() == "Dalle · Dalle générique" => Some(t.pos),
                 _ => None,
             })
             .next_back()
@@ -294,7 +294,7 @@ fn selecteur_surfaces_et_reglages_independants() {
             "le sélecteur doit se trouver dans la palette sous le ruban"
         );
         // la liste reste ouverte d'un onglet de sorte à l'autre
-        cliquer(&ctx, &mut ruban, largeur, "Dalle · Dalle BA 200");
+        cliquer(&ctx, &mut ruban, largeur, "Dalle · Dalle générique");
         cliquer(
             &ctx,
             &mut ruban,

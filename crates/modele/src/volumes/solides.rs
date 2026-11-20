@@ -623,7 +623,7 @@ pub(super) mod tests {
             altitude: 0.0,
             origine: None,
         });
-        p.types_murs.push(TypeCompose {
+        p.types_murs.push(TypeCompose { sorte: None,
             id: "t".into(),
             nom: "Mur".into(),
             couches: vec![Couche {
@@ -786,7 +786,7 @@ mod tests_jonctions {
     #[test]
     fn mur_attache_suit_la_toiture_et_se_detache() {
         let mut p = super::tests::exemple();
-        let t = TypeCompose {
+        let t = TypeCompose { sorte: None,
             id: "toit".into(),
             nom: "Toiture".into(),
             couches: vec![Couche {

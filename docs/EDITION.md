@@ -188,6 +188,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   clic droit ; Entrée ne le ferme plus, elle valide la commande. Un nouveau tracé
   continue le même élément : un contour extérieur ajoute une partie, un contour
   intérieur à un autre est une trémie. L'élément est créé à la validation.
+  Le sélecteur propose les types du projet de la sorte (onglets Dalle, Sol, Plafond,
+  Toiture) ; Modifier, Dupliquer et « + Nouveau type… » ouvrent l'éditeur des types de
+  murs (couches du dessus vers le dessous, fonction, matériau, épaisseur, plume,
+  ossature). Les éléments du type suivent ses couches.
   Pour les éléments horizontaux et les limites de propriété, **Sélectionner** dans le
   bandeau, l'onglet **Modifier** ou Échap interrompt le tracé et permet de choisir un
   sommet ou un segment. **Déplacer** utilise un point de départ et un point d'arrivée ;

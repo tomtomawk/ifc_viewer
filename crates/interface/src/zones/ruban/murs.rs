@@ -236,7 +236,7 @@ impl RubanEdition {
             }
             None => {
                 let id = noyau::uuid::uuid();
-                projet.types_murs.push(modele::TypeCompose { id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
+                projet.types_murs.push(modele::TypeCompose { sorte: None, id: id.clone(), nom: nom.into(), couches, categorie, couches_detaillees: true, origine: None });
                 id
             }
         };

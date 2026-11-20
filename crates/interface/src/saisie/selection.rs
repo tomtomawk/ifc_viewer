@@ -100,7 +100,8 @@ impl Application {
             let types = p.types_murs.iter().filter(|t| t.couches.len() == 1).map(|t| (t.id.clone(), t.nom.clone(), modele::unite::unite().afficher(t.epaisseur()))).collect();
             (Cible::Mur(m.id.clone()), m.type_mur.clone(), types)
         } else if let Some(d) = p.dalles.iter().find(|d| &d.id == id) {
-            let types = p.types_dalles.iter().map(|t| (t.id.clone(), t.nom.clone(), modele::unite::unite().afficher(t.epaisseur()))).collect();
+            // types de la sorte de l'élément (dalle, sol, toiture…) seulement
+            let types = p.types_surface(d.sorte).into_iter().filter(|t| !t.id.is_empty()).map(|t| (t.id.clone(), t.nom.clone(), modele::unite::unite().afficher(t.epaisseur()))).collect();
             (Cible::Dalle(d.id.clone()), d.type_dalle.clone(), types)
         } else if let Some(o) = p.ouvertures.iter().find(|o| &o.id == id) {
             // portes et fenêtres : même objet, rangé par catégorie (libre à part)

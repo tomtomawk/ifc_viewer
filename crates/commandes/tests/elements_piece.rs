@@ -97,7 +97,7 @@ fn piece_ouverte_refusee_et_recalcul() {
 fn piece_mur_compose() {
     use modele::{Couche, TypeCompose};
     let mut p = projet();
-    p.types_murs.push(TypeCompose {
+    p.types_murs.push(TypeCompose { sorte: None,
         id: "compose".into(),
         nom: "Composé".into(),
         couches: vec![Couche { epaisseur: 20.0, ..Default::default() }, Couche { epaisseur: 200.0, ..Default::default() }, Couche { epaisseur: 13.0, ..Default::default() }],

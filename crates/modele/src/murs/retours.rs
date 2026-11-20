@@ -284,7 +284,7 @@ mod tests {
         let mut p = Projet::nouveau("Retours");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
         for (id, e, f, y) in [("b", 200.0, FonctionCouche::Structure, 0.0), ("i", 100.0, FonctionCouche::Isolation, 150.0), ("e", 20.0, FonctionCouche::Finition, 210.0), ("p", 13.0, FonctionCouche::Finition, -106.5)] {
-            p.types_murs.push(TypeCompose { id: id.into(), nom: id.into(), couches: vec![Couche { epaisseur: e, fonction: f, retour: retour && f != FonctionCouche::Structure, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
+            p.types_murs.push(TypeCompose { sorte: None, id: id.into(), nom: id.into(), couches: vec![Couche { epaisseur: e, fonction: f, retour: retour && f != FonctionCouche::Structure, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
             p.murs.push(Mur { id: id.into(), nom: id.into(), type_mur: id.into(), niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, y], fin: [6000.0, y] }, assemblage: None, phase: None, sous_projet: None, variante: None, origine: None });
         }
         let mut f = FamilleModelee::gabarit_fenetre();

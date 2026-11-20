@@ -8,6 +8,7 @@
 //! repère du projet).
 
 pub mod contextes;
+mod types_surfaces;
 pub mod creation;
 pub mod documentation;
 pub mod elements;
@@ -663,6 +664,11 @@ pub struct TypeCompose {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub categorie: Option<CategorieMur>,
     pub origine: Option<Origine>,
+    /// Sorte d'élément horizontal du type (`types_dalles` : dalle, sol, toiture, plafond,
+    /// terre-plein), pour le ranger dans l'onglet de sa sorte ; absente : type d'un mur, ou
+    /// type d'élément horizontal antérieur (rangé d'après les éléments qui l'utilisent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sorte: Option<SorteDalle>,
 }
 
 impl TypeCompose {
@@ -1209,7 +1215,11 @@ impl Projet {
             let _ = p.ajouter_vue_plan(&id, 1200.0);
         }
         for t in &g.types_murs {
-            p.types_murs.push(TypeCompose { id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), categorie: t.categorie, couches_detaillees: true, origine: None });
+            p.types_murs.push(TypeCompose { sorte: None, id: identifiant("type-mur", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), categorie: t.categorie, couches_detaillees: true, origine: None });
+        }
+        // types d'éléments horizontaux : copiés une fois, avec leur sorte
+        for t in &g.types_surfaces {
+            p.types_dalles.push(TypeCompose { id: identifiant("type-dalle", &format!("gabarit:{:?}:{}", t.sorte, t.nom)), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None, sorte: Some(t.sorte) });
         }
         p.types_traits = g.types_traits.clone();
         p.profils = g.profils.iter().cloned().map(|mut p| { p.id = identifiant("profil", &format!("gabarit:{}", p.nom)); p }).collect();
@@ -1619,7 +1629,7 @@ mod tests {
     fn volume_et_json() {
         let mut p = Projet::nouveau("essai");
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
-        p.types_murs.push(TypeCompose { id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: false, origine: None });
+        p.types_murs.push(TypeCompose { sorte: None, id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: false, origine: None });
         p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), assemblage: None, niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
         p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, valeurs: BTreeMap::new(), materiaux: BTreeMap::new(), retournee: false, inversee: false, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);
