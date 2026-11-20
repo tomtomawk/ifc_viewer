@@ -100,8 +100,7 @@ pub fn famille_vegetal(e: Essence) -> FamilleModelee {
     };
     let tronc = vec![pt("Centre", "Bas"), pt("Tronc", "Bas"), pt("Tronc", "Z50"), pt("Centre", "Z50")];
     // en plan, le cercle du houppier remplace la vue des solides
-    let mut vis = VisibiliteElement::default();
-    vis.plan = false;
+    let vis = VisibiliteElement { plan: false, ..Default::default() };
     let forme_rev = |nom: &str, profil, materiau: &str| FormeProfil {
         operation: OperationForme::Revolution { revolution: Revolution { axe: [[0.0, 0.0], [0.0, 100.0]], debut: 0.0, angle: 360.0 } },
         support: None,

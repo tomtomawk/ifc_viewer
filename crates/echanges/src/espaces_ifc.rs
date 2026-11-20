@@ -47,7 +47,9 @@ fn distance_segment(q: DVec2, a: DVec2, b: DVec2) -> f64 {
 /// centre de boîte hors d'elle).
 pub(crate) fn point_interieur(faces: &[[DVec2; 3]]) -> Option<DVec2> {
     let cle = |p: DVec2| ((p.x * 10.0).round() as i64, (p.y * 10.0).round() as i64);
-    let mut aretes: HashMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = HashMap::new();
+    /// Arête repérée par ses extrémités arrondies au dixième de mm, dans l'ordre.
+    type CleArete = ((i64, i64), (i64, i64));
+    let mut aretes: HashMap<CleArete, (usize, DVec2, DVec2)> = HashMap::new();
     for t in faces {
         for i in 0..3 {
             let (a, b) = (t[i], t[(i + 1) % 3]);

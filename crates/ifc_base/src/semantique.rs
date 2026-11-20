@@ -471,7 +471,7 @@ pub fn pretty_type(ty: &str) -> String {
         for w in &words {
             if rest[i..].starts_with(w) {
                 let mut cs = w.chars();
-                out.push(cs.next().unwrap());
+                out.extend(cs.next());
                 out.extend(cs.map(|c| c.to_ascii_lowercase()));
                 i += w.len();
                 continue 'outer;
@@ -479,7 +479,7 @@ pub fn pretty_type(ty: &str) -> String {
         }
         // Mot inconnu : on garde le reste en minuscules avec majuscule initiale.
         let mut cs = rest[i..].chars();
-        out.push(cs.next().unwrap());
+        out.extend(cs.next());
         out.extend(cs.map(|c| c.to_ascii_lowercase()));
         break;
     }

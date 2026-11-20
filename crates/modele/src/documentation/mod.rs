@@ -57,7 +57,7 @@ impl TypeTrait {
     pub fn decouper(&self, a: DVec2, b: DVec2, echelle: f64, phase: &mut f64) -> Vec<[DVec2; 2]> {
         let l = a.distance(b);
         let periode: f64 = self.tirets.iter().sum::<f64>() * echelle;
-        if self.tirets.is_empty() || !(periode > 1e-9) || l < 1e-9 {
+        if self.tirets.is_empty() || periode.is_nan() || periode <= 1e-9 || l < 1e-9 {
             return vec![[a, b]];
         }
         let u = (b - a) / l;
@@ -621,8 +621,8 @@ fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, courbures
         if t.tirets.is_empty() {
             let mut l: Vec<DVec3> = segments[k..fin].iter().flat_map(|s| &s[..s.len() - 1]).map(|q| pt(*q)).collect();
             let ferme = k == 0 && fin == segments.len() && fermee && pts.len() > 2;
-            if !ferme {
-                l.push(pt(*segments[fin - 1].last().unwrap()));
+            if let (false, Some(q)) = (ferme, segments[fin - 1].last()) {
+                l.push(pt(*q));
             }
             out.push(Primitive { forme: Forme::Polyligne { points: l, fermee: ferme }, style, role: Role::Annotation, element: None });
         } else {

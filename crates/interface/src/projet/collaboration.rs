@@ -81,7 +81,7 @@ impl Application {
         self.appliquer_projet_interne(travail, true)?;
         self.collaboration
             .as_mut()
-            .unwrap()
+            .ok_or("Collaboration absente")?
             .synchroniser(None, false)
     }
     pub(crate) fn rouvrir_collaboration(&mut self) {
@@ -220,11 +220,8 @@ impl Application {
             }
         });
         if let Some((reservation, instantane)) = action {
-            if let Err(e) = self
-                .collaboration
-                .as_mut()
-                .unwrap()
-                .synchroniser(reservation, instantane)
+            if let Some(c) = self.collaboration.as_mut()
+                && let Err(e) = c.synchroniser(reservation, instantane)
             {
                 self.error = Some(e);
             }
@@ -232,12 +229,11 @@ impl Application {
         }
     }
     pub(crate) fn fenetres_collaboration(&mut self, ctx: &egui::Context) {
-        if self.collaboration.is_none() {
+        let Some(c) = self.collaboration.as_ref() else {
             return;
-        }
+        };
         let mut abandon = None;
         let mut locale = None;
-        let c = self.collaboration.as_ref().unwrap();
         let libre = !c.synchronisation_en_cours();
         if !c.copie.conflits.is_empty() {
             egui::Window::new("Conflits collaboratifs — propositions conservées").show(ctx, |ui| {
@@ -291,8 +287,8 @@ impl Application {
             let r = self
                 .collaboration
                 .as_mut()
-                .unwrap()
-                .abandonner(&id)
+                .ok_or_else(|| String::from("Collaboration absente"))
+                .and_then(|c| c.abandonner(&id))
                 .and_then(|p| self.appliquer_projet_interne(p, true));
             if let Err(e) = r {
                 self.error = Some(e);
@@ -302,8 +298,8 @@ impl Application {
             let r = self
                 .collaboration
                 .as_mut()
-                .unwrap()
-                .resoudre_locale(&id)
+                .ok_or_else(|| String::from("Collaboration absente"))
+                .and_then(|c| c.resoudre_locale(&id))
                 .and_then(|p| self.appliquer_projet_interne(p, true));
             if let Err(e) = r {
                 self.error = Some(e);

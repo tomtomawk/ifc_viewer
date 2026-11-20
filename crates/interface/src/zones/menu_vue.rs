@@ -146,7 +146,7 @@ impl Application {
 
     /// Poignée au milieu du mur ou de la poutre sélectionnés (hors commande) : la glisser déplace le mur ;
     /// les flèches d'inversion à côté retournent son sens. Rend vrai si la souris est prise.
-    pub(crate) fn poignee_milieu(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, axe: &Option<(String, [f64; 2], [f64; 2], f64, f64)>) -> bool {
+    pub(crate) fn poignee_milieu(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, axe: &Option<crate::saisie::saisie_plan::AxeSelection>) -> bool {
         let Some((id, a, b, z, _)) = axe else {
             self.glisse_milieu = None;
             return false;

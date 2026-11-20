@@ -17,3 +17,6 @@ image.workspace = true
 
 [dev-dependencies]
 maillage = { path = "../maillage" }
+
+[lints]
+workspace = true

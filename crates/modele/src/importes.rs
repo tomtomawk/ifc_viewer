@@ -183,7 +183,9 @@ mod tests {
     /// négative, unité ou matériau vides.
     #[test]
     fn rejet() {
-        let cas: Vec<(&str, Box<dyn Fn(&mut DonneesImportees)>)> = vec![
+        /// Altération des données qui doit les faire rejeter.
+        type Alteration = Box<dyn Fn(&mut DonneesImportees)>;
+        let cas: Vec<(&str, Alteration)> = vec![
             ("jeu sans nom", Box::new(|d| d.proprietes[0].nom = " ".into())),
             ("jeu en double", Box::new(|d| d.proprietes[1].nom = "Pset_Essai".into())),
             ("propriété sans nom", Box::new(|d| d.proprietes[0].proprietes[0].nom.clear())),

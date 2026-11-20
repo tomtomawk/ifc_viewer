@@ -81,9 +81,9 @@ impl Application {
         points_ui(ui, &mut self.bim.points);
         if ui.button("Utiliser le dernier point cliqué").clicked()
             && let Some(pt) = self.point_clique
+            && let Some((p, _)) = self.natif.as_ref()
+            && let Some(v) = p.vues.iter().find(|v| v.id == vue)
         {
-            let p = &self.natif.as_ref().unwrap().0;
-            let v = p.vues.iter().find(|v| v.id == vue).unwrap();
             let (o, u, h) = modele::documentation::repere(p, v);
             let d = pt * 1000.0 - o;
             self.bim.points[0] = [d.dot(u), d.dot(h)];

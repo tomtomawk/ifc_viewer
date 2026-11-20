@@ -83,10 +83,14 @@ impl ExecutionCopier for Projet {
                 let mut ordre: Vec<_> = set.iter().collect();
                 ordre.sort();
                 for old in ordre {
-                    let id = (1u64..)
-                        .map(|n| format!("copie-{n}"))
-                        .find(|n| !connus.contains(n))
-                        .unwrap();
+                    let mut n = 1u64;
+                    let id = loop {
+                        let candidat = format!("copie-{n}");
+                        if !connus.contains(&candidat) {
+                            break candidat;
+                        }
+                        n += 1;
+                    };
                     connus.insert(id.clone());
                     map.insert(old.clone(), id);
                 }

@@ -31,9 +31,14 @@ fn fond(ui: &egui::Ui, r: egui::Rect, courant: bool, survol: bool, arrondi: f32)
     }
 }
 
+/// Dessin de la vignette d'un en-tête : peintre, zone, couleur de l'encre.
+pub(crate) type VignetteEntete<'a> = &'a dyn Fn(&egui::Painter, egui::Rect, Color32);
+/// Dessin de la vignette d'une ligne de la liste, dans la zone prévue.
+pub(crate) type VignetteLigne<'a> = &'a mut dyn FnMut(&mut egui::Ui, egui::Rect);
+
 /// En-tête fermé du sélecteur : vignette facultative, titre (« catégorie · nom »),
 /// détail grisé à droite, flèche. Réponse cliquable : à passer à [`liste`].
-pub(crate) fn entete(ui: &mut egui::Ui, titre: &str, detail: Option<&str>, bulle: &str, vignette: Option<&dyn Fn(&egui::Painter, egui::Rect, Color32)>) -> egui::Response {
+pub(crate) fn entete(ui: &mut egui::Ui, titre: &str, detail: Option<&str>, bulle: &str, vignette: Option<VignetteEntete<'_>>) -> egui::Response {
     let largeur = ui.available_width();
     let hauteur = if vignette.is_some() { HAUTEUR_ENTETE } else { 30.0 };
     let (r, bouton) = ui.allocate_exact_size(egui::vec2(largeur, hauteur), Sense::click());
@@ -144,7 +149,7 @@ pub(crate) struct Clic {
 
 /// Trace une ligne de type ; `vignette` dessine dans la zone prévue (rien si None).
 /// Ferme la liste sur un choix ou une action.
-pub(crate) fn ligne(ui: &mut egui::Ui, l: &Ligne, vignette: Option<&mut dyn FnMut(&mut egui::Ui, egui::Rect)>) -> Clic {
+pub(crate) fn ligne(ui: &mut egui::Ui, l: &Ligne, vignette: Option<VignetteLigne<'_>>) -> Clic {
     let hauteur = if l.sous_titre.is_some() { HAUTEUR_LIGNE_DOUBLE } else { HAUTEUR_LIGNE };
     let (r, reponse) = ui.allocate_exact_size(egui::vec2(ui.available_width(), hauteur), Sense::click());
     let survol = ui.rect_contains_pointer(r);

@@ -92,7 +92,9 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             .unwrap_or_else(|| if topo { "IFCGEOGRAPHICELEMENT".into() } else if o.categorie.to_uppercase().starts_with("IFC") { o.categorie.to_uppercase() } else { "IFCBUILDINGELEMENTPROXY".into() });
         entite(id_natif("importe", &o.id), &classe, &o.id, &o.nom, 9)?;
     }
-    for n in &projet.niveaux { file.entities.get_mut(&id_natif("niveau", &n.id)).unwrap().args[9] = Value::Real(n.altitude); }
+    for n in &projet.niveaux {
+        if let Some(e) = file.entities.get_mut(&id_natif("niveau", &n.id)) { e.args[9] = Value::Real(n.altitude); }
+    }
     let mut model = IfcModel::new(file);
     model.length_scale = 0.001;
     for n in &projet.niveaux {

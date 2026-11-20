@@ -31,13 +31,17 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::Arc;
 
+/// Métadonnées Revit, scène des murs (ou raison de son absence) et source ouverte.
+type ChargementRevit = (Box<RvtInfo>, Result<Box<Scene>, String>, echanges::enregistrement::SourceRvt);
+
+#[allow(clippy::large_enum_variant, reason = "un message par chargement de document : boîter le projet compliquerait les filtrages de poll_loading sans gain mesurable")]
 enum LoadMsg {
     Partage(Result<(Box<Scene>, modele::Projet, PathBuf, ::collaboration::session::Session), String>, Option<usize>),
     Natif(Result<(Box<Scene>, modele::Projet, PathBuf), String>),
     Progress(String),
     Done(Result<Box<Scene>, String>),
     /// Métadonnées, puis scène des murs (ou raison de son absence).
-    Revit(Result<(Box<RvtInfo>, Result<Box<Scene>, String>, echanges::enregistrement::SourceRvt), String>),
+    Revit(Result<ChargementRevit, String>),
 }
 
 enum SaveMsg {

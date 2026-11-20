@@ -94,7 +94,10 @@ impl Terrain {
                 if voisines.len() != 2 { return Err("Le point coté doit être strictement à l'intérieur du terrain.".into()); }
                 for i in voisines.into_iter().rev() {
                     let t = faces.swap_remove(i);
-                    let k = (0..3).find(|&k| (t[k] == a && t[(k+1)%3] == b) || (t[k] == b && t[(k+1)%3] == a)).unwrap();
+                    let Some(k) = (0..3).find(|&k| (t[k] == a && t[(k+1)%3] == b) || (t[k] == b && t[(k+1)%3] == a)) else {
+                        faces.push(t);
+                        continue;
+                    };
                     let (x, y, z) = (t[k], t[(k+1)%3], t[(k+2)%3]);
                     faces.extend([[x,n,z], [n,y,z]]);
                 }
@@ -143,8 +146,8 @@ fn delaunay(s: &[DVec2], faces: &mut [[usize; 3]]) {
         for ((a, b), voisines) in aretes {
             let [i, j] = voisines[..] else { continue };
             if touchees[i] || touchees[j] { continue; }
-            let oppose = |f: [usize; 3]| f.into_iter().find(|&x| x != a && x != b).unwrap();
-            let (c, d) = (oppose(faces[i]), oppose(faces[j]));
+            let oppose = |f: [usize; 3]| f.into_iter().find(|&x| x != a && x != b);
+            let (Some(c), Some(d)) = (oppose(faces[i]), oppose(faces[j])) else { continue };
             let t = faces[i];
             if !dans_cercle(s[t[0]], s[t[1]], s[t[2]], s[d]) { continue; }
             // la nouvelle diagonale c-d doit couper a-b : quadrilatère convexe

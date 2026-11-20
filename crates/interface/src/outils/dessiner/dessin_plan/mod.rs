@@ -142,7 +142,7 @@ pub(crate) struct EtatDessin2D {
     /// Poignée sous le curseur, poignée glissée et état d'avant le glissé (repris si le
     /// terrain devient impossible à trianguler).
     terrain_survol: Option<PoigneeTerrain>,
-    terrain_glisse: Option<(PoigneeTerrain, Vec<[f64; 2]>, Vec<f64>, Vec<[f64; 3]>)>,
+    terrain_glisse: Option<GlisseTerrain>,
     dernier_usage: Option<Usage>,
     pub edition_contour: Option<EditionContour>,
     /// Heure du premier Échap sur un tracé modifié : un second, dans les 4 s, l'abandonne.
@@ -154,8 +154,13 @@ pub(crate) struct EtatDessin2D {
     pub(crate) aretes_cote: Vec<(String, usize, f64)>,
     pub(crate) arete_premiere: Option<crate::outils::annoter::cotes_aretes::AreteVisee>,
     pub(crate) arete_survol: Option<crate::outils::annoter::cotes_aretes::AreteVisee>,
-    pub(crate) aretes_cache: Option<(u64, String, Vec<(String, usize, [DVec2; 2])>)>,
+    pub(crate) aretes_cache: Option<(u64, String, Vec<AreteVue>)>,
 }
+
+/// Glissé d'une poignée du terrain : poignée, contour, cotes et points d'avant le glissé.
+type GlisseTerrain = (PoigneeTerrain, Vec<[f64; 2]>, Vec<f64>, Vec<[f64; 3]>);
+/// Arête d'un élément dans la vue : élément, rang de l'arête, extrémités.
+pub(crate) type AreteVue = (String, usize, [DVec2; 2]);
 
 pub(crate) struct EditionContour {
     id: String,
@@ -213,7 +218,7 @@ fn fermer_par_extremite(contour: &mut Vec<[f64; 2]>, sommet: usize) -> bool {
     true
 }
 
-fn ouvrir_contour(contour: &mut Vec<[f64; 2]>, segment: usize) {
+fn ouvrir_contour(contour: &mut [[f64; 2]], segment: usize) {
     let debut = (segment + 1) % contour.len();
     contour.rotate_left(debut);
 }
@@ -406,8 +411,8 @@ impl Application {
             return;
         }
         if self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps))) { return; }
-        let Some((c, i)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.segment) else { return };
-        let e = self.dessin2d.edition_contour.as_mut().unwrap();
+        let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
+        let Some((c, i)) = e.segment else { return };
         let mut k = courbures::du_contour(&self.dessin2d.dalle, &self.dessin2d.courbures, c);
         if e.fermee(c) {
             // le contour s'ouvre au trait retiré : il commence au sommet suivant
@@ -472,7 +477,7 @@ impl Application {
         raccorder_contour(&mut self.dessin2d.dalle[c], premier, &trace.points);
         trace.points.clear();
         courbures::definir(&mut self.dessin2d.courbures, c, k);
-        let e = self.dessin2d.edition_contour.as_mut().unwrap();
+        let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
         e.raccord = None;
         e.dessin = false;
     }
@@ -488,9 +493,9 @@ impl Application {
             return true;
         }
         let mut k_trace = self.dessin2d.trace.as_ref().map(|t| { let mut k = t.courbures(); k.resize(t.points.len().saturating_sub(1), 0.0); k }).unwrap_or_default();
-        let autre = self.dessin2d.dalle.iter().enumerate().filter(|(i, _)| *i != c && !self.dessin2d.edition_contour.as_ref().unwrap().fermee(*i)).find_map(|(i, t)| {
+        let autre = self.dessin2d.dalle.iter().enumerate().filter(|(i, _)| *i != c && self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.fermee(*i))).find_map(|(i, t)| {
             if DVec2::from_array(t[0]).distance(p) < 1e-6 { Some((i, true)) }
-            else if DVec2::from_array(*t.last().unwrap()).distance(p) < 1e-6 { Some((i, false)) }
+            else if t.last().is_some_and(|q| DVec2::from_array(*q).distance(p) < 1e-6) { Some((i, false)) }
             else { None }
         });
         if let Some((autre, debut)) = autre {
@@ -504,26 +509,27 @@ impl Application {
             ka.append(&mut k_trace);
             ka.push(0.0);
             ka.extend(kb);
-            a.extend(self.dessin2d.trace.as_ref().unwrap().points.iter().skip(1).map(|p| p.to_array()));
+            if let Some(t) = self.dessin2d.trace.as_ref() { a.extend(t.points.iter().skip(1).map(|p| p.to_array())); }
             a.extend(b);
             self.dessin2d.dalle[c] = a;
             self.dessin2d.definir_courbures(c, ka);
             self.dessin2d.dalle.remove(autre);
             self.dessin2d.retirer_courbures(autre);
-            self.dessin2d.trace.as_mut().unwrap().points.clear();
-            let e = self.dessin2d.edition_contour.as_mut().unwrap();
-            e.fermees.remove(autre);
-            e.selection = Some(if autre < c { c - 1 } else { c });
-            e.raccord = None;
-            e.dessin = false;
+            if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
+            if let Some(e) = self.dessin2d.edition_contour.as_mut() {
+                e.fermees.remove(autre);
+                e.selection = Some(if autre < c { c - 1 } else { c });
+                e.raccord = None;
+                e.dessin = false;
+            }
             { self.dessin2d.message = None; self.dessin2d.information = None; };
             return true;
         }
         let k_contour = self.dessin2d.courbures_contour(c);
         let arc = self.dessin2d.arc_demande;
         let contour = &mut self.dessin2d.dalle[c];
-        let cible = DVec2::from_array(if premier { *contour.last().unwrap() } else { contour[0] });
-        let trace = self.dessin2d.trace.as_mut().unwrap();
+        let Some(cible) = (if premier { contour.last() } else { contour.first() }).map(|q| DVec2::from_array(*q)) else { return false };
+        let Some(trace) = self.dessin2d.trace.as_mut() else { return false };
         if p.distance(cible) < 1e-6 {
             if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation == Some(Usage::Terrain)) {
                 let n = trace.points.len().saturating_sub(1);
@@ -535,10 +541,11 @@ impl Application {
             raccorder_contour(contour, premier, &trace.points);
             trace.points.clear();
             courbures::definir(&mut self.dessin2d.courbures, c, k);
-            let e = self.dessin2d.edition_contour.as_mut().unwrap();
-            e.fermees[c] = true;
-            e.raccord = None;
-            e.dessin = false;
+            if let Some(e) = self.dessin2d.edition_contour.as_mut() {
+                e.fermees[c] = true;
+                e.raccord = None;
+                e.dessin = false;
+            }
             { self.dessin2d.message = None; self.dessin2d.information = None; };
         } else if trace.points.last().is_none_or(|q| q.distance(p) > 1e-6) {
             // Alt : ce point termine un segment d'arc, le suivant donne sa courbure
@@ -558,9 +565,9 @@ impl Application {
             });
             if let Some((c, premier)) = trouve {
                 let points = &self.dessin2d.dalle[c];
-                let point = if premier { points[0] } else { *points.last().unwrap() };
-                self.dessin2d.trace.as_mut().unwrap().points.push(DVec2::from_array(point));
-                self.dessin2d.edition_contour.as_mut().unwrap().raccord = Some((c, premier));
+                let Some(&point) = (if premier { points.first() } else { points.last() }) else { return false };
+                if let Some(t) = self.dessin2d.trace.as_mut() { t.points.push(DVec2::from_array(point)); }
+                if let Some(e) = self.dessin2d.edition_contour.as_mut() { e.raccord = Some((c, premier)); }
                 self.dessin2d.saisie.clear();
                 self.dessin2d.message = None; self.dessin2d.information = None;
                 return true;
@@ -1066,7 +1073,7 @@ impl Application {
                     noyau::trace2d::Forme::Segments(segments) => for [a,b] in segments { g.push(Geom::Segment([point(a),point(b)])); },
                     noyau::trace2d::Forme::Polyligne { points, fermee } => {
                         for w in points.windows(2) { g.push(Geom::Segment([point(w[0]),point(w[1])])); }
-                        if fermee && points.len() > 2 { g.push(Geom::Segment([point(*points.last().unwrap()),point(points[0])])); }
+                        if fermee && points.len() > 2 && let (Some(&dernier), Some(&premier)) = (points.last(), points.first()) { g.push(Geom::Segment([point(dernier),point(premier)])); }
                     }
                     _ => {}
                 }
@@ -1082,7 +1089,7 @@ impl Application {
                         noyau::trace2d::Forme::Segments(segments)=>for [a,b] in segments {g.push(Geom::Segment([point(a),point(b)]));},
                         noyau::trace2d::Forme::Polyligne{points,fermee}=>{
                             for w in points.windows(2) {g.push(Geom::Segment([point(w[0]),point(w[1])]));}
-                            if fermee && points.len()>2 {g.push(Geom::Segment([point(*points.last().unwrap()),point(points[0])]));}
+                            if fermee && points.len()>2 && let (Some(&dernier), Some(&premier)) = (points.last(), points.first()) {g.push(Geom::Segment([point(dernier),point(premier)]));}
                         },
                         _=>{}
                     }

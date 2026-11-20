@@ -118,7 +118,9 @@ impl Etat {
                         .as_ref()
                         .is_some_and(|id| self.acceptes.contains_key(id))
                     {
-                        out.textes.get_mut(id).unwrap().supprime = false;
+                        if let Some(e) = out.textes.get_mut(id) {
+                            e.supprime = false;
+                        }
                     } else {
                         return Err(erreur("Identité d'annotation supprimée : restauration compensatrice explicite nécessaire".into()));
                     }
@@ -429,11 +431,11 @@ impl Autorite {
         }
         while pos < bytes.len() {
             let debut = pos;
-            if bytes.len() - pos < 8 {
+            let Some(tete) = bytes.get(pos..pos + 8).and_then(|b| <[u8; 8]>::try_from(b).ok()) else {
                 self.tronquer(debut)?;
                 break;
-            }
-            let len = u64::from_le_bytes(bytes[pos..pos + 8].try_into().unwrap()) as usize;
+            };
+            let len = u64::from_le_bytes(tete) as usize;
             pos += 8;
             if len > 256 * 1024 * 1024 {
                 return Err("Corruption : longueur de registre invalide".into());

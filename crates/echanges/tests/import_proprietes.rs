@@ -1,5 +1,6 @@
 //! Import IFC qui garde les données : propriétés, quantités, matériau et couleur des
 //! éléments importés (`samples/test_ifc4_proprietes.ifc`).
+#![allow(clippy::unwrap_used, clippy::panic, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use echanges::depuis_ifc;
 use modele::{ElementImporte, Projet};
 use std::path::Path;

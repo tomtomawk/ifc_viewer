@@ -147,9 +147,9 @@ struct Lecteur<'s, 'b> {
 }
 
 fn take<const N: usize>(r: &mut Lecteur, what: &str) -> Result<[u8; N], String> {
-    let v = r.b.get(r.o..r.o + N).ok_or_else(|| format!("fin des données à {} ({what})", r.o))?;
+    let v: [u8; N] = r.b.get(r.o..r.o + N).and_then(|v| v.try_into().ok()).ok_or_else(|| format!("fin des données à {} ({what})", r.o))?;
     r.o += N;
-    Ok(v.try_into().unwrap())
+    Ok(v)
 }
 
 impl<'s> Lecteur<'s, '_> {

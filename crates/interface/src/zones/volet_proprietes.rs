@@ -38,11 +38,11 @@ impl Application {
                 .on_hover_text("Le fichier ouvert est en lecture seule : convertir le modèle pour modifier ses types.");
             ui.separator();
         }
-        if self.natif.is_some() {
+        if let Some((projet_ouvert, _)) = self.natif.as_ref() {
             let ids = self.selection_bim();
             let mut gerer = false;
             if ids.is_empty() {
-                let mut contexte = self.natif.as_ref().unwrap().0.clone();
+                let mut contexte = projet_ouvert.clone();
                 if self.ruban_edition.contexte_creation(ui, &mut contexte)
                     && let Err(e) = self.appliquer_projet(contexte) { self.error = Some(e); }
             } else if let Some(projet) = self.contexte_selection(ui, &ids, &mut gerer)
@@ -81,8 +81,7 @@ impl Application {
                 ui.label(RichText::new(format!("{} éléments de même sorte sélectionnés : une modification de l'élément affiché s'applique à tous.", memes.len())).small().weak());
             }
         }
-        if self.natif.is_some() {
-            let projet = &self.natif.as_ref().unwrap().0;
+        if let Some((projet, _)) = self.natif.as_ref() {
             // éditeur de type de mur : un type déjà porté par des murs les met à jour
             let mut copie = if self.ruban_edition.editeur_type_ouvert() { projet.clone() } else { modele::Projet::default() };
             if self.ruban_edition.editeur_type_ouvert() && self.ruban_edition.editeur_type_mur(ui.ctx(), &mut copie) {
@@ -281,7 +280,9 @@ impl Application {
         let Some((projet, _)) = &self.natif else { return };
         if projet.vues.iter().find(|v| v.id == id).is_none_or(|v| v.elements_masques.is_empty()) { return; }
         let mut copie = projet.clone();
-        copie.vues.iter_mut().find(|v| v.id == id).unwrap().elements_masques.clear();
+        if let Some(v) = copie.vues.iter_mut().find(|v| v.id == id) {
+            v.elements_masques.clear();
+        }
         if let Err(e) = self.appliquer_projet(copie) { self.error = Some(e); }
         self.coupe_dirty = true;
     }

@@ -142,7 +142,7 @@ fn lancer() -> Result<Cible, String> {
 }
 
 fn liste_instances(vivantes: &[(Instance, Value)]) -> Value {
-    let choisie = CHOISIE.lock().unwrap().as_ref().and_then(|c| c.pid);
+    let choisie = CHOISIE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|c| c.pid);
     Value::Array(vivantes.iter().map(|(i, e)| json!({
         "pid": i.pid,
         "port": i.port,
@@ -161,13 +161,13 @@ fn cible() -> Result<Cible, String> {
     if let Some(c) = cible_isolee() {
         return Ok(c);
     }
-    let choisie = CHOISIE.lock().unwrap().clone();
+    let choisie = CHOISIE.lock().unwrap_or_else(|e| e.into_inner()).clone();
     if let Some(c) = choisie
         && envoyer(&c, "etat", Duration::from_secs(3)).is_ok()
     {
         return Ok(c);
     }
-    *CHOISIE.lock().unwrap() = None;
+    *CHOISIE.lock().unwrap_or_else(|e| e.into_inner()) = None;
     let v = vivantes();
     let c = match v.as_slice() {
         [] => lancer()?,
@@ -177,7 +177,7 @@ fn cible() -> Result<Cible, String> {
             liste_instances(&v)
         )),
     };
-    *CHOISIE.lock().unwrap() = Some(c.clone());
+    *CHOISIE.lock().unwrap_or_else(|e| e.into_inner()) = Some(c.clone());
     Ok(c)
 }
 
@@ -187,7 +187,7 @@ fn commande_delai(ligne: &str, delai: Duration) -> Result<Value, String> {
         // instance fermée entre la vérification et l'envoi : nouvelle résolution (relance
         // seulement s'il n'en reste aucun, sinon le choix revient à l'agent)
         Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-            *CHOISIE.lock().unwrap() = None;
+            *CHOISIE.lock().unwrap_or_else(|e| e.into_inner()) = None;
             let c = cible()?;
             envoyer(&c, ligne, delai).map_err(|e| e.to_string())
         }
@@ -213,12 +213,12 @@ fn instances_outil(a: &Map<String, Value>) -> Result<Sortie, String> {
             let pid = a.get("pid").and_then(Value::as_u64).ok_or("pid requis (voir action lister)")? as u32;
             let v = vivantes();
             let (i, _) = v.iter().find(|(i, _)| i.pid == pid).ok_or_else(|| format!("aucune instance joignable avec le pid {pid}"))?;
-            *CHOISIE.lock().unwrap() = Some(cible_de(i));
+            *CHOISIE.lock().unwrap_or_else(|e| e.into_inner()) = Some(cible_de(i));
             Ok(reponse(json!({"ok": true, "instances": liste_instances(&v)})))
         }
         "nouvelle" => {
             let c = lancer()?;
-            *CHOISIE.lock().unwrap() = Some(c);
+            *CHOISIE.lock().unwrap_or_else(|e| e.into_inner()) = Some(c);
             let v = vivantes();
             Ok(reponse(json!({"ok": true, "instances": liste_instances(&v)})))
         }

@@ -268,14 +268,13 @@ impl<T: Instantane> Historique<T> {
         if nombre == 0 || nombre > if retablir { self.apres.len() } else { self.avant.len() } {
             return Err("Historique insuffisant.".into());
         }
-        for _ in 0..nombre {
-            if retablir {
-                let e = self.apres.pop().unwrap();
-                self.avant.push_back(e);
-            } else {
-                let e = self.avant.pop_back().unwrap();
-                self.apres.push(e);
-            }
+        // Les étapes passent une à une du sommet d'une pile au sommet de l'autre.
+        if retablir {
+            let debut = self.apres.len() - nombre;
+            self.avant.extend(self.apres.drain(debut..).rev());
+        } else {
+            let debut = self.avant.len() - nombre;
+            self.apres.extend(self.avant.drain(debut..).rev());
         }
         self.borner();
         Ok(())

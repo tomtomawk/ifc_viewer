@@ -115,10 +115,12 @@ fn lire_fichier_police(nom: &str) -> Option<Vec<u8>> {
 
 /// Police `nom` normale ou grasse, lue une fois ; repli sur Arial puis sur Ubuntu.
 fn police(nom: &str, gras: bool) -> Arc<Police> {
-    static POLICES: OnceLock<Mutex<HashMap<(String, bool), Arc<Police>>>> = OnceLock::new();
+    /// Polices chargées, par nom (minuscules) et graisse.
+    type Cache = Mutex<HashMap<(String, bool), Arc<Police>>>;
+    static POLICES: OnceLock<Cache> = OnceLock::new();
     let cle = (nom.to_lowercase(), gras);
     let cache = POLICES.get_or_init(Default::default);
-    if let Some(p) = cache.lock().unwrap().get(&cle) {
+    if let Some(p) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&cle) {
         return p.clone();
     }
     let lire = |n: &str| {
@@ -128,9 +130,10 @@ fn police(nom: &str, gras: bool) -> Arc<Police> {
     let p = lire(&cle.0)
         .or_else(|| lire("arial"))
         .or_else(|| charger(epaint_default_fonts::UBUNTU_LIGHT.to_vec()))
-        .expect("police de repli illisible");
+        // police embarquée illisible : police vide (glyphes sans tracé, avance d'un demi-cadratin)
+        .unwrap_or_else(|| Police { donnees: Vec::new(), unites: 1000.0, capitales: 700.0, ascendante: 800.0, descendante: -200.0, glyphes: Mutex::new(HashMap::new()) });
     let p = Arc::new(p);
-    cache.lock().unwrap().insert(cle, p.clone());
+    cache.lock().unwrap_or_else(|e| e.into_inner()).insert(cle, p.clone());
     p
 }
 
@@ -180,10 +183,12 @@ pub fn trianguler(contours: Vec<Vec<[f32; 2]>>) -> Vec<[[f32; 2]; 3]> {
 
 impl Police {
     fn glyphe(&self, c: char) -> Arc<Glyphe> {
-        if let Some(g) = self.glyphes.lock().unwrap().get(&c) {
+        if let Some(g) = self.glyphes.lock().unwrap_or_else(|e| e.into_inner()).get(&c) {
             return g.clone();
         }
-        let f = FontRef::new(&self.donnees).expect("police relue");
+        let Ok(f) = FontRef::new(&self.donnees) else {
+            return Arc::new(Glyphe { triangles: Vec::new(), avance: 0.5 * self.unites });
+        };
         let id = f.charmap().map(c).or_else(|| f.charmap().map('?')).unwrap_or_default();
         let avance = f.glyph_metrics(Size::unscaled(), LocationRef::default()).advance_width(id).unwrap_or(0.5 * self.unites);
         let mut stylo = Stylo { contours: Vec::new(), courant: [0.0; 2] };
@@ -191,7 +196,7 @@ impl Police {
             let _ = g.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut stylo);
         }
         let g = Arc::new(Glyphe { triangles: trianguler(stylo.contours), avance });
-        self.glyphes.lock().unwrap().insert(c, g.clone());
+        self.glyphes.lock().unwrap_or_else(|e| e.into_inner()).insert(c, g.clone());
         g
     }
 }

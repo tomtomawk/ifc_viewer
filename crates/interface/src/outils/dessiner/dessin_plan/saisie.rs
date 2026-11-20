@@ -37,9 +37,9 @@ impl Application {
                 geoms.push(Geom::Segment([*p, *p]));
             }
         }
-        if self.dessin2d.edition_contour.is_some() {
+        if let Some(e) = self.dessin2d.edition_contour.as_ref() {
             for ci in 0..self.dessin2d.dalle.len() {
-                let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(ci);
+                let fermee = e.fermee(ci);
                 geoms.extend(self.dessin2d.segments_contour(ci, fermee).into_iter().map(|(a, b, k)| noyau::forme2d::geom_segment(a, b, k)));
             }
         }
@@ -324,8 +324,7 @@ impl Application {
         }
         if echap {
             { self.dessin2d.message = None; self.dessin2d.information = None; };
-            if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.commande.is_some()) {
-                let e = self.dessin2d.edition_contour.as_mut().unwrap();
+            if let Some(e) = self.dessin2d.edition_contour.as_mut().filter(|e| e.commande.is_some()) {
                 e.commande = None; e.depart = None; e.repere = None;
             } else if !self.dessin2d.saisie.is_empty() {
                 self.dessin2d.saisie.clear();
@@ -342,7 +341,7 @@ impl Application {
                 } else if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some() && e.raccord.is_none())
                     && let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2).map(|t| (t.points.iter().map(|p| p.to_array()).collect(), t.courbures())) {
                     self.dessin2d.pousser_contour(points, k);
-                    self.dessin2d.edition_contour.as_mut().unwrap().fermees.push(false);
+                    if let Some(e) = self.dessin2d.edition_contour.as_mut() { e.fermees.push(false); }
                 }
                 if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
                 // dessin 2D : ce qui est tracé reste et l'outil se ferme, la sélection
@@ -552,9 +551,8 @@ impl Application {
                 }
                 Err(e) => { self.dessin2d.message = Some(e); return; }
             }
-        } else if let (true, Some(element)) = (valider, self.dessin2d.edition_contour.as_ref().and_then(|e| e.element)) {
+        } else if let (true, Some((element, id))) = (valider, self.dessin2d.edition_contour.as_ref().and_then(|e| e.element.map(|el| (el, e.id.clone())))) {
             // garde-corps ou limite de propriété : un seul tracé, repris tel quel
-            let id = self.dessin2d.edition_contour.as_ref().unwrap().id.clone();
             let [trace] = self.dessin2d.dalle.as_slice() else { self.dessin2d.message = Some("Un seul tracé est attendu.".into()); return; };
             let trace = trace.clone();
             if trace.len() < 2 || trace.windows(2).any(|w| DVec2::from_array(w[0]).distance(DVec2::from_array(w[1])) < 1e-6) {
@@ -568,16 +566,14 @@ impl Application {
             let Some(commande) = commande else { self.dessin2d.message = Some("Élément introuvable.".into()); return; };
             if let Err(e) = self.executer_bim(commande) { self.dessin2d.message = Some(e); return; }
             self.status = "Tracé modifié — Ctrl+S pour enregistrer.".into();
-        } else if valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.annotation.is_some()) {
-            let edit = self.dessin2d.edition_contour.as_ref().unwrap();
-            let modele = edit.annotation.clone().unwrap();
+        } else if valider && let Some(edit) = self.dessin2d.edition_contour.as_ref() && let Some(modele) = edit.annotation.clone() {
             let Some((mut projet, _)) = self.natif.clone() else { return };
             let mut ids = Vec::new();
             for (i, points) in self.dessin2d.dalle.iter().enumerate() {
                 let fermee = edit.fermee(i);
                 let minimum = if fermee { 3 } else { 2 };
                 if points.len() < minimum || points.windows(2).any(|w| DVec2::from_array(w[0]).distance(DVec2::from_array(w[1])) < 1e-6)
-                    || (fermee && DVec2::from_array(points[0]).distance(DVec2::from_array(*points.last().unwrap())) < 1e-6) {
+                    || (fermee && points.first().zip(points.last()).is_some_and(|(a, b)| DVec2::from_array(*a).distance(DVec2::from_array(*b)) < 1e-6)) {
                     self.dessin2d.message = Some("La polyligne doit comporter des segments de longueur non nulle.".into()); return;
                 }
                 let mut annotation = modele.clone();
@@ -606,13 +602,12 @@ impl Application {
             self.informer("Polyligne modifiée");
         } else if valider && matches!(usage, Some(Usage::Escalier | Usage::GardeCorps | Usage::Annotation)) && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some()) {
             let formes = self.dessin2d.dalle.iter().enumerate().map(|(i, c)| {
-                let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(i);
+                let fermee = self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.fermee(i));
                 noyau::forme2d::Forme2D::Polyligne { points: c.iter().copied().map(DVec2::from_array).collect(), fermee, courbures: self.dessin2d.courbures_enregistrees(i, fermee) }
             }).collect();
             self.enregistrer_formes(formes);
             if self.dessin2d.message.is_some() { return; }
-        } else if surface && valider && self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_none()) {
-            let id = self.dessin2d.edition_contour.as_ref().unwrap().id.clone();
+        } else if surface && valider && let Some(id) = self.dessin2d.edition_contour.as_ref().filter(|e| e.creation.is_none()).map(|e| e.id.clone()) {
             let contours = self.dessin2d.dalle.clone();
             if let Err(e) = self.executer_bim(Commande::Contour { id, contours }) {
                 self.dessin2d.message = Some(e);
@@ -743,7 +738,7 @@ impl Application {
         }
         if saisie.eq_ignore_ascii_case("f") && let Some((c, premier)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.raccord) {
             let contour = &self.dessin2d.dalle[c];
-            let cible = if premier { *contour.last().unwrap() } else { contour[0] };
+            let Some(&cible) = (if premier { contour.last() } else { contour.first() }) else { return };
             self.ajouter_point_raccord(DVec2::from_array(cible));
             return;
         }

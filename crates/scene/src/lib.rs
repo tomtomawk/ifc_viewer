@@ -66,6 +66,9 @@ pub struct NavMateriau {
     pub elements: Vec<Id>,
 }
 
+/// Contenu d'une nomenclature : titres, lignes, colonnes non calculées, tri en clair.
+pub type Tableau = (Vec<String>, Vec<Vec<String>>, Vec<usize>, String);
+
 /// Vue, nomenclature ou feuille.
 pub struct NavVue {
     pub revit_id: i64,
@@ -83,7 +86,7 @@ pub struct NavVue {
     /// fichier).
     pub cadrage: Vec<DVec4>,
     /// Contenu d'une nomenclature : titres, lignes, colonnes non calculées, tri en clair.
-    pub tableau: Option<(Vec<String>, Vec<Vec<String>>, Vec<usize>, String)>,
+    pub tableau: Option<Tableau>,
     /// Entité de la vue dans le modèle (propriétés ; ses éléments 2D en enfants).
     pub entite: Option<Id>,
     /// Genre (« Plan d'étage », « Élévation », « Feuille »…).

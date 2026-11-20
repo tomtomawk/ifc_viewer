@@ -126,7 +126,8 @@ pub(super) fn guid(cle: &str, origine: Option<&Origine>) -> String {
         s[i] = alphabet[(h & 63) as usize];
         h >>= 6;
     }
-    String::from_utf8(s.to_vec()).unwrap()
+    // alphabet ASCII : un octet par caractère
+    s.iter().map(|&b| char::from(b)).collect()
 }
 
 /// Horodatage ISO 8601 UTC (`AAAA-MM-JJThh:mm:ss`) de `secondes` depuis 1970.

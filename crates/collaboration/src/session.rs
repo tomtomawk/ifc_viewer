@@ -5,6 +5,9 @@ use super::*;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 
+/// Réponse du thread de synchronisation : état, attente, conflits, durée (ms) et mesures.
+type ReponseSynchro = Resultat<(Etat, Vec<Transaction>, BTreeMap<String, Vec<Conflit>>, f64, stockage::Mesures)>;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Copie {
     #[serde(default)]
@@ -35,17 +38,7 @@ pub struct Session {
     pub mesure_gpu_ms: f64,
     pub mesures_fichiers: stockage::Mesures,
     pub mesure_validation_ms: f64,
-    messages: Option<
-        Receiver<
-            Resultat<(
-                Etat,
-                Vec<Transaction>,
-                BTreeMap<String, Vec<Conflit>>,
-                f64,
-                stockage::Mesures,
-            )>,
-        >,
-    >,
+    messages: Option<Receiver<ReponseSynchro>>,
     editeurs: BTreeMap<String, Editeur>,
     // Le verrou local reste vivant pour interdire deux propriétaires de la même queue.
     _local: std::fs::File,
@@ -220,16 +213,12 @@ impl Session {
                         }
                     });
                 if precedent != Some(texte.as_str()) {
-                    if !self.editeurs.contains_key(&a.id) {
-                        self.editeurs.insert(
-                            a.id.clone(),
-                            Editeur::ouvrir(&self.texte_local(&a.id)?, &self.copie.session)?,
-                        );
-                    }
-                    t.textes.insert(
-                        a.id.clone(),
-                        self.editeurs.get_mut(&a.id).unwrap().remplacer(texte),
-                    );
+                    let mut editeur = match self.editeurs.remove(&a.id) {
+                        Some(e) => e,
+                        None => Editeur::ouvrir(&self.texte_local(&a.id)?, &self.copie.session)?,
+                    };
+                    t.textes.insert(a.id.clone(), editeur.remplacer(texte));
+                    self.editeurs.insert(a.id.clone(), editeur);
                 }
             }
         }

@@ -304,8 +304,11 @@ impl Projet {
         // de l'extérieur (position la plus grande) vers l'intérieur
         let rang = asm.couches.iter().take_while(|c| self.murs.iter().find(|m| &m.id == *c).is_some_and(|c| position(&c.axe) > p)).count();
         let (mur, assemblage) = (mur.to_string(), assemblage.to_string());
-        self.assemblages.iter_mut().find(|a| a.id == assemblage).unwrap().couches.insert(rang, mur.clone());
-        self.murs.iter_mut().find(|m| m.id == mur).unwrap().assemblage = Some(assemblage);
+        let (Some(asm), Some(m)) = (self.assemblages.iter_mut().find(|a| a.id == assemblage), self.murs.iter_mut().find(|m| m.id == mur)) else {
+            return Err("Mur ou assemblage introuvable.".into());
+        };
+        asm.couches.insert(rang, mur.clone());
+        m.assemblage = Some(assemblage);
         Ok(())
     }
 

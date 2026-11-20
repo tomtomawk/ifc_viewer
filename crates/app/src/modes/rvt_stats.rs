@@ -151,8 +151,10 @@ pub(crate) fn rvt_stats(path: &std::path::Path) -> i32 {
             }
         }
     } else {
-        for w in m.murs.iter().filter(|w| w.geometrie.is_err()) {
-            println!("  {:>10} {:<8} non maillé : {}", w.id, w.classe, w.geometrie.as_ref().err().unwrap());
+        for w in &m.murs {
+            if let Err(e) = &w.geometrie {
+                println!("  {:>10} {:<8} non maillé : {e}", w.id, w.classe);
+            }
         }
     }
     let bilan = |nom: &str, gs: &mut dyn Iterator<Item = &formats::rvt::maquette::Geometrie>| {

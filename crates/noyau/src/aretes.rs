@@ -52,17 +52,21 @@ pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
     a
 }
 
+/// Arête douce : segment et normales des deux facettes.
+pub type AreteDouce = ([DVec3; 2], DVec3, DVec3);
+/// Arêtes vives et arêtes douces, chacune avec l'indice de l'élément qui la porte.
+pub type AretesProprietaires = (Vec<([DVec3; 2], usize)>, Vec<(AreteDouce, usize)>);
+
 /// Arêtes d'éléments d'un même matériau pris ensemble, chacune rendue à l'élément
 /// (indice de `tris`) qui la porte : deux faces collées l'une contre l'autre (normales
 /// opposées, parcours opposés : contact entre deux murs) s'annulent, et les faces
 /// coplanaires de part et d'autre d'une jonction se raccordent sans arête. Les angles
 /// réels (faces non coplanaires) restent.
-pub fn aretes_jointes(tris: &[([DVec3; 3], usize)]) -> (Vec<([DVec3; 2], usize)>, Vec<(([DVec3; 2], DVec3, DVec3), usize)>) {
+pub fn aretes_jointes(tris: &[([DVec3; 3], usize)]) -> AretesProprietaires {
     aretes_proprietaires(tris.iter().copied(), true)
 }
 
-#[allow(clippy::type_complexity)]
-fn aretes_proprietaires(tris: impl Iterator<Item = ([DVec3; 3], usize)>, annuler_opposees: bool) -> (Vec<([DVec3; 2], usize)>, Vec<(([DVec3; 2], DVec3, DVec3), usize)>) {
+fn aretes_proprietaires(tris: impl Iterator<Item = ([DVec3; 3], usize)>, annuler_opposees: bool) -> AretesProprietaires {
     type Cle = ([i64; 3], [i64; 3]);
     /// Direction, point et arêtes (t0, t1, normale, sens, élément) d'une droite.
     type Droite = (DVec3, DVec3, Vec<(f64, f64, DVec3, i32, usize)>);
@@ -220,14 +224,14 @@ pub fn chainer(segs: &[[[f64; 2]; 2]]) -> (Vec<Polyligne>, Vec<Polyligne>) {
         pris[i] = true;
         let depart = segs[i][0];
         let mut pts = vec![segs[i][0], segs[i][1]];
-        while let Some((j, q)) = suivant(*pts.last().unwrap(), &pris) {
+        while let Some((j, q)) = pts.last().and_then(|&p| suivant(p, &pris)) {
             pris[j] = true;
             pts.push(q);
             if cle(q) == cle(depart) {
                 break;
             }
         }
-        if pts.len() > 3 && cle(*pts.last().unwrap()) == cle(depart) {
+        if pts.len() > 3 && pts.last().is_some_and(|&p| cle(p) == cle(depart)) {
             pts.pop();
             boucles.push(pts);
             continue;

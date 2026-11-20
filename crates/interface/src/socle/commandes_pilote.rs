@@ -167,16 +167,16 @@ impl Application {
             None => objet(&[("pid", std::process::id().to_string()), ("isolee", "true".into())]),
         }));
         p.push(("saisies_en_attente", (self.saisies_pilote.len()+usize::from(self.saisie_pilote_image)).to_string()));
-        p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap()));
+        p.push(("selection_native", serde_json::to_string(&self.selection_bim()).unwrap_or_else(|_| "null".into())));
         p.push(("afficher_masques", self.afficher_masques.to_string()));
         p.push(("visibilite_temporaire", (!self.masques_utilisateur.is_empty() || self.isolement_utilisateur).to_string()));
-        p.push(("croix_temporaire", serde_json::to_string(&self.croix_temporaire.map(|c| [c.x, c.y])).unwrap()));
+        p.push(("croix_temporaire", serde_json::to_string(&self.croix_temporaire.map(|c| [c.x, c.y])).unwrap_or_else(|_| "null".into())));
         p.push(("objets_masques", self.objets_masques.len().to_string()));
         p.push(("transformation", self.etat_transformation().to_string()));
         p.push(("accrochage", self.etat_accrochage().to_string()));
-        p.push(("cadenas", serde_json::to_string(&self.cadenas_ecran.iter().map(|(id, q)| serde_json::json!({"id": id, "ecran": [q.x, q.y]})).collect::<Vec<_>>()).unwrap()));
+        p.push(("cadenas", serde_json::to_string(&self.cadenas_ecran.iter().map(|(id, q)| serde_json::json!({"id": id, "ecran": [q.x, q.y]})).collect::<Vec<_>>()).unwrap_or_else(|_| "null".into())));
         p.push(("outil", self.ruban_edition.outil().map_or("null".into(), |o|texte(o.nom()))));
-        p.push(("rectangle_vue", serde_json::to_string(&[self.rect_vue.min.x,self.rect_vue.min.y,self.rect_vue.width(),self.rect_vue.height()]).unwrap()));
+        p.push(("rectangle_vue", serde_json::to_string(&[self.rect_vue.min.x,self.rect_vue.min.y,self.rect_vue.width(),self.rect_vue.height()]).unwrap_or_else(|_| "null".into())));
         if let Some(c)=&self.collaboration { p.push(("collaboration",serde_json::json!({"etat":c.etat,"revision":c.copie.base.revision,"en_attente":c.copie.attente.len(),"conflits":c.copie.conflits,"comparaison_validation_ms":c.mesure_validation_ms,"geometrie_ms":c.mesure_geometrie_ms,"preparation_transfert_gpu_ms":c.mesure_gpu_ms,"synchronisation_ms":c.mesure_sync_ms,"fichiers":c.mesures_fichiers}).to_string())); }
         if let Some(e) = &self.error {
             p.push(("erreur_chargement", texte(e)));
@@ -306,13 +306,13 @@ impl Application {
             },
             "editer" => {
                 let resultat=serde_json::from_str::<commandes::Commande>(argument).map_err(|e|e.to_string()).and_then(|c|self.executer_bim(c));
-                match resultat { Ok(ids)=>succes(&[("ids",serde_json::to_string(&ids).unwrap())]), Err(e)=>erreur(&e) }
+                match resultat { Ok(ids)=>succes(&[("ids",serde_json::to_string(&ids).unwrap_or_else(|_| "null".into()))]), Err(e)=>erreur(&e) }
             }
             "annuler" | "retablir" => {
                 self.error=None; self.parcourir_historique(commande=="retablir");
                 match &self.error { Some(e)=>erreur(e),None=>self.etat() }
             }
-            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("empreinte",texte(&noyau::hash::hash(&serde_json::to_value(p).unwrap()))),("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
+            "projet_natif" => match &self.natif {Some((p,_))=>match p.json() {Ok(s)=>succes(&[("empreinte",texte(&noyau::hash::hash(&serde_json::to_value(p).unwrap_or_default()))),("projet",s)]),Err(e)=>erreur(&e)},None=>erreur("Aucun projet natif.")},
             "vue_plan" => {
                 // vue_plan <nom ou id du niveau> [hauteur de coupe mm]
                 let (nom, h) = argument.rsplit_once(' ').and_then(|(n, h)| Some((n, h.parse::<f64>().ok()?))).unwrap_or((argument, 1200.0));
@@ -430,7 +430,7 @@ impl Application {
                 if self.natif.is_none() { return erreur("aucun projet natif ou Revit ouvert") }
                 if !argument.trim().is_empty() {
                     let chemin=PathBuf::from(argument.trim().trim_matches('"'));
-                    let (p,ancien)=self.natif.as_ref().unwrap();
+                    let Some((p,ancien))=self.natif.as_ref() else { return erreur("aucun projet natif ou Revit ouvert") };
                     if self.collaboration.is_some() && &chemin!=ancien{return erreur("La copie collaborative conserve son chemin local");}
                     if let Err(e)=echanges::enregistrement::enregistrer_natif(p,&chemin){return erreur(&e);}
                     echanges::enregistrement::effacer_recuperation(ancien);
@@ -932,7 +932,8 @@ impl Application {
             },
             "proprietes" => match self.entite(argument) {
                 Ok(id) => {
-                    let m = &self.scene.as_ref().unwrap().model;
+                    let Some(scene) = self.scene.as_ref() else { return erreur("Aucune scène chargée.") };
+                    let m = &scene.model;
                     let paires = |v: Vec<(String, String)>| objet(&v.iter().map(|(k, v)| (k.as_str(), texte(v))).collect::<Vec<_>>());
                     let groupes: Vec<String> = m.property_groups(id).into_iter().map(|g| objet(&[("nom", texte(&g.name)), ("proprietes", paires(g.props))])).collect();
                     succes(&[("entite", self.decrire(id)), ("attributs", paires(m.attributes(id))), ("groupes", liste(groupes))])

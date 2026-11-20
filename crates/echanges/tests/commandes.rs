@@ -1,4 +1,5 @@
 //! Tests de `commandes` dont le projet de départ vient de `echanges::depuis_ifc` (l'un appelle aussi `echanges::export_ifc`).
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use echanges::{depuis_ifc, export_ifc};
 use commandes::*;
 use commandes::historique;

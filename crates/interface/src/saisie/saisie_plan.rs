@@ -2,6 +2,10 @@
 use commandes::Execution;
 use crate::*;
 
+/// Ligne d'implantation du mur sélectionné : identifiant, extrémités (mm), altitude de la
+/// base, écart à l'axe médian.
+pub(crate) type AxeSelection = (String, [f64; 2], [f64; 2], f64, f64);
+
 impl Application {
     pub(crate) fn ajouter_mur_natif(&mut self, debut: [f64; 2], fin: [f64; 2], options: &modele::creation::ParametresMur) -> Result<String, String> {
         let (projet, _) = self.natif.as_ref().ok_or("Créez ou ouvrez un projet natif pour dessiner un mur.")?;
@@ -219,7 +223,7 @@ impl Application {
 
     /// Mur ou assemblage natif sélectionné : identifiant, ligne d'implantation choisie
     /// (extrémités en mm), altitude de la base et écart de cette ligne à l'axe médian.
-    pub(crate) fn axe_selection(&self) -> Option<(String, [f64; 2], [f64; 2], f64, f64)> {
+    pub(crate) fn axe_selection(&self) -> Option<AxeSelection> {
         let (projet, _) = self.natif.as_ref()?;
         let ids=self.selection_bim();
         if ids.len()!=1 {return None;}
@@ -290,10 +294,9 @@ impl Application {
             let cadre = egui::Rect::from_center_size(ea + (eb - ea) * 0.5 - egui::vec2(0.0, 16.0), g.size() + egui::vec2(10.0, 4.0));
             painter.rect(cadre, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 235), egui::Stroke::new(1.0, bleu), egui::StrokeKind::Inside);
             painter.galley(cadre.min + egui::vec2(5.0, 2.0), g, Color32::from_gray(30));
-        } else if self.cote_axe.as_ref().is_some_and(|(mur, _, _)| mur == &id) {
+        } else if let Some((_, fin, texte)) = self.cote_axe.as_mut().filter(|(mur, _, _)| mur == &id) {
             let position = ea + (eb - ea) * 0.5 - egui::vec2(0.0, 18.0);
             let cadre = egui::Rect::from_center_size(position, egui::vec2(90.0, 22.0));
-            let (_, fin, texte) = self.cote_axe.as_mut().unwrap();
             let fin = *fin;
             let reponse = ui.put(cadre, egui::TextEdit::singleline(texte).id(ui.make_persistent_id(("cote_poignee_mur", &id))).desired_width(90.0))
                 .on_hover_text(format!("Longueur de la ligne d'implantation ({}) : saisir une valeur puis valider", modele::unite::unite().suffixe().trim()));
@@ -666,25 +669,25 @@ impl Application {
         let echelle_modifiee = echelle_vue(&projet) != self.natif.as_ref().and_then(|(p, _)| echelle_vue(p));
         let chemin = self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.1.clone();
         if !distant {
-            commandes::verrous::verifier(&self.natif.as_ref().unwrap().0, &projet)?;
-            let avant=&self.natif.as_ref().unwrap().0;
+            commandes::verrous::verifier(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0, &projet)?;
+            let avant=&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0;
             let detachees=projet.detacher_couches_disjointes(avant);
             if !detachees.is_empty() {self.status=format!("{} couche(s) détachée(s) du mur composé : plus alignée(s) ou plus en contact.",detachees.len());}
-            projet.recaler_menuiseries(&self.natif.as_ref().unwrap().0)?;
+            projet.recaler_menuiseries(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0)?;
         }
         projet.verifier()?;
         // comparaison des objets : utile seulement en collaboration
-        let texte_seul = self.collaboration.is_some() && commandes::objets::objets(&projet)? == commandes::objets::objets(&self.natif.as_ref().unwrap().0)?;
+        let texte_seul = self.collaboration.is_some() && commandes::objets::objets(&projet)? == commandes::objets::objets(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0)?;
         noyau::chrono::chrono("application : vérifications", &mut t_etape);
         let debut_geometrie=std::time::Instant::now();
         let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(maillage::depuis_natif_verifie(&projet, &chemin)?) };
         if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=debut_geometrie.elapsed().as_secs_f64()*1000.0;}
         // Le commit local durable précède toute installation dans la scène.
         // Une réception utilise déjà un état accepté et ne crée pas de transaction.
-        if !distant && let Some(c) = &mut self.collaboration { c.editer(&self.natif.as_ref().unwrap().0, &projet)?; }
+        if !distant && let Some(c) = &mut self.collaboration { c.editer(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0, &projet)?; }
         if texte_seul && self.collaboration.is_some() {
             if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=0.0;c.mesure_gpu_ms=0.0;}
-            self.natif.as_mut().unwrap().0 = projet;
+            self.natif.as_mut().ok_or("Aucun projet natif ouvert.")?.0 = projet;
             self.bim.revision = self.bim.revision.wrapping_add(1);
             self.natif_modifie = true;
             return Ok(());
@@ -692,7 +695,7 @@ impl Application {
         let mut scene = scene_preparee.ok_or("Scène préparée absente")?; if let Some(s) = &self.scene { scene.file_name.clone_from(&s.file_name); } // même document, même nom (projet partagé : pas celui de la copie locale)
         noyau::chrono::chrono("application : scène", &mut t_etape);
         // l'instantané pris pour l'historique dit aussi si le projet diffère du fichier
-        let modifie = if !distant && self.collaboration.is_none() { Some(self.historique.pousser_modifie(&self.natif.as_ref().unwrap().0, &projet)?) } else { None };
+        let modifie = if !distant && self.collaboration.is_none() { Some(self.historique.pousser_modifie(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0, &projet)?) } else { None };
         noyau::chrono::chrono("application : historique", &mut t_etape);
         // Les indices de vues et d'objets peuvent changer après suppression ou annulation.
         // Retrouver leurs identifiants stables avant de remplacer la scène.

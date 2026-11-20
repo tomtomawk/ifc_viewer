@@ -77,8 +77,12 @@ pub fn points_segment(a: DVec2, b: DVec2, k: f64) -> Vec<DVec2> {
         Some((o, r, d, s)) => {
             let mut l = points_arc(o, r, d, s);
             // extrémités exactes : les sommets de la polyligne
-            l[0] = a;
-            *l.last_mut().unwrap() = b;
+            if let Some(premier) = l.first_mut() {
+                *premier = a;
+            }
+            if let Some(dernier) = l.last_mut() {
+                *dernier = b;
+            }
             l
         }
         None => vec![a, b],

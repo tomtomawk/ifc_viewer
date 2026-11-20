@@ -135,10 +135,13 @@ fn chemin(s: &'static str) -> Option<Vec<Pas>> {
 }
 
 /// Paramètres intégrés portés par un champ, par classe : (id du paramètre, chemin).
-fn champs_appris() -> &'static HashMap<&'static str, Vec<(i64, Vec<Pas>)>> {
-    static T: OnceLock<HashMap<&'static str, Vec<(i64, Vec<Pas>)>>> = OnceLock::new();
+type ChampsAppris = HashMap<&'static str, Vec<(i64, Vec<Pas>)>>;
+
+/// Paramètres intégrés portés par un champ, par classe : (id du paramètre, chemin).
+fn champs_appris() -> &'static ChampsAppris {
+    static T: OnceLock<ChampsAppris> = OnceLock::new();
     T.get_or_init(|| {
-        let mut t: HashMap<&'static str, Vec<(i64, Vec<Pas>)>> = HashMap::new();
+        let mut t: ChampsAppris = HashMap::new();
         for l in include_str!("donnees/parametres_champs.tsv").lines().filter(|l| !l.starts_with('#')) {
             let c: Vec<&'static str> = l.split('\t').collect();
             if let (Some(&classe), Some(Ok(id)), Some(ch)) = (c.first(), c.get(1).map(|s| s.parse()), c.get(2).and_then(|s| chemin(s))) {
@@ -609,7 +612,7 @@ pub fn affiches(vals: &[(i64, Brut)], defs: &HashMap<i64, Definition>, unites: &
 pub fn ifc_guid(episode: &[u8; 16], id: i64) -> String {
     const ALPHABET: &[u8; 64] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
     let mut g = le_vers_be(episode);
-    let fin = u32::from_be_bytes(g[12..16].try_into().unwrap()) ^ (id as u32);
+    let fin = u32::from_be_bytes([g[12], g[13], g[14], g[15]]) ^ (id as u32);
     g[12..16].copy_from_slice(&fin.to_be_bytes());
     let n = u128::from_be_bytes(g);
     (0..22).map(|i| ALPHABET[((n >> (6 * (21 - i))) & 63) as usize] as char).collect()

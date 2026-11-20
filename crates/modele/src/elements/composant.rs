@@ -116,6 +116,11 @@ pub fn type_table() -> TypeComposant {
     TypeComposant { id: "type-composant-table".into(), nom: "Table 1600 × 800".into(), largeur: 1600.0, profondeur: 800.0, hauteur: 750.0, modele: famille_table() }
 }
 
+/// Solide d'un composant : matériau du projet éventuel, masque de visibilité, triangles (mm).
+pub type SolideComposant = (Option<String>, u8, Vec<[DVec3; 3]>);
+/// Famille résolue d'un composant et placement d'un point de son plan.
+type PlanResolu<'a, F> = (&'a FamilleModelee, Resolution, F);
+
 impl Composant {
     /// Repère du composant : origine (x, y, z absolus), axe X, axe Y.
     pub fn repere(&self, p: &Projet) -> Option<(DVec3, DVec2, DVec2)> {
@@ -132,7 +137,7 @@ impl Composant {
     }
     /// Solides pleins visibles, triangles en mm, avec le matériau du projet éventuel et
     /// le masque de visibilité par niveau de détail et type de vue.
-    pub fn solides(&self, p: &Projet) -> Result<Vec<(Option<String>, u8, Vec<[DVec3; 3]>)>, String> {
+    pub fn solides(&self, p: &Projet) -> Result<Vec<SolideComposant>, String> {
         let t = self.type_(p)?;
         let (o, u, n) = self.repere(p).ok_or_else(|| format!("{} : niveau introuvable.", self.nom))?;
         let r = t.modele.resoudre_occurrence(t.largeur, t.hauteur, t.profondeur, &p.parametres_partages, &Default::default());
@@ -147,7 +152,7 @@ impl Composant {
             .collect())
     }
     /// Famille du composant résolue et placement d'un point (h, v) de son plan.
-    fn plan_resolu<'a>(&self, p: &'a Projet) -> Option<(&'a FamilleModelee, Resolution, impl Fn((f64, f64)) -> DVec3)> {
+    fn plan_resolu<'a>(&self, p: &'a Projet) -> Option<PlanResolu<'a, impl Fn((f64, f64)) -> DVec3>> {
         let (Ok(t), Some((o, u, n))) = (self.type_(p), self.repere(p)) else { return None };
         let r = t.modele.resoudre_avec(t.largeur, t.hauteur, t.profondeur, &p.parametres_partages);
         Some((&t.modele, r, move |(h, v): (f64, f64)| Self::placer(o, u, n, VueEsquisse::Plan.point(h, v, 0.0))))

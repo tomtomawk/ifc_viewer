@@ -813,7 +813,7 @@ pub fn decodage(path: &Path) -> Result<Decodage, String> {
         }
     }
     let mut l: Vec<(String, usize, u64)> = autres.into_iter().map(|(c, (n, o))| (sch.classes.iter().find(|k| k.id == c).map(|k| k.name.clone()).unwrap_or_default(), n, o)).collect();
-    l.sort_by(|a, b| b.2.cmp(&a.2));
+    l.sort_by_key(|a| std::cmp::Reverse(a.2));
     d.non_interpretees = l;
     Ok(d)
 }
@@ -857,7 +857,7 @@ enum Extrait {
     LigneZone(i64, i64, DVec2, DVec2),
     Forme(Forme),
     Categorie(i64, String),
-    Vue(Vue),
+    Vue(Box<Vue>),
     /// Cadrage (origine, axes, longueurs ; cadrage complet) de la vue d'un `Viewer`.
     Cadrage(i64, (DVec3, [DVec3; 3], [f64; 3]), Option<Cadre>),
     Element2D(Element2D),

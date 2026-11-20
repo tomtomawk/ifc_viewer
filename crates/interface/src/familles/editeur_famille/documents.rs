@@ -469,7 +469,7 @@ impl Application {
         ed.vues_ouvertes.retain(|&i| i != vue);
         let active = if ed.vue_3d { 3 } else { ed.vue as usize };
         if vue == active {
-            let prochaine = *ed.vues_ouvertes.last().expect("une vue reste ouverte");
+            let Some(&prochaine) = ed.vues_ouvertes.last() else { return };
             match prochaine { 0 => ed.ouvrir_vue(VueFamille::Elevation), 1 => ed.ouvrir_vue(VueFamille::Plan),
                 2 => ed.ouvrir_vue(VueFamille::Coupe), 3 => ed.ouvrir_vue_3d(), _ => {} }
         }
@@ -720,7 +720,7 @@ impl Application {
             C::EtiquettePiece => nom.eq_ignore_ascii_case("Étiquette standard") || p.familles_etiquettes.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
         };
         let base = f.nom.trim().to_string();
-        f.nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} ({k})") }).find(|n| !existe(n)).unwrap();
+        f.nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} ({k})") }).find(|n| !existe(n)).unwrap_or_default();
         let id = match f.famille.categorie {
             C::Profil => {
                 let mut profil = modele::famille::profil::Profil { id: String::new(), nom: f.nom.clone(), document_famille: Box::new(f.clone()) };
@@ -742,7 +742,7 @@ impl Application {
                 self.executer_bim(commandes::Commande::TypeComposant { type_composant })?.into_iter().next().ok_or("Composant non créé.")?
             }
             C::Porte | C::Fenetre => {
-                let mut projet = self.natif.as_ref().unwrap().0.clone();
+                let mut projet = self.natif.as_ref().ok_or("Aucun projet ouvert.")?.0.clone();
                 let id = noyau::uuid::uuid();
                 projet.types_ouvertures.push(modele::TypeOuverture { id: id.clone(), nom: f.nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille.clone()), origine: None, famille_nom: None });
                 self.appliquer_projet(projet)?;
@@ -780,8 +780,10 @@ impl Application {
                 }
             }),
             ActionFamille::Enregistrer if self.famille.as_ref().and_then(|e| e.document_famille.chemin_fichier.as_ref()).is_some() => {
-                let chemin = self.famille.as_ref().and_then(|e| e.document_famille.chemin_fichier.clone()).unwrap();
-                self.enregistrer_famille_fichier(&chemin)
+                match self.famille.as_ref().and_then(|e| e.document_famille.chemin_fichier.clone()) {
+                    Some(chemin) => self.enregistrer_famille_fichier(&chemin),
+                    None => Ok(()),
+                }
             }
             ActionFamille::Enregistrer | ActionFamille::EnregistrerSous => {
                 let nom = self.famille.as_ref().map_or_else(String::new, |e| e.nom.trim().to_string());

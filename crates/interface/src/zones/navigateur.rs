@@ -3,6 +3,7 @@ use crate::*;
 
 type OrganisationNav = modele::OrganisationArborescence;
 
+#[allow(clippy::too_many_arguments)]
 fn organisation_nav(ui: &mut egui::Ui, cle: &str, lignes: &[(String, String)], rangements: &BTreeMap<String, String>, options: &OrganisationNav, survol_titre: bool, changement: &mut Option<(String, String)>, organisation_modifiee: &mut Option<(String, OrganisationNav)>) {
     let mut options = options.clone();
     let avant = options.clone();
@@ -86,7 +87,9 @@ impl Application {
         // glissables vers une feuille
         // jeux : (nom, feuilles : (id, titre, vues placées : (numéro de vue, nom, échelle)))
         type FeuilleNav = (String, String, Vec<(i64, String, f64)>, Vec<(String, String)>);
-        let (jeux_natifs, nomenclatures_natives, glissables): (Vec<(String, Vec<FeuilleNav>)>, Vec<(String, String)>, std::collections::HashMap<i64, String>) = match &self.natif {
+        /// Jeux de feuilles, nomenclatures (id, nom), vues glissables (numéro -> nom).
+        type DonneesNav = (Vec<(String, Vec<FeuilleNav>)>, Vec<(String, String)>, std::collections::HashMap<i64, String>);
+        let (jeux_natifs, nomenclatures_natives, glissables): DonneesNav = match &self.natif {
             Some((p, _)) => (
                 modele::documentation::jeux(p).into_iter().map(|j| {
                     let fs = p.feuilles.iter().filter(|f| f.jeu == j).map(|f| {
@@ -597,7 +600,7 @@ impl Application {
     }
 
     pub(crate) fn tree_roots(&self) -> Vec<Id> {
-        let s = self.scene.as_ref().unwrap();
+        let Some(s) = self.scene.as_ref() else { return Vec::new() };
         let mut roots: Vec<Id> = s.model.project.into_iter().collect();
         // Produits hors arborescence spatiale.
         let orphans = s.model.products.iter().any(|p| !s.model.parent.contains_key(p));
@@ -611,7 +614,7 @@ impl Application {
         if depth > 32 {
             return;
         }
-        let s = self.scene.as_ref().unwrap();
+        let Some(s) = self.scene.as_ref() else { return };
         let model = &s.model;
         let (label, children): (String, Vec<Id>) = if id == 0 {
             let orph: Vec<Id> = model.products.iter().copied().filter(|p| !model.parent.contains_key(p)).collect();
@@ -731,7 +734,7 @@ impl Application {
     }
 
     pub(crate) fn class_list(&mut self, ui: &mut egui::Ui) {
-        let s = self.scene.as_ref().unwrap();
+        let Some(s) = self.scene.as_ref() else { return };
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
         for o in &s.objects {
             *counts.entry(o.class.to_string()).or_default() += 1;
@@ -760,7 +763,7 @@ impl Application {
     }
 
     pub(crate) fn filtered_list(&mut self, ui: &mut egui::Ui) {
-        let s = self.scene.as_ref().unwrap();
+        let Some(s) = self.scene.as_ref() else { return };
         let q = self.filter.trim().to_lowercase();
         let mut hits = Vec::new();
         for &p in &s.model.products {

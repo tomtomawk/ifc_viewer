@@ -87,6 +87,9 @@ pub fn inflate_global(raw: &[u8]) -> Result<Vec<u8>, String> {
 /// principal, sinon le GUID du document embarqué (famille chargée).
 pub type Document = Option<[u8; 16]>;
 
+/// Sections par numéro, et leurs documents (position du début, document) par section.
+pub type SectionsDocuments = (BTreeMap<u32, Vec<u8>>, BTreeMap<u32, Vec<(usize, Document)>>);
+
 /// {h6 : données décompressées concaténées} d'un flux de partition. Les membres sont
 /// décompressés en parallèle ; un enregistrement peut déborder sur le membre suivant
 /// de la même section, d'où la concaténation dans l'ordre. Pour chaque section aussi,
@@ -97,7 +100,7 @@ pub type Document = Option<[u8; 16]>;
 /// de son premier membre : u16 classe, u32 0 et u32 nombre d'éléments pour le document
 /// principal ; u16 classe, u32 FFFFFFFF, u16 `ContentKey`, u32 nombre d'éléments puis
 /// le GUID (corps du pointeur, écrit après les champs) pour un document embarqué.
-pub fn sections_documents(raw: &[u8], marqueurs: Option<(u16, u16)>) -> Result<(BTreeMap<u32, Vec<u8>>, BTreeMap<u32, Vec<(usize, Document)>>), String> {
+pub fn sections_documents(raw: &[u8], marqueurs: Option<(u16, u16)>) -> Result<SectionsDocuments, String> {
     let b = unpad(raw);
     let heads = gzip_heads(&b);
     // document de chaque membre : le dernier marqueur rencontré
@@ -151,8 +154,8 @@ pub fn records(data: &[u8], stamp: bool, ids8: bool) -> Result<Vec<(i64, &[u8])>
     let mut out = Vec::new();
     let mut o = 0;
     while o + hdr <= data.len() {
-        let eid = if ids8 { i64_at(data, o) } else { i32_at(data, o).map(i64::from) }.unwrap();
-        let n = u32_at(data, o + hdr - 4).unwrap() as usize;
+        let eid = if ids8 { i64_at(data, o) } else { i32_at(data, o).map(i64::from) }.ok_or_else(|| format!("enregistrement tronqué à {o}"))?;
+        let n = u32_at(data, o + hdr - 4).ok_or_else(|| format!("enregistrement tronqué à {o}"))? as usize;
         let fin = o + hdr + n;
         if u32_at(data, fin).map(|v| v as usize) != Some(n) {
             return Err(format!("cadrage perdu à {o} (id {eid}, longueur {n})"));
@@ -170,7 +173,7 @@ pub fn records(data: &[u8], stamp: bool, ids8: bool) -> Result<Vec<(i64, &[u8])>
 pub fn elem_table(raw: &[u8]) -> Result<HashMap<i64, u32>, String> {
     let t = inflate_global(raw)?;
     let n = u32_at(&t, 2).ok_or("ElemTable tronquée")? as usize;
-    let size = if n > 0 { (t.len() - 6) / n } else { 40 };
+    let size = (t.len() - 6).checked_div(n).unwrap_or(40);
     (0..n)
         .map(|k| {
             let o = 6 + size * k;
@@ -189,7 +192,10 @@ pub fn episodes(raw: &[u8]) -> Result<Vec<[u8; 16]>, String> {
         let Some(debut) = h.len().checked_sub(4 + 17 * n + 4) else { break };
         // le compte, puis le même octet après chaque GUID
         if u32_at(&h, debut) == Some(n as u32) && (0..n).all(|k| h[debut + 20 + 17 * k] == h[debut + 20]) {
-            let mut l: Vec<[u8; 16]> = (0..n).map(|k| h[debut + 4 + 17 * k..debut + 20 + 17 * k].try_into().unwrap()).collect();
+            let mut l: Vec<[u8; 16]> = (0..n)
+                .map(|k| h.get(debut + 4 + 17 * k..debut + 20 + 17 * k).and_then(|g| g.try_into().ok()))
+                .collect::<Option<_>>()
+                .ok_or("Global/History tronqué")?;
             l.reverse();
             return Ok(l);
         }

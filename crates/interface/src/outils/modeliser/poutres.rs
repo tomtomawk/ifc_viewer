@@ -282,8 +282,8 @@ impl Application {
                 if t != avant { nouveau_type = Some(t); }
             }
         }
-        if let Some(t) = nouveau_type {
-            let mut q = self.natif.as_ref().unwrap().0.clone();
+        if let Some(t) = nouveau_type && let Some((projet, _)) = self.natif.as_ref() {
+            let mut q = projet.clone();
             match q.types_poutres.iter_mut().find(|x| x.id == t.id) {
                 Some(x) => *x = t.clone(),
                 None => q.types_poutres.push(t.clone()),

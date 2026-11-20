@@ -1,6 +1,7 @@
 //! T1 : `.modele.json` malformés. Des valeurs remplacées au hasard (graine fixe) dans les
 //! projets d'exemple donnent une erreur de lecture, de `verifier()` ou de construction de
 //! la scène, jamais une panique.
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use serde_json::Value;
 
 struct Alea(u64);

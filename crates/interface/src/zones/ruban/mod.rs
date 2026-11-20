@@ -943,7 +943,7 @@ impl RubanEdition {
         let pente = pentes.first().copied().flatten();
         if pente.is_some() && !matches!(d.sorte, modele::SorteDalle::Toiture | modele::SorteDalle::TerrePlein) { return Err("Créer à l'identique ne prend pas encore en charge cette pente.".into()); }
         self.activer_surface(d.sorte);
-        let outil = self.selection.unwrap();
+        let Some(outil) = self.selection else { return Err("Outil de création introuvable.".into()) };
         self.surface_identique = Some((outil, type_dalle));
         self.niveau_dalle = Some(d.niveau.clone());
         self.valeurs.insert((outil, 1), Valeur::Nombre(d.decalage));

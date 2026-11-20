@@ -128,6 +128,9 @@ struct Cibles {
     groupe_flou: wgpu::BindGroup,
 }
 
+/// Image d'apparence en cache : date du fichier lu et mipmaps (None : illisible).
+type ImageApparence = (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>);
+
 pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -208,7 +211,7 @@ pub struct Renderer {
     style_sommets: Vec<u8>,
     decoupe_rangs: Vec<bool>,
     indices_opaques: Vec<u32>,
-    images_apparences: std::collections::HashMap<String, (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>)>,
+    images_apparences: std::collections::HashMap<String, ImageApparence>,
     couches_apparences: Vec<(String, Option<std::time::SystemTime>)>,
 }
 
@@ -800,7 +803,7 @@ impl Renderer {
 
     /// Image d'une texture ramenée au carré de COTE_TEXTURE, avec ses mipmaps ; gardée
     /// tant que le fichier n'a pas changé. None : illisible.
-    fn image_apparence(&mut self, chemin: &str) -> (Option<std::time::SystemTime>, Option<Arc<Vec<Vec<u8>>>>) {
+    fn image_apparence(&mut self, chemin: &str) -> ImageApparence {
         let date = std::fs::metadata(chemin).and_then(|m| m.modified()).ok();
         if let Some(x) = self.images_apparences.get(chemin).filter(|x| x.0 == date) {
             return x.clone();

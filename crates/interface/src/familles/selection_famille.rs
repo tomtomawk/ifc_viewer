@@ -83,7 +83,7 @@ impl Application {
             .unwrap_or_else(|| modele::famille::profil::Profil::depuis_contour("Profil", vec![[-50.0, -50.0], [50.0, -50.0], [50.0, 50.0], [-50.0, 50.0]]));
         let noms: Vec<String> = self.natif.as_ref().map(|(p, _)| p.profils.iter().map(|x| x.nom.clone()).collect()).unwrap_or_default();
         let mut document = *profil.document_famille;
-        document.nom = (1..).map(|n| format!("Profil {n}")).find(|nom| !noms.iter().any(|x| x.eq_ignore_ascii_case(nom))).unwrap();
+        document.nom = (1..).map(|n| format!("Profil {n}")).find(|nom| !noms.iter().any(|x| x.eq_ignore_ascii_case(nom))).unwrap_or_default();
         self.ouvrir_famille_document_projet(document, None);
     }
 

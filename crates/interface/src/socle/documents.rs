@@ -35,7 +35,7 @@ impl Application {
         self.loading = Some(rx);
         self.error = None;
         self.status = format!("Chargement de {}…", path.display());
-        std::thread::Builder::new()
+        let lancement = std::thread::Builder::new()
             .stack_size(64 << 20)
             .spawn(move || {
                 // abandon (document fermé, autre chargement) : le calcul s'arrête à la
@@ -79,8 +79,11 @@ impl Application {
                     std::panic::resume_unwind(e);
                 }
                 ctx.request_repaint();
-            })
-            .expect("thread de chargement");
+            });
+        if let Err(e) = lancement {
+            self.loading = None;
+            self.error = Some(format!("Chargement impossible : {e}"));
+        }
     }
 
     /// Arrête le chargement en cours, s'il y en a un : son fil s'interrompt à sa
@@ -282,7 +285,7 @@ impl Application {
         });
         // éléments masqués dans la vue : leurs identifiants de scène calculés une fois, puis
         // chaque objet (ou son parent) y est cherché
-        let masques_vue: HashSet<Id> = self.vue_native_id().and_then(|id| self.natif.as_ref()?.0.vues.iter().find(|v| v.id == id).map(|vue| (&self.natif.as_ref().unwrap().0, vue))).filter(|(_, vue)| !vue.elements_masques.is_empty()).map(|(projet, vue)| {
+        let masques_vue: HashSet<Id> = self.vue_native_id().and_then(|id| { let projet = &self.natif.as_ref()?.0; projet.vues.iter().find(|v| v.id == id).map(|vue| (projet, vue)) }).filter(|(_, vue)| !vue.elements_masques.is_empty()).map(|(projet, vue)| {
             let masques: HashSet<Id> = crate::socle::document_bim::elements_natifs(projet).filter(|(_, cle)| vue.elements_masques.contains(*cle)).map(|(genre, cle)| modele::identifiants::id_natif(genre, cle)).collect();
             scene.objects.iter().filter(|o| masques.contains(&o.id) || scene.model.parent.get(&o.id).is_some_and(|id| masques.contains(id)))
                 .map(|o| o.id).collect()
@@ -475,7 +478,8 @@ impl Application {
             match message {
                 SaveMsg::Progress(p) => tache.progression = p,
                 SaveMsg::Done(resultat) => {
-                    let document = self.sauvegarde.take().unwrap().document;
+                    let Some(fini) = self.sauvegarde.take() else { return };
+                    let document = fini.document;
                     match resultat {
                         Ok(bilan) => {
                             let statut = format!("{} — enregistré en v0 : {} murs paramétriques, {} éléments importés",bilan.chemin.display(),bilan.murs,bilan.importes);

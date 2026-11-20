@@ -48,6 +48,7 @@ fn maillage(p: &Primitive, normale: DVec3, echelle: f64, fins: bool, raccords: O
 /// Ferme les six faces d'une section box. La triangulation précède le découpage
 /// par les autres faces : les trous des solides restent donc des trous.
 /// Sans poché demandé, le fond reprend la couleur de l'élément coupé.
+#[allow(clippy::too_many_arguments)]
 pub fn sommets_boite(scene: &Scene, visible: &[bool], affichage: Affichage, a: Vec3, b: Vec3, echelle: f64, poche: Option<Poche>, rendu: bool, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
     let (mut triangles, mut traits) = (Vec::new(), Vec::new());
     if !a.is_finite() || !b.is_finite() || a.cmpge(b).any() {
@@ -115,10 +116,12 @@ pub fn sommets_boite(scene: &Scene, visible: &[bool], affichage: Affichage, a: V
 /// tampon de profondeur calculé ici (`resolution` pixels sur le grand côté) : chaque arête
 /// est échantillonnée tous les demi-pixels et gardée là où aucune face n'est devant elle.
 /// Arêtes vives et silhouettes des surfaces courbes, une primitive par objet.
+#[allow(clippy::too_many_arguments)]
 pub fn vu(scene: &Scene, visible: &[bool], affichage: Affichage, droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: Option<Vec4>, resolution: usize) -> Vec<Primitive> {
     vu_limites(scene, visible, affichage, droite, haut, vers_oeil, coupe.as_slice(), resolution)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn vu_limites(scene: &Scene, visible: &[bool], affichage: Affichage, droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupes: &[Vec4], resolution: usize) -> Vec<Primitive> {
     let plans: Vec<_> = coupes.iter().map(|c| (c.truncate().as_dvec3(), c.w as f64)).collect();
     let proj = |p: DVec3| DVec3::new(p.dot(droite), p.dot(haut), p.dot(vers_oeil));
@@ -295,7 +298,7 @@ pub fn cadrer_primitives(primitives: Vec<Primitive>, plans: &[Vec4], normale: DV
             Forme::Segments(s) => Forme::Segments(s.into_iter().filter_map(segment).collect()),
             Forme::Polyligne { points, fermee } => {
                 let mut s: Vec<_> = points.windows(2).filter_map(|p| segment([p[0], p[1]])).collect();
-                if fermee && points.len() > 2 && let Some(t) = segment([*points.last().unwrap(), points[0]]) { s.push(t); }
+                if fermee && points.len() > 2 && let Some(&fin) = points.last() && let Some(t) = segment([fin, points[0]]) { s.push(t); }
                 Forme::Segments(s)
             }
             Forme::Triangles(t) => Forme::Triangles(faces(t)),

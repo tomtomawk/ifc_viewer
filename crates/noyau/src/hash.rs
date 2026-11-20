@@ -14,5 +14,6 @@ pub fn encoder<T: Serialize>(v: &T) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 pub fn hash<T: Serialize>(v: &T) -> String {
-    empreinte(&encoder(v).expect("valeur sérialisable"))
+    // valeur non sérialisable (clé de dictionnaire non textuelle) : empreinte du message d'erreur
+    empreinte(&encoder(v).unwrap_or_else(String::into_bytes))
 }

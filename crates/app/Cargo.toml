@@ -22,3 +22,6 @@ glam.workspace = true
 
 [target.'cfg(windows)'.build-dependencies]
 winresource.workspace = true
+
+[lints]
+workspace = true

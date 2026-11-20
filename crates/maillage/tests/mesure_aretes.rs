@@ -1,5 +1,6 @@
 //! Mesure et empreinte (ignorées par défaut) des arêtes de la scène sur les grands
 //! échantillons : sert à vérifier qu'une optimisation des arêtes ne change rien.
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 fn empreinte(chemin: &str) {
     let p = modele::Projet::lire_json(&std::fs::read_to_string(chemin).unwrap()).unwrap();
     let t = std::time::Instant::now();

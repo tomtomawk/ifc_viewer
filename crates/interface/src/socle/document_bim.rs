@@ -18,9 +18,9 @@ impl Application {
                 }
                 return;
             }
-        if self.collaboration.is_some() {
+        if let Some(c) = self.collaboration.as_mut() {
             if nombre != 1 { self.error = Some("En collaboration, annulez une transaction à la fois.".into()); return; }
-            let resultat = self.collaboration.as_mut().unwrap().annuler(retablir).and_then(|p|self.appliquer_projet_interne(p,true));
+            let resultat = c.annuler(retablir).and_then(|p|self.appliquer_projet_interne(p,true));
             if let Err(e)=resultat {self.error=Some(e);}
             return;
         }
@@ -113,7 +113,9 @@ impl Application {
                 .into_owned();
         }
         self.status = format!("{} — enregistré", chemin.display());
-        self.natif.as_mut().unwrap().1 = chemin;
+        if let Some((_, ancien)) = self.natif.as_mut() {
+            *ancien = chemin;
+        }
         self.natif_modifie = false;
         self.error = None;
     }
@@ -162,7 +164,7 @@ impl Application {
         let (tx, rx) = channel();
         let ctx = ctx.clone();
         self.loading = Some(rx);
-        std::thread::Builder::new()
+        let lancement = std::thread::Builder::new()
             .name("import-bim".into())
             .stack_size(64 << 20)
             .spawn(move || {
@@ -201,8 +203,11 @@ impl Application {
                 })();
                 let _ = tx.send(LoadMsg::Natif(resultat));
                 ctx.request_repaint();
-            })
-            .expect("thread d'import");
+            });
+        if let Err(e) = lancement {
+            self.loading = None;
+            self.error = Some(format!("Import impossible : {e}"));
+        }
     }
 }
 impl Application {
@@ -254,7 +259,7 @@ impl Application {
         let mut cible = None;
         for id in objets {
             let sous = self.objects_under(id);
-            let s = self.scene.as_ref().unwrap();
+            let Some(s) = self.scene.as_ref() else { return false };
             let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
             for o in sous.iter().filter_map(|&i| s.objects.get(i as usize)) {
                 mn = mn.min(o.min);

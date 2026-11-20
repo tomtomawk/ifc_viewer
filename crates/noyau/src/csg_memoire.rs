@@ -10,10 +10,13 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// Empreintes des deux maillages, opération, tolérance.
 type Cle = ([u64; 2], [u64; 2], u8, u64);
 
+/// Génération du dernier usage et résultat (absent si l'opération a échoué).
+type Resultat = (u64, Option<Arc<Vec<Tri>>>);
+
 #[derive(Default)]
 struct Memoire {
     generation: u64,
-    resultats: HashMap<Cle, (u64, Option<Arc<Vec<Tri>>>)>,
+    resultats: HashMap<Cle, Resultat>,
 }
 
 /// Nombre de calculs d'ensemble pendant lesquels un résultat inutilisé est gardé

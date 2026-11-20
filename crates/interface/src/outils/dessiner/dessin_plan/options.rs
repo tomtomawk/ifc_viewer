@@ -124,7 +124,7 @@ impl Application {
         self.terminer_raccord_ouvert();
         if let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2).map(|t| (t.points.iter().map(|p| p.to_array()).collect(), t.courbures())) {
             self.dessin2d.pousser_contour(points, k);
-            self.dessin2d.edition_contour.as_mut().unwrap().fermees.push(false);
+            if let Some(e) = self.dessin2d.edition_contour.as_mut() { e.fermees.push(false); }
         }
         if let Some(t) = self.dessin2d.trace.as_mut() {
             t.points.clear();

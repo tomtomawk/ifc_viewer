@@ -48,8 +48,8 @@ pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
 
     progress("Assemblage des tampons…".into());
     let mut scene = assemble(model, geoms, file_name);
-    let mut unsupported: Vec<(String, usize)> = stats.unsupported.into_inner().unwrap().into_iter().collect();
-    unsupported.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut unsupported: Vec<(String, usize)> = stats.unsupported.into_inner().unwrap_or_else(|e| e.into_inner()).into_iter().collect();
+    unsupported.sort_by_key(|u| std::cmp::Reverse(u.1));
     scene.unsupported = unsupported;
     scene.load_ms = t0.elapsed().as_millis();
     Ok(scene)
@@ -149,7 +149,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
             for t in &p.tris {
                 let n = (t[1] - t[0]).cross(t[2] - t[0]);
                 let len = n.length();
-                if !(len > 1e-14) {
+                if len.is_nan() || len <= 1e-14 {
                     continue;
                 }
                 let n = n / len;

@@ -3,11 +3,21 @@
 use std::path::PathBuf;
 
 pub(crate) fn stats(path: PathBuf) -> i32 {
-    let handle = std::thread::Builder::new()
+    let handle = match std::thread::Builder::new()
         .stack_size(64 << 20)
         .spawn(move || formats::ifc::assemblage::load(&path, &|s| eprintln!("{s}")))
-        .unwrap();
-    match handle.join().unwrap() {
+    {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("Erreur : impossible de lancer la lecture ({e})");
+            return 1;
+        }
+    };
+    let Ok(resultat) = handle.join() else {
+        eprintln!("Erreur : la lecture a échoué (panique)");
+        return 1;
+    };
+    match resultat {
         Ok(s) => {
             println!("Fichier      : {}", s.file_name);
             println!("Schéma       : {}", s.model.file.schema);

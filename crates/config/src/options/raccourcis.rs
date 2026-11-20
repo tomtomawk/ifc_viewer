@@ -97,7 +97,7 @@ pub fn analyser(texte: &str) -> Result<Option<Raccourci>, String> {
         return Ok(None);
     }
     let morceaux: Vec<_> = texte.split('+').map(str::trim).collect();
-    let cle = *morceaux.last().unwrap();
+    let Some(&cle) = morceaux.last() else { return Ok(None) };
     if morceaux.len() == 1
         && (2..=3).contains(&cle.len())
         && cle.chars().all(|c| c.is_ascii_alphabetic())

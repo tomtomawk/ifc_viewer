@@ -8,11 +8,14 @@ pub fn lancer(path: Option<PathBuf>) -> eframe::Result<()> {
     // l'anticrénelage de la vue 3D est celui du rendu (BIMEDIT_MSAA), pas de la fenêtre
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title("BIMedit")
-        .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icone.png")).expect("Icône intégrée invalide"))
         .with_decorations(cadre_natif())
         .with_min_inner_size([800.0, 520.0])
         .with_inner_size([1500.0, 920.0])
         .with_drag_and_drop(true);
+    // icône embarquée illisible : fenêtre sans icône plutôt qu'un arrêt
+    if let Ok(icone) = eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icone.png")) {
+        viewport = viewport.with_icon(icone);
+    }
     // Mode arrière-plan (tests, pilotage) : fenêtre créée sans activation, hors de l'écran et
     // hors de la barre des tâches ; elle reste rendue et pilotable (saisies egui simulées).
     let arriere_plan = arriere_plan();

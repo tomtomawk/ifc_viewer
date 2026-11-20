@@ -153,7 +153,7 @@ impl Application {
             let mut q=projet.clone();
             let choisi=self.ruban_edition.type_mur.clone();
             self.ruban_edition.type_mur=type_creation;
-            let Some(choisi)=choisi.filter(|id|id!=&actuel) else{return None};
+            let choisi=choisi.filter(|id|id!=&actuel)?;
             match cible {
                 Cible::Assemblage(a)=>{
                     let axe=match modele::volumes::solides::hote(&q,&a) {Ok((axe,_,_))=>axe,Err(e)=>{self.error=Some(e);return None}};

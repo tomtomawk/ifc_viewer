@@ -162,9 +162,9 @@ impl Zone {
             if !p.iter().all(|x| x.is_finite()) {
                 return None;
             }
-            for i in 0..2 {
-                z.0[i] = z.0[i].min(p[i]);
-                z.0[i + 2] = z.0[i + 2].max(p[i]);
+            for (i, c) in p.into_iter().enumerate() {
+                z.0[i] = z.0[i].min(c);
+                z.0[i + 2] = z.0[i + 2].max(c);
             }
             n += 1;
         }
@@ -520,14 +520,20 @@ pub fn ajouter_spatial(t: &mut Transaction, a: &Objets) {
     }
     if !zones.is_empty() {
         if t.protocole>=3 {
-            let key=format!("#voisinage3/{}",serde_json::to_string(&voisinages).expect("voisinages finis"));
+            // Sérialisation en échec (non attendue) : lecture spatiale globale, la plus prudente.
+            let Ok(json) = serde_json::to_string(&voisinages) else {
+                t.lectures.insert("#spatial".into(), spatial(a));
+                return;
+            };
+            let key=format!("#voisinage3/{json}");
             t.lectures.insert(key,empreinte_voisinage(a,&voisinages));
             return;
         }
-        let key = format!(
-            "#zones/{}",
-            serde_json::to_string(&zones).expect("emprises finies")
-        );
+        let Ok(json) = serde_json::to_string(&zones) else {
+            t.lectures.insert("#spatial".into(), spatial(a));
+            return;
+        };
+        let key = format!("#zones/{json}");
         t.lectures.insert(key, empreinte_zone(a, &zones));
     }
 }

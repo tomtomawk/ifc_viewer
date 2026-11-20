@@ -85,7 +85,7 @@ pub fn hote_elargi(p: &Projet, o: &Ouverture) -> Result<HoteElargi, String> {
             if (y0 - hi).abs() > 1.0 && (y1 - lo).abs() > 1.0 {
                 continue;
             }
-            let (c, d) = droite(m).unwrap();
+            let Some((c, d)) = droite(m) else { continue };
             let (s0, s1) = ((c - a).dot(u), (d - a).dot(u));
             if s0.max(s1).min(x1) - s0.min(s1).max(x0) < 1.0 {
                 continue;

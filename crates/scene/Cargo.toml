@@ -11,3 +11,6 @@ noyau = { path = "../noyau" }
 modele = { path = "../modele" }
 ifc_base = { path = "../ifc_base" }
 glam.workspace = true
+
+[lints]
+workspace = true

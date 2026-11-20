@@ -35,6 +35,9 @@ pub enum FormeGuidee {
     },
 }
 
+/// Chemin, arcs et fermeture modifiables d'une forme par chemin.
+pub type TraceMut<'a> = (&'a mut Vec<[f64; 3]>, &'a mut Vec<usize>, Option<&'a mut bool>);
+
 impl FormeGuidee {
     pub fn nom(&self) -> &'static str {
         match self {
@@ -74,7 +77,7 @@ impl FormeGuidee {
     pub fn ferme(&self) -> bool { matches!(self, Self::ExtrusionChemin { ferme: true, .. }) }
 
     /// Chemin, arcs et fermeture modifiables (formes par chemin seulement).
-    pub fn trace_mut(&mut self) -> Option<(&mut Vec<[f64; 3]>, &mut Vec<usize>, Option<&mut bool>)> {
+    pub fn trace_mut(&mut self) -> Option<TraceMut<'_>> {
         match self {
             Self::ExtrusionChemin { chemin, arcs, ferme } => Some((chemin, arcs, Some(ferme))),
             Self::RaccordementChemin { chemin, arcs, .. } => Some((chemin, arcs, None)),

@@ -74,7 +74,7 @@ fn u16_at(b: &[u8], o: usize) -> u16 {
     u16::from_le_bytes([b[o], b[o + 1]])
 }
 fn u32_at(b: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes(b[o..o + 4].try_into().unwrap())
+    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
 }
 
 impl Cfb {
@@ -126,14 +126,14 @@ impl Cfb {
         fat_sectors.truncate(n_fat);
         for s in fat_sectors {
             let b = cfb.sector(s)?;
-            cfb.fat.extend(b.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())));
+            cfb.fat.extend(b.chunks_exact(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])));
         }
 
         let dir_data = cfb.chain_bytes(first_dir)?;
         for e in dir_data.chunks_exact(128) {
             let nl = (u16_at(e, 64) as usize).min(64);
             let units: Vec<u16> = e[..nl.saturating_sub(2)].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-            let mut size = u64::from_le_bytes(e[120..128].try_into().unwrap());
+            let mut size = u64::from(u32_at(e, 120)) | (u64::from(u32_at(e, 124)) << 32);
             if major == 3 {
                 size &= 0xFFFF_FFFF;
             }
@@ -152,7 +152,7 @@ impl Cfb {
         }
         if n_minifat > 0 {
             let m = cfb.chain_bytes(first_minifat)?;
-            cfb.minifat = m.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect();
+            cfb.minifat = m.chunks_exact(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
         }
         let (root_start, root_size) = (cfb.dirs[0].start, cfb.dirs[0].size);
         if root_size > 0 && root_start < END_OF_CHAIN {
@@ -520,7 +520,7 @@ pub fn extract_png(b: &[u8]) -> Option<Vec<u8>> {
     let start = b.windows(8).position(|w| w == [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A])?;
     let mut o = start + 8;
     while o + 12 <= b.len() {
-        let len = u32::from_be_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+        let len = u32::from_be_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as usize;
         let end = o + 12 + len;
         if end > b.len() {
             return None;
@@ -666,18 +666,18 @@ pub mod xml {
         let mut rest = src;
         while !rest.is_empty() {
             let Some(lt) = rest.find('<') else {
-                stack.last_mut().unwrap().text.push_str(&unescape(rest));
+                stack.last_mut().ok_or("pile XML vide")?.text.push_str(&unescape(rest));
                 break;
             };
             if lt > 0 {
-                stack.last_mut().unwrap().text.push_str(&unescape(&rest[..lt]));
+                stack.last_mut().ok_or("pile XML vide")?.text.push_str(&unescape(&rest[..lt]));
             }
             rest = &rest[lt..];
             if let Some(r) = rest.strip_prefix("<!--") {
                 rest = r.find("-->").map(|i| &r[i + 3..]).ok_or("commentaire non fermé")?;
             } else if let Some(r) = rest.strip_prefix("<![CDATA[") {
                 let i = r.find("]]>").ok_or("CDATA non fermé")?;
-                stack.last_mut().unwrap().text.push_str(&r[..i]);
+                stack.last_mut().ok_or("pile XML vide")?.text.push_str(&r[..i]);
                 rest = &r[i + 3..];
             } else if rest.starts_with("<?") || rest.starts_with("<!") {
                 rest = rest.find('>').map(|i| &rest[i + 1..]).ok_or("déclaration non fermée")?;
@@ -688,7 +688,7 @@ pub mod xml {
                 if node.name != name {
                     return Err(format!("balise </{name}> au lieu de </{}>", node.name));
                 }
-                stack.last_mut().unwrap().children.push(node);
+                stack.last_mut().ok_or("pile XML vide")?.children.push(node);
                 rest = &r[gt + 1..];
             } else {
                 let gt = tag_end(rest).ok_or("balise ouvrante non terminée")?;
@@ -699,7 +699,7 @@ pub mod xml {
                 };
                 let node = open_tag(inner)?;
                 if self_closing {
-                    stack.last_mut().unwrap().children.push(node);
+                    stack.last_mut().ok_or("pile XML vide")?.children.push(node);
                 } else {
                     stack.push(node);
                 }
@@ -707,9 +707,9 @@ pub mod xml {
             }
         }
         if stack.len() != 1 {
-            return Err(format!("élément <{}> non fermé", stack.last().unwrap().name));
+            return Err(format!("élément <{}> non fermé", stack.last().map_or("", |n| n.name.as_str())));
         }
-        stack.pop().unwrap().children.into_iter().next().ok_or_else(|| "document XML vide".to_string())
+        stack.pop().and_then(|racine| racine.children.into_iter().next()).ok_or_else(|| "document XML vide".to_string())
     }
 
     /// Position du `>` qui termine la balise, hors valeurs d'attribut.

@@ -226,8 +226,10 @@ impl Application {
             let nom = self.nom_vue.as_ref().map(|(_, n)| n.clone()).unwrap_or_default();
             p.renommer_vue(&vue.id, &nom)
         } else {
-            *p.vues.iter_mut().find(|v| v.id == vue.id).unwrap() = nouvelle.clone();
-            Ok(())
+            match p.vues.iter_mut().find(|v| v.id == vue.id) {
+                Some(v) => { *v = nouvelle.clone(); Ok(()) }
+                None => Err("Vue introuvable.".into()),
+            }
         };
         if let Err(e) = resultat.and_then(|_| self.appliquer_projet(p)) {
             self.error = Some(e);

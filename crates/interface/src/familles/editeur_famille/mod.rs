@@ -263,7 +263,7 @@ fn couleur_materiau(f: &FamilleModelee, m: Materiau) -> Color32 {
 
 /// Nom libre dérivé de `base` (« Plan 3 »).
 fn nom_libre(existants: impl Fn(&str) -> bool, base: &str) -> String {
-    (1..).map(|k| format!("{base} {k}")).find(|n| !existants(n)).unwrap()
+    (1..).map(|k| format!("{base} {k}")).find(|n| !existants(n)).unwrap_or_default()
 }
 
 impl EditeurFamille {

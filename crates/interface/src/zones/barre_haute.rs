@@ -20,8 +20,11 @@ impl Application {
         let titre = egui::Rect::from_min_size(barre.min, egui::vec2(108.0, barre.height()));
         let icone_id = egui::Id::unique("icone_application_texture");
         let texture = ctx.data(|d| d.get_temp::<egui::TextureHandle>(icone_id)).unwrap_or_else(|| {
-            let image = eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icone.png")).expect("Icône intégrée invalide");
-            let pixels = egui::ColorImage::from_rgba_unmultiplied([image.width as usize, image.height as usize], &image.rgba);
+            // icône embarquée illisible : pixel transparent plutôt qu'un arrêt
+            let pixels = match eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icone.png")) {
+                Ok(image) => egui::ColorImage::from_rgba_unmultiplied([image.width as usize, image.height as usize], &image.rgba),
+                Err(_) => egui::ColorImage::filled([1, 1], egui::Color32::TRANSPARENT),
+            };
             let texture = ctx.load_texture("icone_application", pixels, egui::TextureOptions::LINEAR);
             ctx.data_mut(|d| d.insert_temp(icone_id, texture.clone()));
             texture

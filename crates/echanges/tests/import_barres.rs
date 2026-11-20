@@ -1,5 +1,6 @@
 //! Poteaux et poutres IFC simples convertis en barres natives
 //! (`samples/test_ifc4_proprietes.ifc`).
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use echanges::{depuis_ifc, export_ifc};
 use modele::volumes::{geometrie, solides};
 use modele::{GenreBarre, Projet};

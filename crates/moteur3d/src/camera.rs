@@ -163,7 +163,8 @@ impl Camera {
     pub fn placer(&mut self, oeil: Vec3, cible: Vec3) {
         let d = cible - oeil;
         let l = d.length();
-        if !(l > 1e-6) {
+        // NaN compris : direction indéterminée ignorée
+        if l.is_nan() || l <= 1e-6 {
             return;
         }
         let f = d / l;

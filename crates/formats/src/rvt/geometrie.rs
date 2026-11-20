@@ -198,9 +198,12 @@ fn refs(e: &Obj, name: &str) -> [Option<u32>; 2] {
     [l.first().and_then(Val::reference), l.get(1).and_then(Val::reference)]
 }
 
+/// Boucle d'une face : (numéro d'arête, [(u, v)…]) dans l'ordre de parcours.
+type Boucle = Vec<(u32, Vec<DVec2>)>;
+
 /// Boucles de la face : listes de (numéro d'arête, [(u, v)…]) dans l'ordre de parcours
 /// de la face, chaque arête dans le sens de ce parcours.
-fn boucles<'s>(rec: &Record<'s>, fnum: u32, face: &Obj<'s>) -> Result<Vec<Vec<(u32, Vec<DVec2>)>>, String> {
+fn boucles<'s>(rec: &Record<'s>, fnum: u32, face: &Obj<'s>) -> Result<Vec<Boucle>, String> {
     let mut out = Vec::new();
     let mut lp = face.get("m_pFirstLoop").and_then(|v| rec.deref(v));
     while let Some(b) = lp {
@@ -358,11 +361,12 @@ pub fn trianguler(uv: &[DVec2], xyz: &[DVec3], polys: &[Vec<usize>], surface: Op
                 None => {
                     // sommets alignés restants : on retire le moins saillant sans triangle
                     let idx: Vec<usize> = (0..n).collect();
-                    let i = argmin(&idx, |i| {
+                    let Some(i) = argmin(&idx, |i| {
                         let [a, b, c] = tri_at(i);
                         cross(uv[a], uv[b], uv[c]).abs()
-                    })
-                    .unwrap();
+                    }) else {
+                        break;
+                    };
                     poly.remove(i);
                 }
             }
@@ -469,20 +473,20 @@ impl<'a, 's> Bibliotheque<'a, 's> {
     /// Dessin du type `id` (repère du type, mm), None s'il n'a pas de géométrie.
     pub fn dessin(&self, id: i64) -> Option<Dessin> {
         let f = self.type_famille(id, 0)?;
-        let faces: Vec<(Option<[u8; 3]>, Vec<[DVec3; 3]>)> = f.0.iter().map(|x| (x.motif.map(|m| m.couleur), x.triangles.iter().map(|t| t.map(|p| p * FT)).collect())).collect();
+        let faces: Vec<FaceDessin> = f.0.iter().map(|x| (x.motif.map(|m| m.couleur), x.triangles.iter().map(|t| t.map(|p| p * FT)).collect())).collect();
         Some(Dessin { traits: f.2.iter().map(|l| l.iter().map(|p| *p * FT).collect()).collect(), faces })
     }
 
     /// Faces (pieds, repère du type) et échecs de décodage du type `id`.
     fn type_famille(&self, id: i64, prof: u32) -> Option<FacesType> {
-        if let Some(f) = self.cache.lock().unwrap().get(&id) {
+        if let Some(f) = self.cache.lock().unwrap_or_else(|e| e.into_inner()).get(&id) {
             return Some(f.clone());
         }
         let rec = champs::read(self.sch, self.octets.get(&id)?).ok()?;
         let mut p = Parcours { bib: self, tout: false, feuilles: self.feuilles, faces: Vec::new(), echecs: Vec::new(), traits: Vec::new() };
         p.noeud(&rec, gelement(&rec).ok()?, &Trf::ID, prof);
         let f = Arc::new((p.faces, p.echecs, p.traits));
-        self.cache.lock().unwrap().insert(id, f.clone());
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).insert(id, f.clone());
         Some(f)
     }
 }
@@ -503,8 +507,11 @@ struct Parcours<'b, 'a, 's> {
 /// (régions remplies, avec la couleur de leur remplissage s'il est connu), mm.
 pub struct Dessin {
     pub traits: Vec<Vec<DVec3>>,
-    pub faces: Vec<(Option<[u8; 3]>, Vec<[DVec3; 3]>)>,
+    pub faces: Vec<FaceDessin>,
 }
+
+/// Face d'un dessin : couleur de remplissage éventuelle et triangles (mm).
+pub type FaceDessin = (Option<[u8; 3]>, Vec<[DVec3; 3]>);
 
 /// Points (pieds) d'une courbe d'un `GElement` : droite, arc facetté tous les 5° au plus,
 /// spline en 16 segments.
@@ -691,7 +698,9 @@ fn solide(rec: &Record, n: &Obj, tout: bool) -> Result<Option<Vec<Face>>, String
             for (i, (k, ar)) in b.iter().enumerate() {
                 let suiv = &b[(i + 1) % b.len()].1;
                 // contrôle du sens de parcours : fin de chaque arête = début de la suivante
-                let (fin, debut) = (ar.last().unwrap(), suiv[0]);
+                let (Some(fin), Some(&debut)) = (ar.last(), suiv.first()) else {
+                    return err(format!("arête vide dans la face {}", fb.num));
+                };
                 if point(rec, s, fin.x, fin.y)?.distance(point(rec, s, debut.x, debut.y)?) > TOLERANCE_SOMMET {
                     return err(format!("boucle de la face {} discontinue", fb.num));
                 }

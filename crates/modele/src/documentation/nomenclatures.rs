@@ -22,7 +22,7 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
         ajouter(
             "Murs",
             if n.regrouper {
-                p.type_mur(&m.type_mur).unwrap().nom.clone()
+                p.type_mur(&m.type_mur).ok_or("Type de mur introuvable.")?.nom.clone()
             } else {
                 format!("{} ({})", m.nom, m.id)
             },
@@ -33,7 +33,7 @@ pub fn tableau(p: &Projet, n: &Nomenclature) -> Result<Vec<Vec<String>>, String>
         ajouter(
             d.sorte.nom(),
             if n.regrouper {
-                p.type_dalle(&d.type_dalle).unwrap().nom.clone()
+                p.type_dalle(&d.type_dalle).ok_or("Type de dalle introuvable.")?.nom.clone()
             } else {
                 format!("{} ({})", d.nom, d.id)
             },

@@ -58,11 +58,14 @@ pub(super) fn correspondance(depart: &[[f64; 2]], arrivee: &[[f64; 2]]) -> (Vec<
     (ts.iter().map(|&t| point_a(depart, &ta, t)).collect(), ts.iter().map(|&t| point_a(&arrivee, &tb, t)).collect())
 }
 
+/// Points ajoutés au contour et triangles (indices) d'un capuchon.
+pub(super) type Capuchon = (Vec<[f64; 2]>, Vec<[usize; 3]>);
+
 /// Triangulation d'un contour qui peut porter des points alignés (rééchantillonnage) :
 /// les sommets saillants sont triangulés, puis chaque triangle bordé de points
 /// intermédiaires est découpé en éventail depuis son centre. Rend les points ajoutés
 /// (indices à la suite du contour) et les triangles.
-pub(super) fn capuchon(contour: &[[f64; 2]]) -> Option<(Vec<[f64; 2]>, Vec<[usize; 3]>)> {
+pub(super) fn capuchon(contour: &[[f64; 2]]) -> Option<Capuchon> {
     let n = contour.len();
     let croix = |i: usize| {
         let (a, b, c) = (contour[(i + n - 1) % n], contour[i], contour[(i + 1) % n]);
@@ -73,7 +76,7 @@ pub(super) fn capuchon(contour: &[[f64; 2]]) -> Option<(Vec<[f64; 2]>, Vec<[usiz
     if coins.len() < 3 { return None; }
     let coords: Vec<f64> = coins.iter().flat_map(|&i| contour[i]).collect();
     let indices = noyau::geometrie::earcut(&coords, &[], 2)?;
-    let suivant = |k: usize| coins[(coins.iter().position(|&c| c == k).unwrap() + 1) % coins.len()];
+    let suivant = |k: usize| coins.iter().position(|&c| c == k).map(|i| coins[(i + 1) % coins.len()]);
     let mut ajoutes = Vec::new();
     let mut tris = Vec::new();
     for t in indices.chunks_exact(3) {
@@ -82,10 +85,10 @@ pub(super) fn capuchon(contour: &[[f64; 2]]) -> Option<(Vec<[f64; 2]>, Vec<[usiz
         for e in 0..3 {
             let (x, y) = (sommets[e], sommets[(e + 1) % 3]);
             tour.push(x);
-            if suivant(x) == y {
+            if suivant(x) == Some(y) {
                 let mut i = (x + 1) % n;
                 while i != y { tour.push(i); i = (i + 1) % n; }
-            } else if suivant(y) == x {
+            } else if suivant(y) == Some(x) {
                 let mut i = (x + n - 1) % n;
                 while i != y { tour.push(i); i = (i + n - 1) % n; }
             }

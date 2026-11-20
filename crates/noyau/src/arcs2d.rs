@@ -40,7 +40,7 @@ fn angle(u: DVec2, v: DVec2) -> f64 {
 pub fn morceaux(p: &[DVec2], fermee: bool) -> Vec<Morceau> {
     let mut pts: Vec<DVec2> = p.to_vec();
     pts.dedup_by(|a, b| a.distance_squared(*b) < 1e-18);
-    if fermee && pts.len() > 2 && pts[0].distance_squared(*pts.last().unwrap()) > 1e-18 {
+    if fermee && pts.len() > 2 && pts.last().is_some_and(|d| pts[0].distance_squared(*d) > 1e-18) {
         pts.push(pts[0]);
     }
     let n = pts.len();

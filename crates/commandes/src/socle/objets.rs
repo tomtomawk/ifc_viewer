@@ -24,10 +24,11 @@ pub fn objets(p: &Projet) -> Result<Objets, String> {
                         .ok_or_else(|| format!("Identité absente : {collection}"))?;
                     let key = format!("{collection}/{id}");
                     let mut objet = o.clone();
-                    if collection == "annotations"
-                        && objet.get("forme").and_then(Value::as_str) == Some("texte")
+                    if let Some(champs) = objet.as_object_mut()
+                        && collection == "annotations"
+                        && champs.get("forme").and_then(Value::as_str) == Some("texte")
                     {
-                        objet.as_object_mut().unwrap().remove("texte");
+                        champs.remove("texte");
                     }
                     if out.insert(key.clone(), objet).is_some() {
                         return Err(format!("Identité dupliquée : {key}"));

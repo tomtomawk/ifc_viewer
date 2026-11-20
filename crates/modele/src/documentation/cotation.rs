@@ -92,10 +92,13 @@ pub struct StyleCote<'a> {
     pub altitude: &'a dyn Fn([f64; 2], bool) -> f64,
 }
 
+/// Traits d'une cote, et ses textes (milieu de la ligne de base, direction, contenu).
+pub type GeometrieCote = (Vec<[DVec2; 2]>, Vec<(DVec2, DVec2, String)>);
+
 /// Géométrie d'une cote, quel qu'en soit le genre : traits, et textes (milieu de la
 /// ligne de base, direction, contenu). Cote linéaire : points déjà résolus
 /// (`PointCote::Fixe`), sinon `debut`/`fin` sont à fournir par l'appelant.
-pub fn geometrie(forme: &AnnotationForme, extremites: Option<(DVec2, DVec2)>, style: &StyleCote) -> Option<(Vec<[DVec2; 2]>, Vec<(DVec2, DVec2, String)>)> {
+pub fn geometrie(forme: &AnnotationForme, extremites: Option<(DVec2, DVec2)>, style: &StyleCote) -> Option<GeometrieCote> {
     let x = |q: &[f64; 2]| DVec2::from_array(*q);
     let marge = style.taille;
     let g = match forme {

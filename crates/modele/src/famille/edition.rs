@@ -63,7 +63,9 @@ impl Projet {
             if q.nom_type_libre(&nom, Some(id)) != nom {
                 return Err(format!("Le nom « {nom} » est déjà pris par un autre type."));
             }
-            let t = q.types_ouvertures.iter_mut().find(|t| t.id == id).unwrap();
+            let Some(t) = q.types_ouvertures.iter_mut().find(|t| t.id == id) else {
+                return Err("Type d'ouverture introuvable.".into());
+            };
             (t.nom, t.largeur, t.hauteur, t.modele, t.genre) = (
                 nom,
                 f.largeur,

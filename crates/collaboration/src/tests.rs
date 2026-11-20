@@ -1169,10 +1169,11 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     q.motifs.push(v);
                 }
                 "cartouche" => {
-                    let mut v = documentation::FamilleCartouche::default();
-                    v.id = id;
-                    v.nom = poste.into();
-                    q.familles_cartouches.push(v);
+                    q.familles_cartouches.push(documentation::FamilleCartouche {
+                        id,
+                        nom: poste.into(),
+                        ..Default::default()
+                    });
                 }
                 "barre" => q.barres.push(Barre {
                     id,

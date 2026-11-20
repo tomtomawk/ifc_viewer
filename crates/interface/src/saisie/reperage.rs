@@ -85,6 +85,7 @@ impl Reperage {
         *self = Reperage::default();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn calculer(&mut self, c: DVec2, tol: f64, geoms: &[Geom], droites: &[(DVec2, DVec2)], precedent: Option<DVec2>, maj: bool, temps: f64, delai: f64, angle_axes: f64, trace_actif: bool) -> Option<(DVec2, Accroche)> {
         self.guides.clear();
         self.cercle = (!maj).then(|| cercle_survole(c, tol, geoms)).flatten();
@@ -153,7 +154,9 @@ impl Reperage {
             lignes.extend(self.droites.iter().copied());
             self.guides.extend(self.droites.iter().copied());
             // Une intersection de deux guides est prioritaire sur une projection simple.
-            let mut meilleur: Option<(f64, DVec2, Vec<(DVec2, DVec2)>)> = None;
+            /// Distance au curseur, point d'intersection, guides qui la forment.
+            type Intersection = (f64, DVec2, Vec<(DVec2, DVec2)>);
+            let mut meilleur: Option<Intersection> = None;
             for i in 0..lignes.len() {
                 for j in i + 1..lignes.len() {
                     let (a, d) = lignes[i];

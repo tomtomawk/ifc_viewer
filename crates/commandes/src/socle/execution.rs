@@ -53,7 +53,7 @@ impl Execution for Projet {
             let type_mur = travail.type_mur(&mur.type_mur).ok_or("Type absent.")?;
             let reference = travail.implantations.get(&id).copied().unwrap_or(modele::murs::assemblage::Reference::Axe);
             let axe = assemblage::decaler_axe(&axe, -type_mur.decalage_reference(reference));
-            travail.murs.iter_mut().find(|m| m.id == id).unwrap().axe = axe;
+            travail.murs.iter_mut().find(|m| m.id == id).ok_or("Mur introuvable.")?.axe = axe;
             travail.eclater_mur(&id)?;
         }
         *self = travail;

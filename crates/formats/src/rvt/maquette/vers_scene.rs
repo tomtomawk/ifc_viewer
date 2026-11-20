@@ -17,11 +17,9 @@ impl Builder {
     pub(super) fn psets_parametres(&mut self, m: &Maquette, element: i64) -> Vec<Id> {
         let mut out = Vec::new();
         let aff = m.parametres_affiches(element);
-        let mut k = 0;
-        for groupe in aff.chunk_by(|a, b| a.groupe == b.groupe) {
+        for (k, groupe) in aff.chunk_by(|a, b| a.groupe == b.groupe).enumerate() {
             let props: Vec<(&str, Value)> = groupe.iter().map(|a| (a.nom.as_str(), Value::Str(a.valeur.clone()))).collect();
             out.push(self.pset(&format!("RVTG{k:02}"), element, groupe[0].groupe, props));
-            k += 1;
         }
         out
     }
@@ -121,11 +119,14 @@ pub(super) fn parts_primitives(prims: &[Primitive], normale: DVec3, echelle: f64
     parts
 }
 
+/// Propriété affichée : nom, valeur en clair.
+type Propriete = (String, String);
+
 /// Propriétés « Coordonnées » du projet, comme la boîte « Emplacement » et les points de
 /// base de Revit : emplacement actif, position partagée du point de base du projet et
 /// angle par rapport au nord géographique, point topographique, lieu, autres
 /// emplacements.
-pub(super) fn parametres_du_projet(m: &Maquette) -> (Vec<(String, String)>, Vec<(String, String)>) {
+pub(super) fn parametres_du_projet(m: &Maquette) -> (Vec<Propriete>, Vec<Propriete>) {
     let mut globaux: Vec<(String, String)> = m
         .definitions
         .iter()
@@ -996,7 +997,6 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
         if let Some(mur) = m.murs.iter().find(|w| w.id == el)
             && let Some(bandes) = bandes_couches_mur(m, mur, s.origin) { s.couches_coupe.insert(ent, bandes); }
     }
-    let mut nav = nav;
     for (&ent, &el) in &element_de {
         let ph = |k| id_parametre(m, el, k);
         if let Some(c) = ph(-1_012_100) {
@@ -1129,7 +1129,9 @@ pub(super) fn navigateur(m: &Maquette, entite_vue: &HashMap<i64, Id>, entite_typ
         })
         .collect();
     // familles chargées (catégorie, famille, types), puis familles système
-    let mut par_famille: BTreeMap<(String, String), Vec<(String, Option<Id>)>> = BTreeMap::new();
+    /// Types d'une famille : nom et entité du type.
+    type TypesFamille = Vec<(String, Option<Id>)>;
+    let mut par_famille: BTreeMap<(String, String), TypesFamille> = BTreeMap::new();
     for (&id, f) in m.familles.iter().filter(|(_, f)| f.parent == -1) {
         let cle = (m.nom_categorie(f.categorie), f.nom.clone());
         let mut ts: Vec<(String, Option<Id>)> = m.types.iter().filter(|(_, t)| t.famille == id).map(|(&tid, t)| (t.nom.clone(), entite_type.get(&tid).copied())).collect();

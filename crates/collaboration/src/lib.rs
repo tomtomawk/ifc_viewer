@@ -58,10 +58,11 @@ pub fn projet(objets: &Objets) -> Resultat<Projet> {
             root.insert(k[2..].into(), v.clone());
         } else if c != "@ordre" {
             let mut v = v.clone();
-            if c == "annotations" && v.get("forme").and_then(Value::as_str) == Some("texte") {
-                v.as_object_mut()
-                    .unwrap()
-                    .insert("texte".into(), Value::String(String::new()));
+            if let Some(o) = v.as_object_mut()
+                && c == "annotations"
+                && o.get("forme").and_then(Value::as_str) == Some("texte")
+            {
+                o.insert("texte".into(), Value::String(String::new()));
             }
             collections.entry(c.into()).or_default().push(v);
         }

@@ -6,6 +6,10 @@ use crate::*;
 use commandes::Commande;
 use modele::Projet;
 
+/// Clé de l'aperçu calculé : révision, référence, élément, extrémité, prolonger seulement,
+/// extrémité de la référence (angle), ligne limite arrondie.
+type CleApercu = (u64, String, String, bool, bool, Option<bool>, Option<[[u64; 2]; 2]>);
+
 #[derive(Default)]
 pub(crate) struct EtatAjustement {
     pub reference: Option<String>,
@@ -17,7 +21,7 @@ pub(crate) struct EtatAjustement {
     survol: Option<(String, bool)>,
     /// Arête sous le curseur avant le choix de la limite.
     survol_arete: Option<(String, [[f64; 2]; 2])>,
-    cache: Option<(u64, String, String, bool, bool, Option<bool>, Option<[[u64; 2]; 2]>)>,
+    cache: Option<CleApercu>,
     apercu: Option<Result<Apercu, String>>,
 }
 struct Apercu {
@@ -143,7 +147,7 @@ impl Application {
             if etat
                 .reference
                 .as_ref()
-                .is_some_and(|id| self.natif.as_ref().unwrap().0.ligne_ajustable(id).is_none() && self.natif.as_ref().unwrap().0.aretes_plan(id).is_empty())
+                .is_some_and(|id| self.natif.as_ref().is_some_and(|(p, _)| p.ligne_ajustable(id).is_none() && p.aretes_plan(id).is_empty()))
             {
                 *etat = Default::default();
             }
@@ -266,12 +270,15 @@ impl Application {
             .ruban_edition
             .texte_option(crate::zones::ruban::Outil::Ajuster, 0)
             == "Prolonger seulement";
+        let Some((projet, _)) = self.natif.as_ref() else {
+            return;
+        };
         let Some(etat) = self.ajustement.as_mut() else {
             return;
         };
         // angle : le côté du clic décide de l'extrémité déplacée, pas l'extrémité la plus proche
         if angle && let (Some(r), Some((id, fin)), Some(t)) = (etat.reference.as_deref(), survol.as_mut(), t_survol)
-            && let Some((f, fr)) = fins_angle(&self.natif.as_ref().unwrap().0, id, t, r, etat.t_reference)
+            && let Some((f, fr)) = fins_angle(projet, id, t, r, etat.t_reference)
         {
             *fin = f;
             etat.fin_reference = fr;
@@ -290,7 +297,7 @@ impl Application {
             );
             if etat.cache.as_ref() != Some(&cle) {
                 etat.apercu = Some(preparer(
-                    &self.natif.as_ref().unwrap().0,
+                    projet,
                     id,
                     reference,
                     etat.ligne,

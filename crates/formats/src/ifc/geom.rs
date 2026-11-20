@@ -51,7 +51,7 @@ pub struct GeomStats {
 
 impl GeomStats {
     fn miss(&self, ty: &str) {
-        *self.unsupported.lock().unwrap().entry(ty.to_string()).or_default() += 1;
+        *self.unsupported.lock().unwrap_or_else(|e| e.into_inner()).entry(ty.to_string()).or_default() += 1;
     }
 }
 
@@ -1058,7 +1058,7 @@ fn arc3(p1: DVec3, p2: DVec3, p3: DVec3) -> Vec<DVec3> {
 /// Supprime les doublons consécutifs et le point de fermeture.
 fn clean_ring(mut r: Vec<DVec2>) -> Vec<DVec2> {
     r.dedup_by(|a, b| a.distance_squared(*b) < 1e-18);
-    while r.len() > 1 && r[0].distance_squared(*r.last().unwrap()) < 1e-18 {
+    while r.len() > 1 && r.last().is_some_and(|d| r[0].distance_squared(*d) < 1e-18) {
         r.pop();
     }
     r
@@ -1208,7 +1208,7 @@ fn sweep_disk(path: &[DVec3], r: f64, out: &mut Vec<Tri>) {
     let mut t_prev = tangent(0);
     let mut normal = t_prev.any_orthonormal_vector();
     let mut rings: Vec<Vec<DVec3>> = Vec::with_capacity(n);
-    for i in 0..n {
+    for (i, &centre) in path.iter().enumerate() {
         let t = tangent(i);
         // Transport parallèle de la normale.
         let axis = t_prev.cross(t);
@@ -1222,7 +1222,7 @@ fn sweep_disk(path: &[DVec3], r: f64, out: &mut Vec<Tri>) {
             (0..seg)
                 .map(|k| {
                     let a = TAU * k as f64 / seg as f64;
-                    path[i] + (normal * a.cos() + bin * a.sin()) * r
+                    centre + (normal * a.cos() + bin * a.sin()) * r
                 })
                 .collect(),
         );

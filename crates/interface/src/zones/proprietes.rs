@@ -271,7 +271,7 @@ impl Application {
             if o.representation.is_some() && ui.button("Remplacer la menuiserie importée par un cadre paramétrique").clicked() {o.representation=None;change=true;}
             if change {
                 if o.representation.is_some() { ui.label("La menuiserie importée est conservée ; sa forme n'est pas paramétrique."); }
-                let mut p=projet.clone(); *p.ouvertures.iter_mut().find(|x|x.id==o.id).unwrap()=o.clone(); nouveau=Some(p);
+                let mut p=projet.clone(); if let Some(x)=p.ouvertures.iter_mut().find(|x|x.id==o.id) {*x=o.clone(); nouveau=Some(p);}
             }
         } else if let Some(e) = projet.escaliers.iter().find(|e| modele::identifiants::id_natif("escalier", &e.id) == id) {
             let mut e = e.clone();
@@ -329,8 +329,10 @@ impl Application {
             if change {
                 let mut p = projet.clone();
                 let id = e.id.clone();
-                *p.escaliers.iter_mut().find(|x| x.id == id).unwrap() = e;
-                nouveau = Some(p);
+                if let Some(x) = p.escaliers.iter_mut().find(|x| x.id == id) {
+                    *x = e;
+                    nouveau = Some(p);
+                }
             }
         } else if let Some(g) = projet.garde_corps.iter().find(|g| modele::identifiants::id_natif("garde_corps", &g.id) == id) {
             let mut g = g.clone();
@@ -361,8 +363,10 @@ impl Application {
             if change {
                 let mut p = projet.clone();
                 let id = g.id.clone();
-                *p.garde_corps.iter_mut().find(|x| x.id == id).unwrap() = g;
-                nouveau = Some(p);
+                if let Some(x) = p.garde_corps.iter_mut().find(|x| x.id == id) {
+                    *x = g;
+                    nouveau = Some(p);
+                }
             }
         } else {
             let dalle = projet.dalles.iter().find(|d| modele::identifiants::id_natif("dalle", &d.id) == id)?;

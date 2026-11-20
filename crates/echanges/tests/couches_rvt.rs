@@ -29,8 +29,7 @@ fn couches_projet1_lecture_et_conversion() {
         let total: f64 = t.couches.as_ref().unwrap().iter().map(|c| c.epaisseur).sum();
         assert!((total-t.epaisseur.unwrap()).abs() < 1e-6);
     }
-    let mut c = modele::Conversion::default();
-    c.projet = modele::Projet::nouveau("Test couches");
+    let mut c = modele::Conversion { projet: modele::Projet::nouveau("Test couches"), ..Default::default() };
     c.projet.sources.push(modele::source("s1", &p, "RVT"));
     echanges::depuis_rvt::convertir_maquette(&m, &mut c);
     let detaillees: Vec<_> = c.projet.types_murs.iter().filter(|t| t.couches_detaillees && t.couches.len() > 1).collect();

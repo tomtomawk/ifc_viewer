@@ -145,7 +145,7 @@ impl Application {
             None => {
                 let mut document = *doc::FamilleCartouche::default().document_famille;
                 document.nom = (1..).map(|n| if n == 1 { "Cartouche personnalisé".into() } else { format!("Cartouche personnalisé {n}") })
-                    .find(|nom| !noms.contains(nom)).unwrap();
+                    .find(|nom| !noms.contains(nom)).unwrap_or_default();
                 self.ouvrir_famille_document_projet(document, None);
             }
         }
@@ -164,7 +164,7 @@ impl Application {
             let actuelle = piece.as_ref().and_then(|id| p.pieces.iter().find(|x| &x.id == id)).map(|x| p.famille_etiquette(x));
             let f = if famille.is_none() { actuelle.unwrap_or_else(doc::FamilleEtiquette::standard) } else { doc::FamilleEtiquette::standard() };
             let base = if famille.is_none() { format!("{} (copie)", f.nom) } else { "Étiquette de pièce".to_string() };
-            let nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} {k}") }).find(|n| !p.familles_etiquettes.iter().any(|x| &x.nom == n)).unwrap();
+            let nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} {k}") }).find(|n| !p.familles_etiquettes.iter().any(|x| &x.nom == n)).unwrap_or_default();
             let mut document = *f.document_famille;
             document.nom = nom;
             self.ouvrir_famille_document_projet(document, None);
@@ -184,7 +184,7 @@ impl Application {
         famille.nom = nom;
         let mut q = p.clone();
         if famille.id.is_empty() {
-            famille.id = (1..).map(|k| format!("etiquette-piece-{k}")).find(|i| !q.familles_etiquettes.iter().any(|f| &f.id == i)).unwrap();
+            famille.id = (1..).map(|k| format!("etiquette-piece-{k}")).find(|i| !q.familles_etiquettes.iter().any(|f| &f.id == i)).unwrap_or_default();
         }
         let id = famille.id.clone();
         match q.familles_etiquettes.iter_mut().find(|f| f.id == id) { Some(f) => *f = famille, None => q.familles_etiquettes.push(famille) }

@@ -242,9 +242,10 @@ fn coupe_par_solides(scene: &Scene, ob: &scene::SceneObject, affichage: Affichag
             }
         }
     }
-    let mut lots: HashMap<usize, (Vec<[[f64; 2]; 2]>, usize, bool)> = HashMap::new();
-    for i in 0..tris.len() {
-        let (k, translucide) = tris[i];
+    /// Lot de section : segments 2D, premier sommet du solide (ordre des lots) et translucidité.
+    type Lot = (Vec<[[f64; 2]; 2]>, usize, bool);
+    let mut lots: HashMap<usize, Lot> = HashMap::new();
+    for (i, &(k, translucide)) in tris.iter().enumerate() {
         let p = [0, 1, 2].map(|j| Vec3::from(scene.vertices[k + j].pos).as_dvec3());
         if let Some(s) = section(p, n, d) {
             let r = racine(&mut parent, i);
@@ -384,10 +385,11 @@ fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitiv
                     droites.push((u, s[0], Vec::new()));
                     let n = droites.len() - 1;
                     let familles = index.entry(case(u)).or_default();
-                    let f = match familles.iter().position(|f| f.v.dot(u) > 1.0 - 1e-12) {
-                        Some(i) => &mut familles[i],
-                        None => { familles.push(Famille { v: u, par_decalage: HashMap::new() }); familles.last_mut().unwrap() }
+                    let i = match familles.iter().position(|f| f.v.dot(u) > 1.0 - 1e-12) {
+                        Some(i) => i,
+                        None => { familles.push(Famille { v: u, par_decalage: HashMap::new() }); familles.len() - 1 }
                     };
+                    let f = &mut familles[i];
                     f.par_decalage.entry(decalage(s[0], f.v)).or_default().push(n);
                     n
                 });

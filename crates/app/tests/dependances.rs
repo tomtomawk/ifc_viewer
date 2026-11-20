@@ -126,20 +126,20 @@ fn lire_dependances(manifeste: &str) -> Vec<Dep> {
 }
 
 /// Crates du workspace : nom du dossier -> dépendances lues.
-fn lire_workspace() -> BTreeMap<String, Vec<Dep>> {
+fn lire_workspace() -> Result<BTreeMap<String, Vec<Dep>>, String> {
     let dossier = racine().join("crates");
     let mut crates = BTreeMap::new();
-    for entree in std::fs::read_dir(&dossier).expect("dossier crates/") {
-        let chemin = entree.unwrap().path();
+    for entree in std::fs::read_dir(&dossier).map_err(|e| format!("dossier crates/ : {e}"))? {
+        let chemin = entree.map_err(|e| format!("dossier crates/ : {e}"))?.path();
         let manifeste = chemin.join("Cargo.toml");
         if !manifeste.is_file() {
             continue;
         }
-        let nom = chemin.file_name().unwrap().to_string_lossy().into_owned();
-        let texte = std::fs::read_to_string(&manifeste).unwrap_or_else(|e| panic!("{} : {e}", manifeste.display()));
+        let nom = chemin.file_name().ok_or_else(|| format!("{} : nom de dossier absent", chemin.display()))?.to_string_lossy().into_owned();
+        let texte = std::fs::read_to_string(&manifeste).map_err(|e| format!("{} : {e}", manifeste.display()))?;
         crates.insert(nom, lire_dependances(&texte));
     }
-    crates
+    Ok(crates)
 }
 
 fn table(t: &[(&'static str, &'static [&'static str])]) -> BTreeMap<&'static str, &'static [&'static str]> {
@@ -149,7 +149,7 @@ fn table(t: &[(&'static str, &'static [&'static str])]) -> BTreeMap<&'static str
 #[test]
 fn les_crates_du_workspace_sont_celles_du_garde_fou() {
     // une crate ajoutée doit être inscrite dans ORDRE et AUTORISEES (et au §2 d'ARCHITECTURE.md)
-    let reelles: BTreeSet<String> = lire_workspace().into_keys().collect();
+    let reelles: BTreeSet<String> = lire_workspace().unwrap_or_else(|e| panic!("{e}")).into_keys().collect();
     let connues: BTreeSet<String> = ORDRE.iter().map(|s| s.to_string()).collect();
     assert_eq!(reelles, connues, "crates/* et ORDRE diffèrent : mettre à jour tests/dependances.rs et docs/ARCHITECTURE.md §2");
     let autorisees: BTreeSet<&str> = AUTORISEES.iter().map(|(n, _)| *n).collect();
@@ -161,7 +161,7 @@ fn dependances_internes_autorisees() {
     let autorisees = table(&AUTORISEES);
     let dev = table(&DEV_SEULEMENT);
     let mut erreurs = Vec::new();
-    for (nom, deps) in lire_workspace() {
+    for (nom, deps) in lire_workspace().unwrap_or_else(|e| panic!("{e}")) {
         let permises = autorisees.get(nom.as_str()).copied().unwrap_or(&[]);
         let permises_dev = dev.get(nom.as_str()).copied().unwrap_or(&[]);
         for d in deps {
@@ -184,7 +184,7 @@ fn dependances_internes_autorisees() {
 #[test]
 fn aucun_cycle_et_ordre_respecte() {
     let rang: BTreeMap<&str, usize> = ORDRE.iter().enumerate().map(|(i, n)| (*n, i)).collect();
-    let crates = lire_workspace();
+    let crates = lire_workspace().unwrap_or_else(|e| panic!("{e}"));
     let mut aretes: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut erreurs = Vec::new();
     for (nom, deps) in &crates {
@@ -223,7 +223,7 @@ fn aucun_cycle_et_ordre_respecte() {
 #[test]
 fn egui_et_wgpu_seulement_dans_les_crates_autorisees() {
     let mut erreurs = Vec::new();
-    for (nom, deps) in lire_workspace() {
+    for (nom, deps) in lire_workspace().unwrap_or_else(|e| panic!("{e}")) {
         if CRATES_AVEC_EGUI.contains(&nom.as_str()) {
             continue;
         }

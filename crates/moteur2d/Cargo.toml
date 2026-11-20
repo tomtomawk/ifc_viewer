@@ -20,3 +20,6 @@ acadrust.workspace = true
 [dev-dependencies]
 commandes = { path = "../commandes" }
 serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -21,14 +21,16 @@ struct Ligne {
 impl Ligne {
     fn new(points: Vec<DVec2>) -> Ligne {
         let mut cumul = vec![0.0];
+        let mut total = 0.0;
         for w in points.windows(2) {
-            cumul.push(cumul.last().unwrap() + w[0].distance(w[1]));
+            total += w[0].distance(w[1]);
+            cumul.push(total);
         }
         Ligne { points, cumul }
     }
 
     fn longueur(&self) -> f64 {
-        *self.cumul.last().unwrap()
+        self.cumul.last().copied().unwrap_or(0.0)
     }
 
     /// Point à l'abscisse curviligne `u` (bornée).

@@ -147,6 +147,7 @@ impl crate::Projet {
 }
 
 impl Gabarit {
+    #[allow(clippy::expect_used, reason = "gabarit embarqué à la compilation, relu par le test gabarit_par_defaut_complet")]
     pub fn defaut() -> Gabarit {
         Gabarit::lire(DEFAUT).expect("gabarit par défaut valide")
     }

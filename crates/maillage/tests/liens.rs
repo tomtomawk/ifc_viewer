@@ -1,5 +1,6 @@
 //! Liens IFC dans la scène native : objets ajoutés, placés, rattachés à un niveau ; un
 //! lien absent n'empêche pas d'ouvrir le projet.
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use modele::liens::LienIfc;
 use modele::identifiants::id_natif;
 

@@ -202,9 +202,10 @@ impl Application {
             match placer_point_topo(&mut terrain, i, commande, p) {
                 Ok(selection) => {
                     self.dessin2d.terrain_points = terrain.points;
-                    let e = self.dessin2d.edition_contour.as_mut().unwrap();
-                    e.point_topo = Some(selection);
-                    (e.commande, e.depart) = (None, None);
+                    if let Some(e) = self.dessin2d.edition_contour.as_mut() {
+                        e.point_topo = Some(selection);
+                        (e.commande, e.depart) = (None, None);
+                    }
                     self.dessin2d.message = None;
                     self.dessin2d.saisie.clear();
                 }
@@ -212,7 +213,7 @@ impl Application {
             }
             return;
         }
-        let e = self.dessin2d.edition_contour.as_mut().unwrap();
+        let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
         // points préalables : départ (ou centre), puis repère d'une rotation ou d'une échelle
         if matches!(commande, C::Deplacer | C::Copier | C::Reseau(_) | C::Symetrie | C::Tourner | C::Echelle) && e.depart.is_none() {
             e.depart = Some(p);
@@ -405,7 +406,7 @@ mod tests {
         // oblique : ses deux extrémités viennent sur la droite y = x - 20
         let oblique = Some([DVec2::new(20.0, 0.0), DVec2::new(30.0, 10.0)]);
         let r = transformer_contours(&c, C::Aligner, Some((0, 0)), None, None, None, DVec2::ZERO, oblique).unwrap().unwrap();
-        for k in 0..2 { assert!((r[0][k][1] - (r[0][k][0] - 20.0)).abs() < 1e-9); }
+        for p in &r[0][..2] { assert!((p[1] - (p[0] - 20.0)).abs() < 1e-9); }
         assert!((DVec2::from_array(r[0][0]) - DVec2::new(10.0, -10.0)).length() < 1e-9);
         assert_eq!(r[0][2..], [[10.0, 10.0], [0.0, 10.0]]);
     }

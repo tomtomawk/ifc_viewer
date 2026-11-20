@@ -1,5 +1,6 @@
 //! Copies d'éléments importés (X7) : une copie ne garde pas l'`origine` de l'original,
 //! donc pas son GUID IFC ; après copie, tous les GlobalId du fichier exporté sont uniques.
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use commandes::{Commande, Execution};
 use echanges::{depuis_ifc, export_ifc};
 use modele::Projet;

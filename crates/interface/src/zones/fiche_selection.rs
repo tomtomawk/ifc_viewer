@@ -522,7 +522,7 @@ fn parametres_poteau(a: &mut Application, ui: &mut egui::Ui, id: &str) {
         }
         titre_parametres(ui, "Poteau");
         ui.scope(|ui| {
-            let b = a.bim.barre_editee.as_mut().unwrap();
+            let Some(b) = a.bim.barre_editee.as_mut() else { return };
             let avant = serde_json::to_string(&*b).ok();
             barre_ui(ui, b, &p.niveaux);
             if serde_json::to_string(&*b).ok() != avant {

@@ -1,4 +1,5 @@
 //! Fusion d'un IFC converti dans un projet natif ouvert (`Commande::Fusionner`).
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use commandes::*;
 use echanges::depuis_ifc;
 use modele::*;

@@ -3,92 +3,6 @@ use crate::{Execution, Modification};
 use modele::creation::ListeCreation;
 use modele::{Projet, PHASE_EXISTANT};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use modele::contextes::FiltresContextes;
-    use modele::{ContexteElement, creation::ParametresMur};
-
-    #[test]
-    fn renommage_et_suppression_reaffectent_toutes_les_references() {
-        let mut p = Projet::nouveau("Gestion");
-        p.phases.push("Finition".into());
-        p.sous_projets.push("Structure".into());
-        let mur = p.ajouter_mur([0.,0.], [4000.,0.], &ParametresMur::default()).unwrap();
-        p.murs[0].phase = Some("Projet".into());
-        p.murs[0].sous_projet = Some("A".into());
-        p.contextes.insert("autre".into(), ContexteElement { phase: Some("Projet".into()), sous_projet: Some("A".into()), variante: None });
-        p.contextes_vues.insert("vue".into(), FiltresContextes { phase: Some("Projet".into()), ..Default::default() });
-        p.demolitions.insert(mur.clone(), "Finition".into());
-        p.renommer_contexte(ListeCreation::Phase, "Projet", "Travaux", "").unwrap();
-        assert_eq!(p.murs[0].phase.as_deref(), Some("Travaux"));
-        assert_eq!(p.contextes["autre"].phase.as_deref(), Some("Travaux"));
-        assert_eq!(p.contextes_vues["vue"].phase.as_deref(), Some("Travaux"));
-        p.renommer_contexte(ListeCreation::Phase, "Finition", "Démolition", "").unwrap();
-        assert_eq!(p.demolitions[&mur], "Démolition");
-        let avant = p.json().unwrap();
-        assert!(p.deplacer_phase("Démolition", -1).is_err());
-        assert_eq!(p.json().unwrap(), avant);
-        p.supprimer_contexte(ListeCreation::SousProjet, "A", Some("Structure")).unwrap();
-        assert_eq!(p.murs[0].sous_projet.as_deref(), Some("Structure"));
-        assert_eq!(p.contextes["autre"].sous_projet.as_deref(), Some("Structure"));
-        assert!(p.renommer_contexte(ListeCreation::Phase, PHASE_EXISTANT, "Ancien", "").is_err());
-    }
-
-    #[test]
-    fn variantes_et_filtres_preservent_les_elements_communs() {
-        let mut p = Projet::nouveau("Variantes");
-        p.phases.push("Démolition".into());
-        let a = p.ajouter_choix_creation(ListeCreation::Variante, "A", "Façade").unwrap();
-        let b = p.ajouter_choix_creation(ListeCreation::Variante, "B", "Façade").unwrap();
-        let c = p.ajouter_choix_creation(ListeCreation::Variante, "C", "Toiture").unwrap();
-        let mur = p.ajouter_mur([0.,0.], [4000.,0.], &ParametresMur::default()).unwrap();
-        p.murs[0].variante = Some(b.clone());
-        p.contextes_vues.insert("vue".into(), FiltresContextes { variante: Some(b.clone()), ..Default::default() });
-        p.murs[0].phase = Some("Projet".into());
-        p.ouvertures.push(modele::Ouverture { id: "porte".into(), nom: "Porte".into(), genre: modele::GenreOuverture::Libre, mur: mur.clone(), type_ouverture: None, abscisse: 1000.0, largeur: 600.0, hauteur: 2000.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
-        p.demolitions.insert(mur.clone(), "Démolition".into());
-        let mut filtre = FiltresContextes { phase: Some("Projet".into()), sous_projet: None, variante: Some(a.clone()) };
-        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
-        assert!(p.elements_masques_contextes(&filtre).contains("porte"));
-        // sans choix dans le jeu Façade, seule la variante retenue (A, la première) est visible
-        filtre.variante = Some(c.clone());
-        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
-        assert!(p.elements_masques_contextes(&Default::default()).contains(&mur));
-        assert_eq!(p.variante_retenue("Façade").unwrap().id, a);
-        p.retenir_variante(&b).unwrap();
-        assert_eq!(p.variante_retenue("Façade").unwrap().id, b);
-        assert!(!p.elements_masques_contextes(&filtre).contains(&mur));
-        assert!(!p.elements_masques_contextes(&Default::default()).contains("porte"));
-        let relu: Projet = serde_json::from_str(&p.json().unwrap()).unwrap();
-        assert_eq!(relu.variante_retenue("Façade").unwrap().id, b);
-        // le choix de la vue prime sur la variante retenue
-        let vue = FiltresContextes { variante: Some(a.clone()), ..Default::default() };
-        assert!(p.elements_masques_contextes(&FiltresContextes::default().sur(&vue)).contains(&mur));
-        assert!(!p.elements_masques_contextes(&FiltresContextes { variante: Some(b.clone()), ..Default::default() }.sur(&vue)).contains(&mur));
-        filtre.phase = Some("Démolition".into());
-        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
-        // adopter A : le mur de la variante B est supprimé, celui de A rejoint le modèle principal
-        let mut q = p.clone();
-        q.demolitions.clear();
-        let garde = q.ajouter_mur([0.,3000.], [4000.,3000.], &ParametresMur::default()).unwrap();
-        q.murs.iter_mut().find(|m| m.id == garde).unwrap().variante = Some(a.clone());
-        assert_eq!(q.elements_variantes_ecartees(&a), vec![mur.clone()]);
-        assert_eq!(q.adopter_variante(&a).unwrap(), 1);
-        assert!(q.murs.iter().all(|m| m.id != mur) && q.ouvertures.is_empty());
-        assert_eq!(q.murs.iter().find(|m| m.id == garde).unwrap().variante, None);
-        assert!(q.variantes.iter().all(|v| v.jeu != "Façade") && q.variantes.iter().any(|v| v.id == c));
-        assert_eq!(q.contextes_vues["vue"].variante, None);
-        assert!(p.supprimer_contexte(ListeCreation::Variante, &b, Some(&c)).is_err());
-        p.supprimer_contexte(ListeCreation::Variante, &b, Some(&a)).unwrap();
-        assert_eq!(p.murs[0].variante.as_deref(), Some(a.as_str()));
-        assert_eq!(p.contextes_vues["vue"].variante.as_deref(), Some(a.as_str()));
-        p.renommer_jeu_variantes("Façade", "Enveloppe").unwrap();
-        assert_eq!(p.variantes.iter().find(|v| v.id == a).unwrap().jeu, "Enveloppe");
-        assert!(p.renommer_jeu_variantes("Enveloppe", "Toiture").is_err());
-    }
-}
-
 /// Gestion des phases, sous-projets et variantes d'un projet.
 pub trait Contextes {
     fn variante_retenue(&self, jeu: &str) -> Option<&modele::Variante>;
@@ -260,5 +174,91 @@ impl ContextesInterne for Projet {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use modele::contextes::FiltresContextes;
+    use modele::{ContexteElement, creation::ParametresMur};
+
+    #[test]
+    fn renommage_et_suppression_reaffectent_toutes_les_references() {
+        let mut p = Projet::nouveau("Gestion");
+        p.phases.push("Finition".into());
+        p.sous_projets.push("Structure".into());
+        let mur = p.ajouter_mur([0.,0.], [4000.,0.], &ParametresMur::default()).unwrap();
+        p.murs[0].phase = Some("Projet".into());
+        p.murs[0].sous_projet = Some("A".into());
+        p.contextes.insert("autre".into(), ContexteElement { phase: Some("Projet".into()), sous_projet: Some("A".into()), variante: None });
+        p.contextes_vues.insert("vue".into(), FiltresContextes { phase: Some("Projet".into()), ..Default::default() });
+        p.demolitions.insert(mur.clone(), "Finition".into());
+        p.renommer_contexte(ListeCreation::Phase, "Projet", "Travaux", "").unwrap();
+        assert_eq!(p.murs[0].phase.as_deref(), Some("Travaux"));
+        assert_eq!(p.contextes["autre"].phase.as_deref(), Some("Travaux"));
+        assert_eq!(p.contextes_vues["vue"].phase.as_deref(), Some("Travaux"));
+        p.renommer_contexte(ListeCreation::Phase, "Finition", "Démolition", "").unwrap();
+        assert_eq!(p.demolitions[&mur], "Démolition");
+        let avant = p.json().unwrap();
+        assert!(p.deplacer_phase("Démolition", -1).is_err());
+        assert_eq!(p.json().unwrap(), avant);
+        p.supprimer_contexte(ListeCreation::SousProjet, "A", Some("Structure")).unwrap();
+        assert_eq!(p.murs[0].sous_projet.as_deref(), Some("Structure"));
+        assert_eq!(p.contextes["autre"].sous_projet.as_deref(), Some("Structure"));
+        assert!(p.renommer_contexte(ListeCreation::Phase, PHASE_EXISTANT, "Ancien", "").is_err());
+    }
+
+    #[test]
+    fn variantes_et_filtres_preservent_les_elements_communs() {
+        let mut p = Projet::nouveau("Variantes");
+        p.phases.push("Démolition".into());
+        let a = p.ajouter_choix_creation(ListeCreation::Variante, "A", "Façade").unwrap();
+        let b = p.ajouter_choix_creation(ListeCreation::Variante, "B", "Façade").unwrap();
+        let c = p.ajouter_choix_creation(ListeCreation::Variante, "C", "Toiture").unwrap();
+        let mur = p.ajouter_mur([0.,0.], [4000.,0.], &ParametresMur::default()).unwrap();
+        p.murs[0].variante = Some(b.clone());
+        p.contextes_vues.insert("vue".into(), FiltresContextes { variante: Some(b.clone()), ..Default::default() });
+        p.murs[0].phase = Some("Projet".into());
+        p.ouvertures.push(modele::Ouverture { id: "porte".into(), nom: "Porte".into(), genre: modele::GenreOuverture::Libre, mur: mur.clone(), type_ouverture: None, abscisse: 1000.0, largeur: 600.0, hauteur: 2000.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        p.demolitions.insert(mur.clone(), "Démolition".into());
+        let mut filtre = FiltresContextes { phase: Some("Projet".into()), sous_projet: None, variante: Some(a.clone()) };
+        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
+        assert!(p.elements_masques_contextes(&filtre).contains("porte"));
+        // sans choix dans le jeu Façade, seule la variante retenue (A, la première) est visible
+        filtre.variante = Some(c.clone());
+        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
+        assert!(p.elements_masques_contextes(&Default::default()).contains(&mur));
+        assert_eq!(p.variante_retenue("Façade").unwrap().id, a);
+        p.retenir_variante(&b).unwrap();
+        assert_eq!(p.variante_retenue("Façade").unwrap().id, b);
+        assert!(!p.elements_masques_contextes(&filtre).contains(&mur));
+        assert!(!p.elements_masques_contextes(&Default::default()).contains("porte"));
+        let relu: Projet = serde_json::from_str(&p.json().unwrap()).unwrap();
+        assert_eq!(relu.variante_retenue("Façade").unwrap().id, b);
+        // le choix de la vue prime sur la variante retenue
+        let vue = FiltresContextes { variante: Some(a.clone()), ..Default::default() };
+        assert!(p.elements_masques_contextes(&FiltresContextes::default().sur(&vue)).contains(&mur));
+        assert!(!p.elements_masques_contextes(&FiltresContextes { variante: Some(b.clone()), ..Default::default() }.sur(&vue)).contains(&mur));
+        filtre.phase = Some("Démolition".into());
+        assert!(p.elements_masques_contextes(&filtre).contains(&mur));
+        // adopter A : le mur de la variante B est supprimé, celui de A rejoint le modèle principal
+        let mut q = p.clone();
+        q.demolitions.clear();
+        let garde = q.ajouter_mur([0.,3000.], [4000.,3000.], &ParametresMur::default()).unwrap();
+        q.murs.iter_mut().find(|m| m.id == garde).unwrap().variante = Some(a.clone());
+        assert_eq!(q.elements_variantes_ecartees(&a), vec![mur.clone()]);
+        assert_eq!(q.adopter_variante(&a).unwrap(), 1);
+        assert!(q.murs.iter().all(|m| m.id != mur) && q.ouvertures.is_empty());
+        assert_eq!(q.murs.iter().find(|m| m.id == garde).unwrap().variante, None);
+        assert!(q.variantes.iter().all(|v| v.jeu != "Façade") && q.variantes.iter().any(|v| v.id == c));
+        assert_eq!(q.contextes_vues["vue"].variante, None);
+        assert!(p.supprimer_contexte(ListeCreation::Variante, &b, Some(&c)).is_err());
+        p.supprimer_contexte(ListeCreation::Variante, &b, Some(&a)).unwrap();
+        assert_eq!(p.murs[0].variante.as_deref(), Some(a.as_str()));
+        assert_eq!(p.contextes_vues["vue"].variante.as_deref(), Some(a.as_str()));
+        p.renommer_jeu_variantes("Façade", "Enveloppe").unwrap();
+        assert_eq!(p.variantes.iter().find(|v| v.id == a).unwrap().jeu, "Enveloppe");
+        assert!(p.renommer_jeu_variantes("Enveloppe", "Toiture").is_err());
     }
 }

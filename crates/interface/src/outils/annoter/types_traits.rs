@@ -134,10 +134,14 @@ pub(crate) fn definir_trait(forme: &mut AnnotationForme, segment: Option<usize>,
 
 const FENETRE: &str = "fenetre_types_traits";
 
+/// Polyligne vue par l'éditeur de types de trait : id, sommets, fermée, types par
+/// segment, courbures.
+type PolyligneTraits<'a> = (&'a str, Vec<[f64; 2]>, bool, Vec<String>, Vec<f64>);
+
 impl Application {
     /// Types de trait des polylignes sélectionnées : un choix pour tous leurs segments,
     /// puis, pour une seule polyligne, un choix par segment. Retourne le projet modifié.
-    fn polylignes_de<'a>(projet: &'a Projet, ids: &[String]) -> Vec<(&'a str, Vec<[f64; 2]>, bool, Vec<String>, Vec<f64>)> {
+    fn polylignes_de<'a>(projet: &'a Projet, ids: &[String]) -> Vec<PolyligneTraits<'a>> {
         projet
             .annotations
             .iter()
@@ -238,7 +242,7 @@ impl Application {
             }
             ui.horizontal(|ui| {
                 if ui.button("+ Nouveau type").clicked() {
-                    let nom = (1..).map(|k| format!("Trait {k}")).find(|n| !types.iter().any(|t| &t.nom == n)).unwrap();
+                    let nom = (1..).map(|k| format!("Trait {k}")).find(|n| !types.iter().any(|t| &t.nom == n)).unwrap_or_default();
                     types.push(TypeTrait { id: String::new(), nom, epaisseur: 0.25, tirets: Vec::new() });
                     tirets.push(String::new());
                 }

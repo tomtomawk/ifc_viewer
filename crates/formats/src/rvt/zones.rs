@@ -144,7 +144,7 @@ pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
     let mut aretes: Vec<(usize, usize)> = Vec::new();
     for (k, (a, b)) in segments.iter().enumerate() {
         let mut t = coupes[k].clone();
-        t.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        t.sort_by(f64::total_cmp);
         let pts: Vec<usize> = t.iter().map(|&t| sommet(*a + (*b - *a) * t)).collect();
         for w in pts.windows(2) {
             if w[0] != w[1] {
@@ -177,7 +177,7 @@ pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
         let o = sommets[*u];
         l.sort_by(|&a, &b| {
             let (x, y) = (sommets[a] - o, sommets[b] - o);
-            x.y.atan2(x.x).partial_cmp(&y.y.atan2(y.x)).unwrap()
+            x.y.atan2(x.x).total_cmp(&y.y.atan2(y.x))
         });
     }
     // faces : après (u → v), l'arête qui précède (v → u) dans l'ordre trigonométrique
@@ -194,7 +194,7 @@ pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
             while vues.insert((u, v)) {
                 face.push(u);
                 let l = &sortantes[&v];
-                let k = l.iter().position(|&w| w == u).unwrap();
+                let Some(k) = l.iter().position(|&w| w == u) else { break };
                 let w = l[(k + l.len() - 1) % l.len()];
                 (u, v) = (v, w);
             }
@@ -214,7 +214,7 @@ pub fn surface(segments: &[(DVec2, DVec2)], p: DVec2) -> Option<(f64, f64)> {
         c
     };
     // face bornée la plus petite contenant p
-    let zone = faces.iter().filter(|f| aire(f) > 0.0 && dedans(f, p)).min_by(|a, b| aire(a).partial_cmp(&aire(b)).unwrap())?;
+    let zone = faces.iter().filter(|f| aire(f) > 0.0 && dedans(f, p)).min_by(|a, b| aire(a).total_cmp(&aire(b)))?;
     // îlots : contours extérieurs (aire négative) d'autres composantes, dans la zone,
     // ne contenant pas p
     let mut s = aire(zone);

@@ -1,5 +1,6 @@
 //! Tests déplacés de `modele/elements/composant.rs` (`mod tests`) : ils appellent du code situé au-dessus
 //! de la crate `modele` (commandes, scène, formats, échanges, collaboration ou dessin).
+#![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use commandes::Execution;
 use modele::*;
 use commandes::Commande;

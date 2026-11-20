@@ -371,7 +371,7 @@ impl ModificationInterne for Projet {
         if abscisse - o.largeur / 2.0 < 0.0 || abscisse + o.largeur / 2.0 > axe.longueur() {
             return Err("Changer d'hôte : l'ouverture dépasse du nouveau mur.".into());
         }
-        let o = self.ouvertures.iter_mut().find(|o| o.id == id).unwrap();
+        let o = self.ouvertures.iter_mut().find(|o| o.id == id).ok_or("Ouverture introuvable.")?;
         o.mur = mur;
         o.abscisse = abscisse;
         o.representation = None;

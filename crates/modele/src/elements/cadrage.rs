@@ -5,9 +5,9 @@ use glam::{DVec2, DVec3};
 fn cote(a: DVec2, b: DVec2, p: DVec3) -> f64 { (b - a).perp_dot(p.truncate() - a) }
 
 fn coupe_polygone(points: &[DVec3], a: DVec2, b: DVec2) -> Vec<DVec3> {
-    if points.is_empty() { return Vec::new(); }
+    let Some(&dernier) = points.last() else { return Vec::new(); };
     let mut sortie = Vec::new();
-    let mut precedent = *points.last().unwrap();
+    let mut precedent = dernier;
     let mut cp = cote(a, b, precedent);
     for &p in points {
         let c = cote(a, b, p);
@@ -54,7 +54,7 @@ pub fn decouper(primitives: Vec<Primitive>, contour: &[[f64; 2]]) -> Result<Vec<
             Forme::Segments(s) => (s, Vec::new()),
             Forme::Polyligne { points, fermee } => {
                 let mut s: Vec<_> = points.windows(2).map(|p| [p[0], p[1]]).collect();
-                if fermee && points.len() > 2 { s.push([*points.last().unwrap(), points[0]]); }
+                if let (true, Some(&dernier)) = (fermee && points.len() > 2, points.last()) { s.push([dernier, points[0]]); }
                 (s, Vec::new())
             }
             Forme::Triangles(t) => (Vec::new(), t),

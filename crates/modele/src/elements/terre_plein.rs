@@ -523,7 +523,9 @@ fn entre(a: &Point, b: &Point, t: f64) -> Point {
 
 type Cache<T> = Mutex<Vec<(u64, Arc<T>)>>;
 static CACHE: Cache<Remblai> = Mutex::new(Vec::new());
-static CACHE_TERRAINS: Cache<(Vec<[DVec3; 3]>, Vec<[DVec3; 3]>)> = Mutex::new(Vec::new());
+/// Surface d'un terrain creusée (triangles tournés vers le haut) et parois du déblai.
+type TerrainCreuse = (Vec<[DVec3; 3]>, Vec<[DVec3; 3]>);
+static CACHE_TERRAINS: Cache<TerrainCreuse> = Mutex::new(Vec::new());
 
 fn en_cache<T>(cache: &Cache<T>, cle: u64, calcul: impl FnOnce() -> Option<T>) -> Option<Arc<T>> {
     if let Some((_, r)) = cache.lock().ok()?.iter().find(|(k, _)| *k == cle) {
@@ -690,7 +692,7 @@ fn couches_avec_type(projet: &Projet, t: &crate::elements::site::Terrain, ty: &c
 
 /// Surface d'un terrain creusée par les terre-pleins (triangles tournés vers le haut)
 /// et parois du déblai le long des arêtes sans talus.
-fn creuser_terrain(projet: &Projet, t: &crate::elements::site::Terrain, pleins: &[&Dalle]) -> Result<(Vec<[DVec3; 3]>, Vec<[DVec3; 3]>), String> {
+fn creuser_terrain(projet: &Projet, t: &crate::elements::site::Terrain, pleins: &[&Dalle]) -> Result<TerrainCreuse, String> {
     let sol = Sol::nouveau(projet).ok_or("Terrain non valide.")?;
     let pfs: Vec<Plateforme> = pleins.iter().filter_map(|d| Plateforme::nouvelle(projet, d, &sol)).collect();
     let decalage = DVec3::new(0.0, 0.0, -projet.ngf());

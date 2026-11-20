@@ -58,7 +58,7 @@ impl EditeurFamille {
         let vide = matches!(self.outil, OutilFamille::ExtrusionVide | OutilFamille::RevolutionVide);
         let base = guidage.as_ref().map(FormeGuidee::nom).unwrap_or(if revolution.is_some() { "Révolution" } else { "Extrusion" });
         let base = if vide { format!("{base} vide") } else { base.into() };
-        let nom = (1..).map(|n| format!("{base} {n}")).find(|nom| self.famille.extrusions.iter().all(|e| &e.nom != nom)).unwrap();
+        let nom = (1..).map(|n| format!("{base} {n}")).find(|nom| self.famille.extrusions.iter().all(|e| &e.nom != nom)).unwrap_or_default();
         let vue = self.vue.esquisse();
         let profondeur = if support.is_some() {
             [Face {plan:String::new(),decalage:0.0},Face {plan:String::new(),decalage:100.0}]

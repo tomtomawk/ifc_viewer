@@ -23,6 +23,7 @@ pub fn dans_plage_haute(objet: &SceneObject, coupe: f32, limite: f32) -> bool {
 }
 
 /// Arêtes visibles entre le plan de coupe et la limite haute, avant la conversion en pointillés.
+#[allow(clippy::too_many_arguments)]
 pub fn aretes_plage_haute(
     scene: &Scene, visible: &[bool], affichage: Affichage, droite: DVec3, haut: DVec3, vers_oeil: DVec3, coupe: f32, limite: f32,
 ) -> Vec<Primitive> {
@@ -71,7 +72,7 @@ pub fn pointilles_plage_haute(mut prims: Vec<Primitive>, echelle: f64, coupe: f6
             let l=a.distance(b);
             if l<=1e-6 {continue;}
             let mut u=(b-a)/l;
-            if u.x< -1e-9 || (u.x.abs()<=1e-9 && u.y<0.0) {std::mem::swap(&mut a,&mut b);u=-u;}
+            if u.x< -1e-9 || (u.x.abs()<=1e-9 && u.y<0.0) {std::mem::swap(&mut a,&mut b);u = -u;}
             let cle=|x:f64|(x*1e4).round() as i64;
             let decalage=u.perp_dot(a);
             if !vus.insert((cle(u.x),cle(u.y),cle(decalage),cle(a.dot(u)),cle(b.dot(u)))) {continue;}

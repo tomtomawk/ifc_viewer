@@ -15,7 +15,6 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| A1b | Résorber les avertissements clippy restants (131 au 20/11/2026 après correction automatique : 49 types complexes, 11 champs assignés après `Default::default()`, 9 fonctions à plus de 7 arguments, 8 comparaisons niées sur des flottants, 8 éléments après un module de test…), puis rendre clippy bloquant dans la CI | P2 | `.github/workflows/ci.yml`, tâche `debug` |
 | T1 | Tests de fichiers malformés, reste : balayage aléatoire des RVT (aucun fichier RVT d'exemple dans le dépôt) ; `feuilles::visible_dans_vue` cherche la catégorie de chaque élément coté dans toutes les collections (coût quadratique sur un gros modèle) ; formule de nomenclature à champs partagés sans cycle (arbre de 16 champs au plus, chacun cité plusieurs fois) : coût exponentiel possible | P3 | `crates/formats/src/rvt/` |
 | G1 | Reste du gabarit pendant l'édition : les textures livrées (`gabarit:textures/…`, `maillage::textures_gabarit`) restent embarquées et désignées par les matériaux ; à copier dans le dossier du projet (ou une bibliothèque) avant de cesser d'embarquer le gabarit | P3 | `crates/maillage/src/textures_gabarit.rs` |
 
@@ -90,7 +89,6 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | I2 | Catalogue unique des commandes avec schéma JSON généré (`schemars`) et documentation `docs/commandes.md` régénérée et vérifiée par un test : un seul contrat pour interface, pilote et MCP ; base de la palette de commandes (M19). Idée ConstructCraft | P2 | `crates/commandes`, `crates/pilote` |
 | I3 | Infobulles du ruban : raccourci, raison d'indisponibilité d'un outil grisé, commande correspondante ; test que la disponibilité suit l'état. Idée ConstructCraft | P2 | `crates/interface/src/zones/ruban/` |
 | I4 | Tests d'interface sans affichage (egui_kittest : arbre d'accessibilité, comparaisons d'images à la demande) pour remplacer une partie des essais Xvfb manuels | P2 | `crates/interface` |
-| I5 | Clippy : interdire `unwrap`/`expect`/`panic` hors tests (`clippy.toml`), puis clippy bloquant (avec A1b) ; actions de la CI épinglées par SHA | P2 | `.github/workflows/ci.yml` |
 | I6 | Budget des booléens (nombre de polygones et de découpes ; au-delà, échec propre au lieu d'un blocage) et `catch_unwind` autour des triangulations | P2 | `crates/noyau/src/csg*.rs`, `noyau::trace2d` |
 | A10 | Registre des documents : `Application` (environ 150 champs) transfère 19 champs à la main à chaque changement de document | P2 | `crates/interface/src/lib.rs`, `socle/documents.rs:497-613` |
 | R1 | Catalogue unique des outils : cartouches et contrôle complet par le pilote restent à unifier | P2 | audit du 11/11, lot 1 : `git show 9121974:docs/historique/AUDIT_FACTORIZATION_2026-11-11.md` |

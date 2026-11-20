@@ -306,9 +306,12 @@ mod tests {
     }
 }
 
+/// Domaines d'un toit : plan de chaque pan et son contour.
+type Domaines = Vec<(Plan, Vec<DVec2>)>;
+
 /// Sur un contour concave, la propagation des arêtes doit s'arrêter aux noues.
 /// Le squelette droit fournit ces domaines pour les toits à pente uniforme.
-fn domaines_concaves(contours:&[Vec<[f64;2]>],plans:&[Plan])->Result<Option<Vec<(Plan,Vec<DVec2>)>>,String> {
+fn domaines_concaves(contours:&[Vec<[f64;2]>],plans:&[Plan])->Result<Option<Domaines>,String> {
     if plans.len()<=1 {return Ok(None);}
     let concave=contours.first().is_some_and(|c|{
         let mut positif=false;let mut negatif=false;

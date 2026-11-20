@@ -5,11 +5,11 @@ use glam::{Mat4, Vec3, Vec4};
 use std::collections::HashMap;
 
 fn clip(poly: &[Vec4], distance: impl Fn(Vec4) -> f32) -> Vec<Vec4> {
-    if poly.is_empty() {
+    let Some(&dernier) = poly.last() else {
         return Vec::new();
-    }
+    };
     let mut out = Vec::new();
-    let mut a = *poly.last().unwrap();
+    let mut a = dernier;
     let mut da = distance(a);
     for &b in poly {
         let db = distance(b);
@@ -26,6 +26,7 @@ fn clip(poly: &[Vec4], distance: impl Fn(Vec4) -> f32) -> Vec<Vec4> {
 }
 
 /// Retourne pour chaque objet (géométrie visible, entièrement incluse, touchée).
+#[allow(clippy::too_many_arguments)]
 pub fn objets(
     scene: &Scene,
     visible: &[bool],

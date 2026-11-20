@@ -385,7 +385,7 @@ impl RubanEdition {
         if !enregistrer {
             return false;
         }
-        let ed = self.editeur_type.as_mut().unwrap();
+        let Some(ed) = self.editeur_type.as_mut() else { return false };
         let nom = ed.nom.trim().to_string();
         if nom.is_empty() {
             ed.erreur = Some("Donnez un nom au type.".into());
@@ -421,7 +421,10 @@ impl RubanEdition {
         }
         let id = match &ed.id {
             Some(id) => {
-                let t = projet.types_murs.iter_mut().find(|t| &t.id == id).unwrap();
+                let Some(t) = projet.types_murs.iter_mut().find(|t| &t.id == id) else {
+                    ed.erreur = Some("Type de mur introuvable.".into());
+                    return false;
+                };
                 t.nom = nom;
                 t.couches = ed.couches.clone();
                 t.couches_detaillees = true;

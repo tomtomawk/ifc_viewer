@@ -359,9 +359,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             // pour une ligne, l'arc garde ses 3 points)
             if resp.clicked_by(PointerButton::Secondary)
                 && let Some((Poignee::Sommet { extrusion, k, i }, _, false)) = resp.interact_pointer_pos().and_then(visee) {
-                    if extrusion && ed.supprimer_sommet_forme(k, i) {
-                    } else if !extrusion && ed.supprimer_sommet_ancre(k, i) {
-                    } else {
+                    let supprime = if extrusion { ed.supprimer_sommet_forme(k, i) } else { ed.supprimer_sommet_ancre(k, i) };
+                    if !supprime {
                         ed.message = Some("Sommet conservé : nombre minimal atteint.".into());
                     }
                 }
@@ -688,7 +687,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         OutilFamille::Ligne | OutilFamille::Spline | OutilFamille::Cercle | OutilFamille::Rectangle => {
             use moteur2d::dao::{EvenementTrace, Trace};
             use noyau::forme2d::{Forme2D};
-            let outil = ed.outil.outil_dessin().expect("outil de dessin");
+            let Some(outil) = ed.outil.outil_dessin() else { return };
             let mut trace = ed.trace_polyligne.take().unwrap_or_else(|| Trace::new(outil));
             // polyligne : segments d'arc par Alt+clic sur leur fin, puis point de passage
             // (ou rayon tapé), comme dans les vues du projet
@@ -845,7 +844,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 let vue = ed.vue.esquisse();
                 match ed.outil {
                     o if o.cote_mesure().is_some_and(|g| points.len() == g.points()) => {
-                        let genre = o.cote_mesure().unwrap();
+                        let Some(genre) = o.cote_mesure() else { return };
                         let modele: Vec<glam::DVec2> = points.iter().map(|p| { let (h, v) = ed.famille.point_esquisse(&r, p); glam::DVec2::new(h, v) }).collect();
                         if geometrie_mesure(genre, vue, &modele, echelle).is_some() {
                             ed.famille.cotes_mesure.push(CoteMesure { vue, genre, points });

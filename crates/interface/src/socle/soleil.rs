@@ -122,7 +122,7 @@ impl Application {
     /// obstacle (rayons à hauteur de genou et d'œil), puis l'œil suit le sol.
     pub(crate) fn marcher(&mut self, d: Vec3) {
         let l = d.length();
-        if !(l > 1e-6) {
+        if l.is_nan() || l <= 1e-6 {
             return;
         }
         let dir = d / l;

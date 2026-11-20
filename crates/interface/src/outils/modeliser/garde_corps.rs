@@ -71,14 +71,14 @@ fn nom_libre(p: &Projet, base: &str) -> String {
     if p.types_garde_corps.iter().all(|t| t.nom != base) {
         return base.to_owned();
     }
-    (2..).map(|n| format!("{base} {n}")).find(|nom| p.types_garde_corps.iter().all(|t| &t.nom != nom)).unwrap()
+    (2..).map(|n| format!("{base} {n}")).find(|nom| p.types_garde_corps.iter().all(|t| &t.nom != nom)).unwrap_or_default()
 }
 
 /// Ajoute un type au projet (identifiant et nom libres, matériaux manquants).
 fn ajouter_type(p: &Projet, mut t: TypeGardeCorps) -> (Projet, String) {
     let mut q = p.clone();
     t.nom = nom_libre(p, t.nom.trim());
-    t.id = (0..).map(|n| identifiant("type-garde-corps", &format!("{}:{n}", t.nom))).find(|id| q.types_garde_corps.iter().all(|x| &x.id != id)).unwrap();
+    t.id = (0..).map(|n| identifiant("type-garde-corps", &format!("{}:{n}", t.nom))).find(|id| q.types_garde_corps.iter().all(|x| &x.id != id)).unwrap_or_default();
     completer_materiaux(&mut q, &t);
     let id = t.id.clone();
     q.types_garde_corps.push(t);
@@ -463,7 +463,7 @@ fn poignee(ui: &mut egui::Ui, glisse: &mut Option<(Liste, usize)>, liste: Liste,
 
 /// Déplace la ligne glissée de `liste` sous le pointeur ; trace le repère d'insertion.
 fn reordonner<T>(ui: &egui::Ui, v: &mut Vec<T>, lignes: &[egui::Rangef], glisse: &mut Option<(Liste, usize)>, liste: Liste, lacher: bool) -> Option<(usize, usize)> {
-    let Some((l, k)) = *glisse else { return None };
+    let (l, k) = (*glisse)?;
     if l != liste || k >= v.len() {
         return None;
     }
@@ -668,6 +668,7 @@ fn couleur(p: &Projet, materiau: Option<&str>, defaut: Color32) -> Color32 {
 
 /// Élévation du type (vignettes et éditeur) ; `selection` surligne un élément.
 /// Retourne le repère utilisé.
+#[allow(clippy::too_many_arguments)]
 fn apercu(peintre: &egui::Painter, zone: egui::Rect, p: &Projet, t: &TypeGardeCorps, longueur: f64, selection: Option<Element>, encre: Color32, accent: Color32) -> Option<Repere> {
     if longueur <= 0.0 || t.hauteur <= 0.0 || !longueur.is_finite() || !t.hauteur.is_finite() {
         return None;

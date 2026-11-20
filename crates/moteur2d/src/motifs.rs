@@ -3,6 +3,9 @@
 /// Nombre maximal de boucles par morceau : borne le coût d'une couche très mince et longue.
 const BOUCLES_ISOLANT_MAX: f64 = 2000.0;
 
+/// Arête repérée par ses deux extrémités arrondies au centième, dans l'ordre.
+type CleArete = ((i64, i64), (i64, i64));
+
 /// Ligne d'isolant en série de S (symbole traditionnel) d'une région de coupe (triangles
 /// 2D) : chaque morceau connexe est traité seul, le motif suit sa plus longue face.
 pub fn ligne_isolation(tris: &[[[f64; 2]; 3]]) -> Vec<[[f64; 2]; 2]> {
@@ -17,7 +20,7 @@ fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
     use glam::DVec2;
     let cle = |p: DVec2| ((p.x * 100.0).round() as i64, (p.y * 100.0).round() as i64);
     // L'estimation de la courbure échantillonne les arêtes dans cet ordre.
-    let mut aretes: std::collections::BTreeMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::BTreeMap::new();
+    let mut aretes: std::collections::BTreeMap<CleArete, (usize, DVec2, DVec2)> = std::collections::BTreeMap::new();
     // Triangles aplatis (épaisseur sous la résolution des clés, laissés par la découpe
     // d'une travée) : collés contre une face, ils la feraient compter deux fois, donc
     // passer pour une arête intérieure, et une diagonale deviendrait la plus longue face.
@@ -39,7 +42,7 @@ fn contour_morceau(tris: &[[[f64; 2]; 3]]) -> Vec<(glam::DVec2, glam::DVec2)> {
     if libres.len() * sommets.len() > 4_000_000 {
         return libres;
     }
-    let mut morceaux: std::collections::BTreeMap<((i64, i64), (i64, i64)), (usize, DVec2, DVec2)> = std::collections::BTreeMap::new();
+    let mut morceaux: std::collections::BTreeMap<CleArete, (usize, DVec2, DVec2)> = std::collections::BTreeMap::new();
     for (a, b) in &libres {
         let d = *b - *a;
         let l = d.length();
@@ -134,7 +137,8 @@ fn centre_courbure(tris: &[[[f64; 2]; 3]]) -> Option<[f64; 2]> {
     r.sort_by(f64::total_cmp);
     let (r0, r1) = (r[r.len() / 10], r[r.len() - 1 - r.len() / 10]);
     let e = r1 - r0;
-    if !(e > 1e-6) || r0 < e || r0 > 1e3 * perimetre {
+    // NaN compris : épaisseur indéterminée refusée
+    if e.is_nan() || e <= 1e-6 || r0 < e || r0 > 1e3 * perimetre {
         return None;
     }
     // Sur une bande de longueur L et d'épaisseur e, A ≈ L·e et P ≈ 2(L + e).
@@ -185,7 +189,7 @@ pub(super) fn composantes(tris: &[[[f64; 2]; 3]]) -> Vec<Vec<[[f64; 2]; 3]>> {
         }
         i
     }
-    let mut vues: std::collections::HashMap<((i64, i64), (i64, i64)), usize> = std::collections::HashMap::new();
+    let mut vues: std::collections::HashMap<CleArete, usize> = std::collections::HashMap::new();
     for (i, t) in tris.iter().enumerate() {
         for k in 0..3 {
             let (ka, kb) = (cle(t[k]), cle(t[(k + 1) % 3]));
@@ -245,7 +249,8 @@ pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]], direction: Option<
             u1 = u1.max(d.dot(u));
         }
     }
-    if !(e > 1e-6) || !(u1 - u0 >= e) || (u1 - u0) / (0.25 * e) > BOUCLES_ISOLANT_MAX {
+    // NaN compris : épaisseur ou longueur indéterminée refusée
+    if e.is_nan() || e <= 1e-6 || (u1 - u0).is_nan() || u1 - u0 < e || (u1 - u0) / (0.25 * e) > BOUCLES_ISOLANT_MAX {
         return Vec::new();
     }
     // Série de S (isolant souple, motif traditionnel) : cercles de rayon e/4 posés

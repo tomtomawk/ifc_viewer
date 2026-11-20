@@ -252,7 +252,7 @@ impl ExecutionModeliser for Projet {
                 self.assemblages
                     .iter_mut()
                     .find(|x| x.id == a.id)
-                    .unwrap()
+                    .ok_or("Assemblage introuvable.")?
                     .couches = nouveaux.iter().map(|m| m.id.clone()).collect();
                 self.murs.extend(nouveaux);
                 self.completer_materiaux();

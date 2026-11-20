@@ -257,7 +257,7 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
         }
         ui.horizontal(|ui| {
             if ui.button("Ajouter un paramètre").clicked() {
-                let nom = (1..).map(|k| format!("Parametre{k}")).find(|n| ed.famille.parametres.iter().all(|p| &p.nom != n)).unwrap();
+                let nom = (1..).map(|k| format!("Parametre{k}")).find(|n| ed.famille.parametres.iter().all(|p| &p.nom != n)).unwrap_or_default();
                 ed.famille.parametres.push(Parametre::nouveau(&nom, "100"));
             }
             let disponibles: Vec<(String, f64)> = ed.partages.iter().filter(|(n, _)| ed.famille.parametres.iter().all(|p| &p.nom != *n)).map(|(n, v)| (n.clone(), *v)).collect();

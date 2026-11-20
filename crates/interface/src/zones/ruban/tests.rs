@@ -3,8 +3,7 @@ use super::*;
 #[test]
 fn croquis_mur_suit_hauteur_niveaux_et_decalages() {
     let projet = modele::Projet::nouveau("Croquis");
-    let mut params = modele::creation::ParametresMur::default();
-    params.niveau_haut = Some("haut".into());
+    let mut params = modele::creation::ParametresMur { niveau_haut: Some("haut".into()), ..Default::default() };
     assert_eq!(limites_croquis_mur(&params, &projet, 10.0, 46.0), (10.0, 46.0));
     for valeur in [1.0, 20_000.0] {
         params.decalage_haut = valeur;
@@ -45,7 +44,6 @@ fn boutons_modifier_declenchent_les_actions_sans_changer_outil() {
                 pos: position, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
             }]);
         }
-        drop(frame);
         assert_eq!(action, Some(outil));
         assert_eq!(ruban.outil(), Some(Outil::Mur));
     }
@@ -72,7 +70,6 @@ fn bouton_attacher_toiture_active_la_selection_graphique() {
             pos: position, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
         }]);
     }
-    drop(frame);
     assert_eq!(ruban.outil(), Some(Outil::AttacherToiture));
 }
 
@@ -110,8 +107,7 @@ fn crayon_du_type_courant_ouvre_son_editeur() {
         couches: vec![modele::Couche { epaisseur: 200.0, ..Default::default() }],
         categorie: None, couches_detaillees: true, origine: None,
     });
-    let mut ruban = RubanEdition::default();
-    ruban.type_mur = Some("mur-test".into());
+    let mut ruban = RubanEdition { type_mur: Some("mur-test".into()), ..Default::default() };
     let mut frame = |events| {
         let mut position = egui::Pos2::ZERO;
         let mut sortie = ctx.run_ui(egui::RawInput {
@@ -135,7 +131,6 @@ fn crayon_du_type_courant_ouvre_son_editeur() {
             pos: position, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
         }]);
     }
-    drop(frame);
     assert!(ruban.editeur_type_ouvert());
     assert_eq!(ruban.editeur_type.as_ref().and_then(|e| e.id.as_deref()), Some("mur-test"));
 }

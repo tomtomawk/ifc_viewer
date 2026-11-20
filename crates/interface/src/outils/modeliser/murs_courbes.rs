@@ -120,7 +120,7 @@ impl Application {
         for id in &ids {
             let Some((axe,z))=p.trajectoire_justification(id) else {continue};
             let Some(mut points)=points_controle(axe) else {continue};
-            if let Some((gid,_,pts))=&self.dessin2d.arc_glisse&& gid==id {points=*pts;}
+            if let Some((gid,_,pts))=&self.dessin2d.arc_glisse&& gid==id {points = *pts;}
             let Some((o,r,d,s))=noyau::forme2d::arc_3_points(points[0],points[1],points[2]) else {continue};
             let ligne:Vec<_>=noyau::forme2d::points_arc(o,r,d,s).into_iter().filter_map(|p|self.ecran_plan(rect,p.to_array(),z)).collect();
             painter.add(egui::Shape::dashed_line(&ligne,egui::Stroke::new(1.5,bleu),8.,4.));
@@ -157,8 +157,8 @@ impl Application {
                     }
                 } else if self.cote_arc.as_ref().is_some_and(|(mur, _, _, _)| mur == id)
                     && let Some(e) = self.ecran_plan(rect, points[1].to_array(), z)
+                    && let Some((_, poignee, rayon, longueur)) = self.cote_arc.as_mut()
                 {
-                    let (_, poignee, rayon, longueur) = self.cote_arc.as_mut().unwrap();
                     let poignee = *poignee;
                     for (k, (nom, texte)) in [("Rayon", rayon), ("Longueur", longueur)].into_iter().enumerate() {
                         let zone = egui::Rect::from_min_size(e + egui::vec2(14.0, -48.0 + k as f32 * 24.0), egui::vec2(95.0, 22.0));

@@ -12,6 +12,8 @@ mod placement;
 mod poteau;
 pub(crate) mod widgets;
 
+/// Tableau de nomenclature mis en cache : révision, clé de la nomenclature, lignes ou erreur.
+pub(crate) type TableauCache = (u64, String, Result<Vec<Vec<String>>, String>);
 
 pub(crate) struct EtatBim {
     pub selection: Vec<String>,
@@ -46,7 +48,7 @@ pub(crate) struct EtatBim {
     pub(crate) murs_a_attacher: Vec<String>,
     pub(crate) priorite: i32,
     pub revision: u64,
-    pub(crate) tableau_cache: Option<(u64, String, Result<Vec<Vec<String>>, String>)>,
+    pub(crate) tableau_cache: Option<TableauCache>,
     /// Origine du projet sélectionnée (trait invisible) : ses coordonnées dans Propriétés.
     pub(crate) origine: bool,
 }
@@ -133,7 +135,7 @@ impl Application {
     pub(crate) fn placer_ouverture(&mut self, id: Id, point: [f64; 2]) {
         let resultat = (|| {
             let mut id = self.cle_native(id).ok_or("Sélectionnez un mur.")?;
-            let p = &self.natif.as_ref().unwrap().0;
+            let p = &self.natif.as_ref().ok_or("Aucun projet ouvert.")?.0;
             if let Some(a) = p
                 .murs
                 .iter()

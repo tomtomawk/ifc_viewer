@@ -82,7 +82,9 @@ impl Application {
                             .contains(&categorie) =>
                     {
                         self.ouvrir_parametres();
-                        self.parametres.as_mut().unwrap().categorie = categorie.into();
+                        if let Some(p) = self.parametres.as_mut() {
+                            p.categorie = categorie.into();
+                        }
                     }
                     _ => return Err(
                         "parametres ouvrir|fermer|etat|general|dessin|raccourcis|graphisme|gabarit"

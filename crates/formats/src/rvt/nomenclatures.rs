@@ -384,6 +384,9 @@ fn morceaux(t: &str) -> Vec<Morceau> {
 /// tri, chacun avec son en-tête (valeur dans la première colonne), ses lignes, son pied
 /// (totaux ; titre et nombre selon les drapeaux) ; une ligne vide sépare deux groupes
 /// voisins, pas après le dernier (comme Revit).
+/// Ligne de totaux d'un groupe d'éléments, avec son titre éventuel.
+type LigneTotaux<'f> = dyn Fn(&[i64], Option<String>) -> Vec<String> + 'f;
+
 #[allow(clippy::too_many_arguments)]
 fn composer(
     niveau: usize,
@@ -392,7 +395,7 @@ fn composer(
     largeur: usize,
     cle: &dyn Fn(i64, &Tri) -> String,
     feuille: &dyn Fn(&[i64]) -> Vec<Vec<String>>,
-    total: &dyn Fn(&[i64], Option<String>) -> Vec<String>,
+    total: &LigneTotaux<'_>,
     lignes: &mut Vec<Vec<String>>,
 ) {
     let Some(t) = d.tris.get(niveau) else {
@@ -485,7 +488,9 @@ pub fn calculer(m: &Maquette, d: &Definition) -> Tableau {
     };
     // ordre total (sinon `sort_by` peut paniquer) : nombres d'abord, entre eux par
     // `total_cmp`, puis textes par ordre naturel ; clés calculées une fois par élément
-    let cles: std::collections::HashMap<i64, Vec<(Vec<Morceau>, Option<f64>)>> = els.iter().map(|&e| (e, d.tris.iter().map(|t| { let (texte, n) = cle_tri(e, t); (morceaux(&texte), n.or_else(|| texte.trim().parse::<f64>().ok())) }).collect())).collect();
+    /// Clés de tri d'un élément : morceaux du texte et valeur numérique éventuelle.
+    type Cles = Vec<(Vec<Morceau>, Option<f64>)>;
+    let cles: std::collections::HashMap<i64, Cles> = els.iter().map(|&e| (e, d.tris.iter().map(|t| { let (texte, n) = cle_tri(e, t); (morceaux(&texte), n.or_else(|| texte.trim().parse::<f64>().ok())) }).collect())).collect();
     els.sort_by(|&a, &b| {
         for (k, t) in d.tris.iter().enumerate() {
             let (x, y) = (&cles[&a][k], &cles[&b][k]);

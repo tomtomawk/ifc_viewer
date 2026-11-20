@@ -733,6 +733,11 @@ impl Axe {
     /// Rayon et angles (début, balayage signé) d'un arc.
     fn arc(&self) -> Option<(f64, f64, f64)> {
         let Axe::Arc { debut, fin, centre, direct } = *self else { return None };
+        Some(Axe::parametres_arc(debut, fin, centre, direct))
+    }
+
+    /// Rayon et angles (début, balayage signé) de l'arc de `debut` à `fin` autour de `centre`.
+    fn parametres_arc(debut: [f64; 2], fin: [f64; 2], centre: [f64; 2], direct: bool) -> (f64, f64, f64) {
         let r = ((debut[0] - centre[0]).powi(2) + (debut[1] - centre[1]).powi(2)).sqrt();
         let a0 = (debut[1] - centre[1]).atan2(debut[0] - centre[0]);
         let a1 = (fin[1] - centre[1]).atan2(fin[0] - centre[0]);
@@ -743,7 +748,7 @@ impl Axe {
         } else {
             balayage = -(-balayage).rem_euclid(tour);
         }
-        Some((r, a0, balayage))
+        (r, a0, balayage)
     }
 
     pub fn longueur(&self) -> f64 {

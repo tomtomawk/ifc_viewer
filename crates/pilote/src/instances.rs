@@ -115,13 +115,13 @@ pub fn inscrire(port: u16, jeton: &str) -> Result<(), String> {
         partage: None,
     };
     let r = ecrire(&i);
-    *COURANTE.lock().unwrap() = Some(i);
+    *COURANTE.lock().unwrap_or_else(|e| e.into_inner()) = Some(i);
     r
 }
 
 /// Met à jour le fichier ouvert et le partage ; n'écrit que s'ils ont changé.
 pub fn publier(fichier: Option<String>, partage: Option<String>) {
-    let mut c = COURANTE.lock().unwrap();
+    let mut c = COURANTE.lock().unwrap_or_else(|e| e.into_inner());
     let Some(i) = c.as_mut() else { return };
     if i.fichier == fichier && i.partage == partage { return; }
     i.fichier = fichier;
@@ -133,12 +133,12 @@ pub fn publier(fichier: Option<String>, partage: Option<String>) {
 
 /// Pid et port de cette instance, si elle est inscrite.
 pub fn courante() -> Option<(u32, u16)> {
-    COURANTE.lock().unwrap().as_ref().map(|i| (i.pid, i.port))
+    COURANTE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|i| (i.pid, i.port))
 }
 
 /// Retire l'inscription de ce processus (fermeture).
 pub fn retirer() {
-    if let Some(i) = COURANTE.lock().unwrap().take() {
+    if let Some(i) = COURANTE.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = std::fs::remove_file(fichier_de(i.pid));
     }
 }

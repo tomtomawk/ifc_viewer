@@ -33,6 +33,9 @@ const DALLES: &[&str] = &["IFCSLAB", "IFCSLABSTANDARDCASE", "IFCSLABELEMENTEDCAS
 /// Produits sans équivalent physique à importer.
 const IGNORES: &[&str] = &["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE", "IFCANNOTATION", "IFCVIRTUALELEMENT", "IFCGRID"];
 
+/// Produit IFC lu : identifiant, triangles (mm) et couleur de sa plus grande part.
+type ProduitLu = (Id, Vec<[DVec3; 3]>, Option<[f32; 4]>);
+
 pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<modele::Mesure>), String> {
     progress(format!("Lecture de {}…", chemin.display()));
     let data = std::fs::read(chemin).map_err(|e| format!("Lecture impossible : {e}"))?;
@@ -46,7 +49,7 @@ pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Ve
     let pool = rayon::ThreadPoolBuilder::new().stack_size(64 << 20).build().map_err(|e| e.to_string())?;
     // triangles de chaque produit, en mm, et couleur de sa plus grande part si elle vient
     // d'un style ou d'un matériau (pas de la couleur par défaut de sa classe)
-    let lus: Vec<(Id, Vec<[DVec3; 3]>, Option<[f32; 4]>)> = pool.install(|| {
+    let lus: Vec<ProduitLu> = pool.install(|| {
         model
             .products
             .par_iter()

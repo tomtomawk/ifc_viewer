@@ -175,6 +175,9 @@ pub fn barre_3d(a: DVec3, b: DVec3, largeur: f64, epaisseur: f64) -> Vec<Tri> {
     hexaedre([p(a, -1.0, -e), p(b, -1.0, -e), p(b, 1.0, -e), p(a, 1.0, -e), p(a, -1.0, e), p(b, -1.0, e), p(b, 1.0, e), p(a, 1.0, e)])
 }
 
+/// Marches et paliers, et profil de la ligne de foulée (point, altitude du nez de marche).
+type MarchesEtProfil = (Vec<Marche>, Vec<(DVec2, f64)>);
+
 impl Escalier {
     /// Hauteur à franchir et caractéristiques.
     pub fn calcul(&self, p: &Projet) -> Result<CalculEscalier, String> {
@@ -231,10 +234,11 @@ impl Escalier {
 
     /// Marches et paliers : contour en plan, altitude du dessus ; et le profil de la
     /// ligne de foulée (abscisse curviligne, altitude du nez de marche).
-    fn marches(&self, c: &CalculEscalier) -> Result<(Vec<Marche>, Vec<(DVec2, f64)>), String> {
+    fn marches(&self, c: &CalculEscalier) -> Result<MarchesEtProfil, String> {
         if self.balance.is_some() {
             return self.marches_balancees(c);
         }
+        let Some(&arrivee) = self.trace.last() else { return Err("Escalier sans tracé.".into()) };
         let w = self.largeur / 2.0;
         let volees = self.volees();
         let total: f64 = volees.iter().map(|(a, b)| a.distance(*b)).sum();
@@ -271,7 +275,7 @@ impl Escalier {
             }
             faites += m;
         }
-        profil.push((pt(*self.trace.last().unwrap()), c.base + c.hauteur));
+        profil.push((pt(arrivee), c.base + c.hauteur));
         Ok((out, profil))
     }
 
@@ -288,8 +292,9 @@ impl Escalier {
     }
 
     /// Marches tournantes balancées et profil de la foulée.
-    fn marches_balancees(&self, c: &CalculEscalier) -> Result<(Vec<Marche>, Vec<(DVec2, f64)>), String> {
+    fn marches_balancees(&self, c: &CalculEscalier) -> Result<MarchesEtProfil, String> {
         let trace: Vec<DVec2> = self.trace.iter().map(|p| pt(*p)).collect();
+        let Some(&arrivee) = trace.last() else { return Err("Escalier sans tracé.".into()) };
         let n = c.contremarches - 1;
         let contours = self.contours_balancees_avec_arrivees(c)?;
         let mut profil = vec![(trace[0], c.base)];
@@ -303,7 +308,7 @@ impl Escalier {
                 if reste <= l { return w[0].lerp(w[1], reste / l.max(1e-12)); }
                 reste -= l;
             }
-            *trace.last().unwrap()
+            arrivee
         };
         for (k, (contour, arrivee)) in contours.into_iter().enumerate() {
             let z = c.base + (k + 1) as f64 * c.h;
@@ -311,7 +316,7 @@ impl Escalier {
             out.push(Marche { contour, z, arrivee: Some(arrivee) });
             s += total / n as f64;
         }
-        profil.push((*trace.last().unwrap(), c.base + c.hauteur));
+        profil.push((arrivee, c.base + c.hauteur));
         Ok((out, profil))
     }
 

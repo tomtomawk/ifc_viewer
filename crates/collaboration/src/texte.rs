@@ -30,9 +30,11 @@ impl EtatTexte {
         Ok(())
     }
     pub fn document(&self) -> Resultat<Doc> {
-        let mut options = yrs::Options::default();
-        options.skip_gc = true;
-        options.offset_kind = yrs::OffsetKind::Utf16;
+        let options = yrs::Options {
+            skip_gc: true,
+            offset_kind: yrs::OffsetKind::Utf16,
+            ..Default::default()
+        };
         let doc = Doc::with_options(options);
         doc.get_or_insert_text("texte");
         for u in self.mises_a_jour.values() {
@@ -70,18 +72,22 @@ impl Editeur {
         }
     }
     pub fn restaurer(s: &SauvegardeEditeur, origine: &str) -> Resultat<Self> {
-        let mut options = yrs::Options::default();
-        options.guid = s.guid.clone().into();
-        options.skip_gc = true;
-        options.offset_kind = yrs::OffsetKind::Utf16;
+        let options = yrs::Options {
+            guid: s.guid.clone().into(),
+            skip_gc: true,
+            offset_kind: yrs::OffsetKind::Utf16,
+            ..Default::default()
+        };
         let doc = Doc::with_options(options);
         let texte = doc.get_or_insert_text("texte");
         doc.transact_mut()
             .apply_update(Update::decode_v1(&s.etat).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
-        let mut options = yrs::undo::Options::default();
-        options.init_undo_stack = s.annulations.clone();
-        options.init_redo_stack = s.retablissements.clone();
+        let options = yrs::undo::Options {
+            init_undo_stack: s.annulations.clone(),
+            init_redo_stack: s.retablissements.clone(),
+            ..Default::default()
+        };
         let mut undo = UndoManager::with_options(options);
         undo.expand_scope(&doc, &texte);
         undo.include_origin(origine);

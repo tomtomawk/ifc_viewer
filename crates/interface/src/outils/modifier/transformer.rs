@@ -51,10 +51,7 @@ impl Transformation {
             self.saisie.clear();
         } else if self.placer_centre {
             self.placer_centre = false;
-        } else if self.points.pop().is_some() {
-        } else if self.element.take().is_some() {
-        } else if self.alignement.reference.take().is_some() {
-        } else {
+        } else if self.points.pop().is_none() && self.element.take().is_none() && self.alignement.reference.take().is_none() {
             return false;
         }
         true
@@ -320,6 +317,7 @@ impl Application {
         }).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, id)| id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn clic_transformation(&mut self, outil: Outil, p: [f64; 2], ecran: egui::Pos2, rect: egui::Rect, altitude: f64, maj: bool, cible: Option<String>) {
         let cible = cible.or_else(|| self.mur_proche(p));
         // centre déplaçable (Tourner, réseau polaire) : clic dessus, puis nouveau centre

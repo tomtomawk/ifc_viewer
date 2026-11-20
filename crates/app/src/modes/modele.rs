@@ -7,13 +7,18 @@ use std::path::PathBuf;
 pub(crate) fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
     let t0 = std::time::Instant::now();
     let e = entree.clone();
-    let handle = std::thread::Builder::new()
+    let handle = match std::thread::Builder::new()
         .stack_size(64 << 20)
         .spawn(move || {
             let progress = |s: String| eprintln!("{s}");
             if formats::rvt::is_revit_path(&e) { echanges::depuis_rvt::convertir(&e, &progress) } else { echanges::depuis_ifc::convertir(&e, &progress) }
-        })
-        .unwrap();
+        }) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("Erreur : impossible de lancer la conversion ({e})");
+            return 1;
+        }
+    };
     let (projet, mesures) = match handle.join() {
         Ok(Ok(x)) => x,
         Ok(Err(e)) => {

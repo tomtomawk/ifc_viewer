@@ -30,11 +30,8 @@ fn feuilles_par_jeu_et_anciens_fichiers() {
 #[test]
 fn cartouche_standard_enregistre_est_partage_par_les_feuilles_sans_affectation() {
     let mut p = Projet::nouveau("Projet");
-    let mut standard = FamilleCartouche::default();
-    standard.largeur = 125.0;
-    let mut autre = FamilleCartouche::default();
-    autre.nom = "Agence".into();
-    autre.largeur = 80.0;
+    let standard = FamilleCartouche { largeur: 125.0, ..Default::default() };
+    let autre = FamilleCartouche { nom: "Agence".into(), largeur: 80.0, ..Default::default() };
     p.familles_cartouches.extend([standard, autre]);
     p.cartouches_feuilles.insert("personnalisee".into(), "Agence".into());
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();

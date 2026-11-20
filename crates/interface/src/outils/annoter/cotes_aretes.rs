@@ -49,7 +49,7 @@ impl Application {
         }
         let modele::GenreVue::Plan { niveau, .. } = &v.genre else { return Vec::new() };
         let en_assemblage = |m: &modele::Mur| m.assemblage.as_ref().is_some_and(|a| p.assemblage(a).is_some());
-        let murs: Vec<&str> = p.murs.iter().filter(|m| &m.niveau == niveau).map(|m| if en_assemblage(m) { m.assemblage.as_deref().unwrap() } else { m.id.as_str() }).collect();
+        let murs: Vec<&str> = p.murs.iter().filter(|m| &m.niveau == niveau).map(|m| m.assemblage.as_deref().filter(|_| en_assemblage(m)).unwrap_or(m.id.as_str())).collect();
         let mut ids: Vec<&str> = Vec::new();
         for id in &murs { if !ids.contains(id) { ids.push(id); } }
         ids.extend(p.dalles.iter().filter(|d| &d.niveau == niveau).map(|d| d.id.as_str()));

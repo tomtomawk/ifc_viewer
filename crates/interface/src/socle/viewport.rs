@@ -17,9 +17,8 @@ impl Application {
         let aspect = rect.width() / rect.height().max(1.0);
         let mode_ajuster=self.preparer_outil_ajuster();
         let mode_attache = self.onglet_ruban == OngletRuban::Modifier && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::AttacherToiture) && self.natif.is_some() && self.loading.is_none();
-        if mode_attache && !self.bim.attache_toiture_active {
+        if mode_attache && !self.bim.attache_toiture_active && let Some((projet, _)) = self.natif.as_ref() {
             let selection = self.selection_bim();
-            let projet = &self.natif.as_ref().unwrap().0;
             self.bim.murs_a_attacher = selection.into_iter().filter_map(|id| {
                 if projet.assemblage(&id).is_some() { Some(id) }
                 else { projet.murs.iter().find(|m| m.id == id).map(|m| m.assemblage.clone().unwrap_or(id)) }
@@ -224,8 +223,7 @@ impl Application {
                 if resp.clicked() && let Some(q) = resp.interact_pointer_pos() {
                     let cible = pick(self, q).and_then(|(objet, _)| self.scene.as_ref()?.objects.get(objet as usize).map(|o| o.id))
                         .and_then(|id| self.cle_native(self.cible_clic(id)));
-                    if let Some(id) = cible {
-                        let projet = &self.natif.as_ref().unwrap().0;
+                    if let Some(id) = cible && let Some((projet, _)) = self.natif.as_ref() {
                         if projet.dalles.iter().any(|d| d.id == id && d.sorte == modele::SorteDalle::Toiture) {
                             if self.bim.murs_a_attacher.is_empty() {
                                 self.status = "Attacher au toit : choisissez d'abord un ou plusieurs murs.".into();
@@ -428,8 +426,8 @@ impl Application {
                         .filter(|(obj, _)| self.options.selection_faces_vues || self.natif.is_none()
                             || resp.interact_pointer_pos().is_some_and(|q| self.objet_coupe(*obj) || self.arete_vue_proche(rect, q, *obj))),
                 };
-                let id = hit.map(|(obj, _)| self.cible_clic(self.scene.as_ref().unwrap().objects[obj as usize].id));
-                self.point_clique = hit.map(|(_, p)| p.as_dvec3() + self.scene.as_ref().unwrap().origin);
+                let id = hit.and_then(|(obj, _)| self.scene.as_ref()?.objects.get(obj as usize).map(|o| self.cible_clic(o.id)));
+                self.point_clique = hit.and_then(|(_, p)| self.scene.as_ref().map(|s| p.as_dvec3() + s.origin));
                 if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ouverture) {
                     if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
                 } else if id.is_none() {

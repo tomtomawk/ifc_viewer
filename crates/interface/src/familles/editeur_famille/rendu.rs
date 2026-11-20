@@ -144,6 +144,7 @@ impl Application {
     /// Rendu de la famille par le `Renderer` du projet avec `camera` (paramètres
     /// d'affichage du projet : fond, style, éclairage) ; image à placer sous les
     /// superpositions de l'éditeur.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn rendre_famille(&mut self, ui: &egui::Ui, rect: egui::Rect, camera: &mut Camera, scene: &SceneFamille, coupe: (&[scene::Vertex], &[scene::Vertex]), selection: Option<usize>, mm: f32) -> Option<egui::Shape> {
         std::mem::swap(&mut self.camera, camera);
         let mut params = self.frame_params(rect.width() / rect.height().max(1.0));

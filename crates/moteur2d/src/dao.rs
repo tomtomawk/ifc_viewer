@@ -175,7 +175,7 @@ pub fn accrocher(c: DVec2, tol: f64, geoms: &[Geom], depuis: Option<DVec2>) -> O
         Accroche::Quadrant => 1,
         _ => 2,
     };
-    let meilleur = candidats.into_iter().filter(|(p, _)| p.distance(c) <= tol).min_by(|x, y| (rang(x.1), x.0.distance(c)).partial_cmp(&(rang(y.1), y.0.distance(c))).unwrap());
+    let meilleur = candidats.into_iter().filter(|(p, _)| p.distance(c) <= tol).min_by(|x, y| rang(x.1).cmp(&rang(y.1)).then(x.0.distance(c).total_cmp(&y.0.distance(c))));
     if meilleur.is_some() {
         return meilleur;
     }

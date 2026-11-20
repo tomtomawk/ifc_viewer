@@ -1,6 +1,7 @@
 //! Espaces IFC convertis en pièces natives (`samples/test_ifc4_espaces.ifc`) : séjour
 //! rectangulaire et bureau en L fermés par des murs ; placard d'emprise trop petite et
 //! terrasse hors des murs restés éléments importés.
+#![allow(clippy::unwrap_used, clippy::panic, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use echanges::{depuis_ifc, export_ifc};
 use ifc_base::semantique::IfcModel;
 use ifc_base::step::StepFile;

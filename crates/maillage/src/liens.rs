@@ -107,7 +107,7 @@ fn lire(chemin: &Path) -> Result<FichierLie, String> {
         max = max.max(*v);
     }
     let mut ignores: Vec<(String, usize)> = stats.unsupported.into_inner().unwrap_or_else(|e| e.into_inner()).into_iter().collect();
-    ignores.sort_by(|a, b| b.1.cmp(&a.1));
+    ignores.sort_by_key(|a| std::cmp::Reverse(a.1));
     Ok(FichierLie { elements, ignores, min, max })
 }
 

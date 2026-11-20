@@ -133,7 +133,9 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
     niveaux.sort_by(|a, b| a.altitude.total_cmp(&b.altitude).then(a.id.cmp(&b.id)));
     let altitude: HashMap<i64, f64> = niveaux.iter().map(|n| (n.id, n.altitude)).collect();
     let herite = |c: &str, base: &str| sch.by_name(c).is_some_and(|c| sch.inherits(c.id, base));
-    let extraits: Vec<Result<(i64, Extrait, Vec<(i64, Brut)>, (Option<i64>, Option<i64>)), (i64, String)>> = ids
+    /// Objet lu : identifiant, extrait, paramètres bruts, (groupe, variante) ; sinon l'erreur.
+    type Lu = Result<(i64, Extrait, Vec<(i64, Brut)>, (Option<i64>, Option<i64>)), (i64, String)>;
+    let extraits: Vec<Lu> = ids
         .par_iter()
         .filter(|e| objets[e].0 != Sorte::Niveau)
         .filter_map(|eid| Some(lire_objet(eid)?.map(|(s, r)| (*eid, extraire(*eid, s, &r, &altitude, &herite), parametres::valeurs(&r), (crate::rvt::annexes::groupe_de(&r), crate::rvt::annexes::variante_de(&r))))))
@@ -248,7 +250,7 @@ pub fn lire(path: &Path, progress: &dyn Fn(String)) -> Result<Maquette, String> 
             Ok(Extrait::LigneZone(sc, niv, a, b)) => lignes_zones.entry((sc, niv)).or_default().push((a, b)),
             Ok(Extrait::Forme(f)) => formes.push(f),
             Ok(Extrait::Categorie(id, nom)) => drop(categories.insert(id, nom)),
-            Ok(Extrait::Vue(v)) => vues.push(v),
+            Ok(Extrait::Vue(v)) => vues.push(*v),
             Ok(Extrait::Cadrage(v, c, k)) => drop(cadrages.insert(v, (c, k))),
             Ok(Extrait::Element2D(e)) => elements_2d.push(e),
             Ok(Extrait::Motif(id, x)) => drop(motifs.insert(id, x)),
@@ -816,7 +818,7 @@ pub(super) fn extraire(eid: i64, s: Sorte, r: &Record, altitude: &HashMap<i64, f
         Sorte::Piece => Extrait::Piece(piece(eid, r, altitude)),
         Sorte::Forme => ou_rien(forme(eid, r).map(Extrait::Forme)),
         Sorte::Categorie => ou_rien((|| Some(Extrait::Categorie(eid, r.field_body(o, "m_pCategory")?.get("m_name")?.str()?.to_string())))()),
-        Sorte::Vue => ou_rien(vues::vue(eid, r).map(Extrait::Vue)),
+        Sorte::Vue => ou_rien(vues::vue(eid, r).map(|v| Extrait::Vue(Box::new(v)))),
         Sorte::Viewer => ou_rien(vues::cadrage(r).map(|(v, o, a, b)| Extrait::Cadrage(v, (o, a, b), vues::cadre(r).map(|c| c.1)))),
         // ligne de zone (limite des zones de surface) : droite `m_pCurveDriver.m_pCrv`
         // (`m_origin`, `m_dirVec`, `m_endParams`, pieds)

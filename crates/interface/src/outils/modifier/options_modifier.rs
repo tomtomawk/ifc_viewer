@@ -158,8 +158,8 @@ impl Application {
             && let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);
             }
-        if let Some(m) = mur.filter(|_| dissocier || associer.is_some()) {
-            let mut p = self.natif.as_ref().unwrap().0.clone();
+        if let Some(m) = mur.filter(|_| dissocier || associer.is_some()) && let Some((projet, _)) = self.natif.as_ref() {
+            let mut p = projet.clone();
             let r = match &associer {
                 Some(a) => p.associer(&m.id, a),
                 None => p.dissocier(&m.id).map(|_| ()),
@@ -230,7 +230,9 @@ impl Application {
         let Some(id) = self.vue_native_id() else {
             return Vec::new();
         };
-        let p = &self.natif.as_ref().unwrap().0;
+        let Some((p, _)) = self.natif.as_ref() else {
+            return Vec::new();
+        };
         let Some(v) = p.vues.iter().find(|v| v.id == id) else {
             return Vec::new();
         };
@@ -329,9 +331,10 @@ impl Application {
                 if serde_json::to_string(&n).ok()!=serde_json::to_string(&p.nomenclatures[self.bim.nomenclature]).ok() {commande=Some(Commande::Nomenclature {nomenclature:n.clone()});}
                 let cle=serde_json::to_string(&n).unwrap_or_default();
                 if self.bim.tableau_cache.as_ref().is_none_or(|(r,c,_)|*r!=self.bim.revision || *c!=cle) {self.bim.tableau_cache=Some((self.bim.revision,cle,d::tableau(p,&n)));}
-                match &self.bim.tableau_cache.as_ref().unwrap().2 {
-                    Ok(lignes)=>{egui::ScrollArea::both().max_height(230.0).show(ui,|ui|{egui::Grid::new("quantites_projet").striped(true).show(ui,|ui|{for l in lignes {for c in l {ui.label(c);}ui.end_row();}});});}
-                    Err(e)=>{ui.colored_label(Color32::DARK_RED,e);}
+                match self.bim.tableau_cache.as_ref().map(|t| &t.2) {
+                    Some(Ok(lignes))=>{egui::ScrollArea::both().max_height(230.0).show(ui,|ui|{egui::Grid::new("quantites_projet").striped(true).show(ui,|ui|{for l in lignes {for c in l {ui.label(c);}ui.end_row();}});});}
+                    Some(Err(e))=>{ui.colored_label(Color32::DARK_RED,e);}
+                    None=>{}
                 }
                 if ui.button("Exporter CSV…").clicked(){export=Some(self.bim.nomenclature);}
             }
@@ -345,7 +348,9 @@ impl Application {
             let Some(path) = rfd::FileDialog::new().set_file_name("nomenclature.csv").add_filter("csv", &["csv"]).save_file() else {
                 return;
             };
-            let p = &self.natif.as_ref().unwrap().0;
+            let Some((p, _)) = self.natif.as_ref() else {
+                return;
+            };
             let contenu = d::tableau(p, &p.nomenclatures[k]).map(|l| d::csv(&l).into_bytes());
             match contenu.and_then(|b| echanges::enregistrement::ecrire_atomique(&path, &b)) {
                 Ok(()) => self.status = format!("Export : {}", path.display()),

@@ -29,3 +29,6 @@ serde_json.workspace = true
 # numéro de build de Windows (cadre de fenêtre : Windows 10 ou 11)
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
+
+[lints]
+workspace = true

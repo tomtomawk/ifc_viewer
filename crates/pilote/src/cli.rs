@@ -48,7 +48,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
                 maillage::depuis_natif(&p, Path::new(entree))?;
                 let sortie = args.get(3).map_or(entree, |s| s);
                 echanges::enregistrement::enregistrer_natif(&p, Path::new(sortie))?;
-                println!("{}", serde_json::to_string(&ids).unwrap());
+                println!("{}", serde_json::to_string(&ids).map_err(|e| e.to_string())?);
             }
             "--export-ifc" => echanges::enregistrement::ecrire_atomique(
                 Path::new(arg),

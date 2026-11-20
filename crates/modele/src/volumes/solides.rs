@@ -104,8 +104,8 @@ pub fn repere(axe: &Axe, s: f64) -> (DVec2, DVec2) {
             let u = (DVec2::from_array(fin) - a).normalize_or_zero();
             (a + u * s, u)
         }
-        Axe::Arc { centre, .. } => {
-            let (r, a, b) = axe.arc().unwrap();
+        Axe::Arc { debut, fin, centre, direct } => {
+            let (r, a, b) = Axe::parametres_arc(debut, fin, centre, direct);
             let angle = a + b.signum() * s / r;
             let radial = DVec2::new(angle.cos(), angle.sin());
             (
@@ -137,12 +137,12 @@ pub fn bande(axe: &Axe, debut: f64, fin: f64, epaisseur: f64) -> Result<Vec<[f64
             debut: a,
             fin: b,
             centre,
-            ..
+            direct,
         } => {
             if a.iter().chain(b).chain(centre).any(|v| !v.is_finite()) {
                 return Err("Arc non fini.".into());
             }
-            let (r, _, _) = axe.arc().unwrap();
+            let (r, _, _) = Axe::parametres_arc(*a, *b, *centre, *direct);
             let rb = (DVec2::from_array(*b) - DVec2::from_array(*centre)).length();
             if r <= epaisseur / 2.0 || (r - rb).abs() > 1.0 {
                 return Err("Rayon du mur courbe non valide.".into());
@@ -370,11 +370,14 @@ pub fn murs(p: &Projet, jonctions: &crate::murs::jonctions::Coupes) -> Vec<Resul
     solides
 }
 
+/// Solide brut d'un mur (rang dans le projet, mur), calculé ou repris.
+type SolideBrut<'a, 'f> = dyn Fn(usize, &Mur) -> Result<std::borrow::Cow<'a, [Tri]>, String> + Sync + 'f;
+
 fn mur_avec<'a>(
     p: &Projet,
     rang: usize,
     m: &Mur,
-    brut: &(dyn Fn(usize, &Mur) -> Result<std::borrow::Cow<'a, [Tri]>, String> + Sync),
+    brut: &SolideBrut<'a, '_>,
     voisin: &(dyn Fn(usize, &Mur) -> std::borrow::Cow<'a, Voisin> + Sync),
     memoire: bool,
 ) -> Result<Vec<Tri>, String> {
@@ -462,10 +465,15 @@ fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, Str
     Ok(Some(solides_famille(p, o, f)?.into_iter().filter(|s| s.vide && s.visible).map(|s| s.tris).collect()))
 }
 
+/// Point (h, v) d'une vue d'esquisse, mm.
+type PointVue = (f64, f64);
+/// Famille résolue d'une ouverture et placement d'un point de ses vues d'esquisse.
+type VueOuverture<'a, F> = (&'a crate::famille::modelee::FamilleModelee, crate::famille::modelee::Resolution, F);
+
 /// Famille, résolution et placement d'une ouverture dans le projet : point de la vue
 /// d'esquisse `vue` (h, v) vers le projet (mm ; plan : à l'altitude du bas de la baie ;
 /// élévation : dans le plan de l'axe du mur).
-fn vue_ouverture<'a>(p: &'a Projet, o: &Ouverture) -> Option<(&'a crate::famille::modelee::FamilleModelee, crate::famille::modelee::Resolution, impl Fn(crate::famille::modelee::VueEsquisse, (f64, f64)) -> DVec3)> {
+fn vue_ouverture<'a>(p: &'a Projet, o: &Ouverture) -> Option<VueOuverture<'a, impl Fn(crate::famille::modelee::VueEsquisse, PointVue) -> DVec3>> {
     let f = famille_modelee(p, o)?;
     let (axe, e, niveau) = hote_ouverture(p, o).ok()?;
     let z = p.niveau(&niveau)?.altitude + o.allege;

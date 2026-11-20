@@ -240,7 +240,7 @@ fn faces(murs: &[Vec<DVec2>]) -> Vec<Vec<DVec2>> {
                 vus.insert(h);
                 anneau.push(sommets[h.0]);
                 let l = &voisins[h.1];
-                let k = l.iter().position(|&x| x == h.0).unwrap();
+                let Some(k) = l.iter().position(|&x| x == h.0) else { break };
                 let suivant = l[(k + l.len() - 1) % l.len()];
                 h = (h.1, suivant);
                 if h == depart {

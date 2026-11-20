@@ -21,3 +21,6 @@ commandes = { path = "../commandes" }
 maillage = { path = "../maillage" }
 moteur2d = { path = "../moteur2d" }
 serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -70,10 +70,10 @@ fn contenu(p: &Projet) -> Result<Step, String> {
     let mut ns = Vec::new();
     for n in &p.niveaux {
         let id = w.add(format!(
-            "IFCBUILDINGSTOREY('{}',$,{},$,$,#{placement},$,$,.ELEMENT.,{})",
+            "IFCBUILDINGSTOREY('{}',$,{},$,$,#{placement},$,$,.ELEMENT.,{:.6})",
             guid(&n.id, n.origine.as_ref()),
             texte(&n.nom),
-            format!("{:.6}", n.altitude)
+            n.altitude
         ));
         niveaux.insert(n.id.clone(), id);
         ns.push(id);
@@ -155,8 +155,8 @@ fn contenu(p: &Projet) -> Result<Step, String> {
         produits.insert(a.id.clone(), id);
     }
     for d in &p.dalles {
-        let t = p.type_dalle(&d.type_dalle).unwrap();
-        let z = p.niveau(&d.niveau).unwrap().altitude + d.decalage;
+        let t = p.type_dalle(&d.type_dalle).ok_or("Type de dalle introuvable.")?;
+        let z = p.niveau(&d.niveau).ok_or("Niveau de dalle introuvable.")?.altitude + d.decalage;
         // une part par couche, du dessus vers le bas, colorée par son matériau ; les lames
         // d'air décalent les couches suivantes sans géométrie (comme la vue 3D)
         let plans = pente::plans(d);
@@ -261,7 +261,7 @@ fn contenu(p: &Projet) -> Result<Step, String> {
     }
     for o in &p.ouvertures {
         let (axe, e, niveau) = solides::hote(p, &o.mur)?;
-        let z = p.niveau(&niveau).unwrap().altitude + o.allege;
+        let z = p.niveau(&niveau).ok_or("Niveau de l'ouverture introuvable.")?.altitude + o.allege;
         let vide = solides::prisme(
             &solides::bande(
                 &axe,
@@ -295,12 +295,12 @@ fn contenu(p: &Projet) -> Result<Step, String> {
                 "IFCWINDOW"
             };
             let element = w.add(format!(
-                "{classe}('{}',$,{},$,$,#{placement},{},$,{},{},.NOTDEFINED.,.NOTDEFINED.,$)",
+                "{classe}('{}',$,{},$,$,#{placement},{},$,{:.6},{:.6},.NOTDEFINED.,.NOTDEFINED.,$)",
                 guid(&o.id, o.origine.as_ref()),
                 texte(&o.nom),
                 ref_(rep),
-                format!("{:.6}", o.hauteur),
-                format!("{:.6}", o.largeur)
+                o.hauteur,
+                o.largeur
             ));
             contenus.entry(niveaux[&niveau]).or_default().push(element);
             proprietes::ouverture(&mut w, p, o, classe == "IFCDOOR", element);

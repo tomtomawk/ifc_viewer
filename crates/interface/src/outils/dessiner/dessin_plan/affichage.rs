@@ -209,7 +209,7 @@ impl Application {
             if self.dessin2d.reperage.survol_accroche.is_some() || self.dessin2d.reperage.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
             if let Some(commande) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.commande) {
                 if resp.clicked_by(PointerButton::Secondary) {
-                    let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                    let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
                     (e.commande, e.depart, e.repere) = (None, None, None);
                     self.dessin2d.saisie.clear();
                 } else if resp.clicked() && let Some(p) = self.dessin2d.point.map(|p| p.0).or(self.dessin2d.curseur) {
@@ -222,7 +222,7 @@ impl Application {
             let mut arete: Option<(f32, usize, usize, egui::Pos2)> = None;
             if let Some(q) = q {
                 for (ci, c) in self.dessin2d.dalle.iter().enumerate() {
-                    let fermee = self.dessin2d.edition_contour.as_ref().unwrap().fermee(ci);
+                    let fermee = self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.fermee(ci));
                     for i in 0..c.len() {
                         if let Some(a) = self.vers_ecran(rect, DVec2::from_array(c[i])) {
                             let distance = q.distance(a);
@@ -244,7 +244,7 @@ impl Application {
             }
             if resp.drag_started_by(PointerButton::Primary) {
                 if let Some((_, c, i)) = sommet {
-                    let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                    let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
                     e.selection = Some(c);
                     e.segment = None;
                     e.sommet = Some((c, i));
@@ -253,7 +253,7 @@ impl Application {
                     && let Some(origine) = self.depuis_ecran(rect, q) {
                         let a = DVec2::from_array(self.dessin2d.dalle[c][i]);
                         let b = DVec2::from_array(self.dessin2d.dalle[c][(i + 1) % self.dessin2d.dalle[c].len()]);
-                        let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                        let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
                         e.selection = Some(c);
                         e.segment = Some((c, i));
                         e.sommet = None;
@@ -283,30 +283,30 @@ impl Application {
                 // sans conserver deux sommets identiques ni créer de segment nul.
                 if let (Some(GlisseContour::Sommet(c, i)), Some(q)) = (glisse, curseur) {
                     let n = self.dessin2d.dalle[c].len();
-                    let ouvert = !self.dessin2d.edition_contour.as_ref().unwrap().fermee(c);
+                    let ouvert = self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.fermee(c));
                     if ouvert && n >= 4 && (i == 0 || i + 1 == n) {
                         let autre = if i == 0 { n - 1 } else { 0 };
                         if self.vers_ecran(rect, DVec2::from_array(self.dessin2d.dalle[c][autre])).is_some_and(|p| p.distance(q) <= 10.0) {
                             let k = courbures::fermer_courbures(&self.dessin2d.courbures_contour(c), n, i);
                             self.dessin2d.definir_courbures(c, k);
                             fermer_par_extremite(&mut self.dessin2d.dalle[c], i);
-                            let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                            let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
                             if i == 0 && c == 0 && let Some(AnnotationForme::Polyligne { traits, .. }) = e.annotation.as_mut().map(|a| &mut a.forme) && !traits.is_empty() { traits.rotate_left(1); }
                             e.fermees[c] = true;
                             e.sommet = None;
                         }
                     }
                 }
-                self.dessin2d.edition_contour.as_mut().unwrap().glisse = None;
+                if let Some(e) = self.dessin2d.edition_contour.as_mut() { e.glisse = None; }
             }
             let topologie_fixe = self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
             // (le clic droit ne supprime rien : Suppr retire le trait ou le sommet sélectionné)
             if resp.double_clicked() {
-                if let Some((_, c, i)) = sommet.filter(|(_, c, i)| self.dessin2d.edition_contour.as_ref().unwrap().creation.is_none() && !self.dessin2d.edition_contour.as_ref().unwrap().fermee(*c) && (*i == 0 || *i + 1 == self.dessin2d.dalle[*c].len())) {
+                if let Some((_, c, i)) = sommet.filter(|(_, c, i)| self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_none() && !e.fermee(*c)) && (*i == 0 || *i + 1 == self.dessin2d.dalle[*c].len())) {
                     let p = DVec2::from_array(self.dessin2d.dalle[c][i]);
-                    let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                    let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
                     e.raccord = Some((c, i == 0)); e.dessin = true;
-                    self.dessin2d.trace.as_mut().unwrap().points = vec![p];
+                    if let Some(t) = self.dessin2d.trace.as_mut() { t.points = vec![p]; }
                     self.dessin2d.message = None; self.dessin2d.information = None;
                     return;
                 } else if let Some((_, c, i, q)) = arete.filter(|_| sommet.is_none() && !topologie_fixe)
@@ -324,7 +324,7 @@ impl Application {
             } else if resp.clicked() {
                 // Propriétés et ruban suivent la sélection dès l'image suivante
                 ui.ctx().request_repaint();
-                let e = self.dessin2d.edition_contour.as_mut().unwrap();
+                let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
                 e.selection = sommet.map(|s| s.1).or(arete.map(|a| a.1));
                 e.segment = if sommet.is_none() { arete.map(|a| (a.1, a.2)) } else { None };
                 e.sommet = sommet.map(|s| (s.1, s.2));
@@ -504,7 +504,7 @@ impl Application {
                     let decimales = u.facteur().log10().round().max(0.0) as usize;
                     let (distance, angle) = saisie.split_once(['<', '>']).map_or((saisie.as_str(), None), |(d, a)| (d, Some(a.trim_end_matches('>'))));
                     let distance = if !coordonnees && !distance.is_empty() { format!("{distance}{}", if !self.dessin2d.champ_angle { "▏" } else { "" }) } else { format!("{:.*}", decimales, v.length() / u.facteur()) };
-                    let angle = if !coordonnees && angle.is_some() { format!("{}{}", angle.unwrap(), if self.dessin2d.champ_angle { "▏" } else { "" }) } else { format!("{:.1}", v.y.atan2(v.x).to_degrees().rem_euclid(360.0)) };
+                    let angle = if !coordonnees && let Some(angle) = angle { format!("{}{}", angle, if self.dessin2d.champ_angle { "▏" } else { "" }) } else { format!("{:.1}", v.y.atan2(v.x).to_degrees().rem_euclid(360.0)) };
                     infos.push(format!("{distance}{} · {angle}°", u.suffixe()));
                 } else if !saisie.is_empty() && !coordonnees {
                     infos.push(format!("{saisie}▏"));

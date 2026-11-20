@@ -28,9 +28,13 @@ pub struct CoucheTerrain {
     pub variable: bool,
 }
 
+/// Couche effective : matériau, profondeur du haut, profondeur du bas sous la surface
+/// (None : jusqu'au fond).
+pub type CoucheEffective = (Option<String>, f64, Option<f64>);
+
 /// Couches effectives d'un type : (matériau, profondeur du haut, profondeur du bas sous
 /// la surface ; None : jusqu'au fond).
-pub fn couches(t: &TypeTerrain) -> Result<Vec<(Option<String>, f64, Option<f64>)>, String> {
+pub fn couches(t: &TypeTerrain) -> Result<Vec<CoucheEffective>, String> {
     if t.couches.is_empty() {
         return Ok(vec![(t.materiau.clone(), 0.0, None)]);
     }

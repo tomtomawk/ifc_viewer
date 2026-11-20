@@ -16,7 +16,7 @@ impl Plane {
     fn from_points(a: DVec3, b: DVec3, c: DVec3) -> Option<Plane> {
         let n = (b - a).cross(c - a);
         let len = n.length();
-        if !(len > 1e-12) {
+        if len.is_nan() || len <= 1e-12 {
             return None;
         }
         let n = n / len;
@@ -213,10 +213,13 @@ impl Node {
                 // Le polygone qui fixe le plan reste dans ce nœud : sinon, s'il n'est pas
                 // exactement plan (sommets issus de découpes), il peut repartir seul dans un
                 // fils qui reprend le même plan, indéfiniment (dépassement de pile).
-                let premier = polys.next().unwrap();
-                self.plane = Some(premier.plane);
+                let Some(premier) = polys.next() else {
+                    return;
+                };
+                let plan = premier.plane;
+                self.plane = Some(plan);
                 self.polygons.push(premier);
-                self.plane.unwrap()
+                plan
             }
         };
         let mut front = Vec::new();
