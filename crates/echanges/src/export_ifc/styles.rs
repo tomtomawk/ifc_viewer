@@ -16,7 +16,7 @@ impl Styles {
         if let Some(&s) = self.par_materiau.get(nom) {
             return s;
         }
-        let m = p.materiau(nom).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(nom));
+        let m = p.materiau(nom).cloned().unwrap_or_else(|| p.materiau_par_defaut(nom));
         let [r, g, b] = m.couleur.map(|c| reel(c as f64 / 255.0));
         let couleur = w.add(format!("IFCCOLOURRGB($,{r},{g},{b})"));
         let t = m.apparence.transparence as f64;

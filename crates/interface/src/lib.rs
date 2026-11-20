@@ -1088,6 +1088,7 @@ impl eframe::App for Application {
     /// tracé complet, que `ui` les traite et qu'une capture ait des pixels.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_sauvegarde();
+        self.ruban_edition.types_vues = self.natif.as_ref().map(|(p, _)| p.types_vues.clone()).unwrap_or_default();
         if let Some(rx) = &self.pilote {
             self.requetes.extend(rx.try_iter());
         }

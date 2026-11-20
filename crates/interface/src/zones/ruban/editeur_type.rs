@@ -31,7 +31,7 @@ impl RubanEdition {
                 if let Some(m) = &c.materiau
                     && !ed.materiaux.iter().any(|x| &x.nom == m)
                 {
-                    ed.materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
+                    ed.materiaux.push(projet.materiau_par_defaut(m));
                 }
             }
             ed.couches = couches;
@@ -61,7 +61,7 @@ impl RubanEdition {
             if let Some(m) = &c.materiau
                 && !materiaux.iter().any(|x| &x.nom == m)
             {
-                materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
+                materiaux.push(projet.materiau_par_defaut(m));
             }
         }
         self.editeur_type = Some(EditeurType { id: existant.map(|t| t.id.clone()), nom, categorie: existant.map_or(modele::CategorieMur::Compose, |t| t.categorie_mur()), couches, materiaux, erreur: None, glisse: None, terrain: None, surface: None });
@@ -81,7 +81,7 @@ impl RubanEdition {
         let mut materiaux = projet.materiaux.clone();
         for m in couches.iter().filter_map(|c| c.materiau.as_ref()) {
             if !materiaux.iter().any(|x| &x.nom == m) {
-                materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
+                materiaux.push(projet.materiau_par_defaut(m));
             }
         }
         self.editeur_type = Some(EditeurType {
@@ -109,7 +109,7 @@ impl RubanEdition {
         let mut materiaux = projet.materiaux.clone();
         for m in source.couches.iter().filter_map(|c| c.materiau.as_ref()) {
             if !materiaux.iter().any(|x| &x.nom == m) {
-                materiaux.push(modele::murs::assemblage::materiau_par_defaut(m));
+                materiaux.push(projet.materiau_par_defaut(m));
             }
         }
         self.editeur_type = Some(EditeurType {
@@ -222,7 +222,7 @@ impl RubanEdition {
                         let nom = nom.trim().to_string();
                         c.materiau = (!nom.is_empty()).then_some(nom.clone());
                         if !nom.is_empty() && !ed.materiaux.iter().any(|m| m.nom == nom) {
-                            ed.materiaux.push(modele::murs::assemblage::materiau_par_defaut(&nom));
+                            ed.materiaux.push(projet.materiau_par_defaut(&nom));
                         }
                         // couleur et motif : hérités du matériau, affichés en lecture seule
                         match ed.materiaux.iter().find(|m| m.nom == nom) {

@@ -90,12 +90,6 @@ impl Application {
             } else if let Some(nom) = self.ruban_edition.prendre_materiau_a_editer() {
                 // double-clic sur un matériau dans l'éditeur de type : fenêtre Matériau
                 self.materiau_edite = Some(nom);
-            } else if let Some(t) = self.ruban_edition.prendre_type_gabarit()
-                && let Some((projet, _)) = &self.natif
-            {
-                let mut copie = projet.clone();
-                let r = self.ruban_edition.definir_type_mur(&mut copie, &t.nom, t.couches, t.categorie).and_then(|_| self.appliquer_projet(copie));
-                if let Err(e) = r { self.error = Some(e); }
             }
         }
         // palette de création : sélecteur, schéma, paramètres (voir palette_creation.rs)

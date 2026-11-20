@@ -93,16 +93,16 @@ impl Application {
         }
     }
 
-    /// Éditeur de hachures : motifs du projet, du gabarit et de base ; nom, familles de
+    /// Éditeur de hachures : motifs du projet et de base ; nom, familles de
     /// traits (angle, pas, glissement, origine, tirets en mm du papier) et aperçu. Un motif
-    /// du gabarit ou de base modifié est copié dans le projet ; renommer un motif met à
+    /// de base modifié est copié dans le projet ; renommer un motif met à
     /// jour les matériaux qui s'en servent.
     /// Fenêtre « Épaisseurs de traits » : épaisseur de chaque plume (mm du papier),
-    /// aperçu, couches qui l'utilisent ; table du projet, ou celle du gabarit rétablie.
+    /// aperçu, couches qui l'utilisent ; table du projet, ou celle du logiciel rétablie.
     pub(crate) fn fenetre_plumes(&mut self, ctx: &egui::Context) {
         let Some(mut table) = self.editeur_plumes.take() else { return };
         let Some((projet, _)) = &self.natif else { return };
-        let gabarit = modele::Projet::default().epaisseurs_plumes();
+        let defaut = modele::Projet::default().epaisseurs_plumes();
         let actuelle = projet.epaisseurs_plumes();
         // couches (types de murs et de dalles) par plume
         let mut usages = [0usize; 12];
@@ -137,11 +137,11 @@ impl Application {
                 if ui.add_enabled(change, egui::Button::new("Appliquer")).clicked() {
                     appliquer = true;
                 }
-                if ui.add_enabled(table.iter().zip(&gabarit).any(|(a, b)| (a - b).abs() > 1e-9), egui::Button::new("Valeurs du gabarit"))
-                    .on_hover_text("Reprendre les épaisseurs du gabarit (Appliquer pour valider)")
+                if ui.add_enabled(table.iter().zip(&defaut).any(|(a, b)| (a - b).abs() > 1e-9), egui::Button::new("Valeurs par défaut"))
+                    .on_hover_text("Reprendre les épaisseurs par défaut du logiciel (Appliquer pour valider)")
                     .clicked()
                 {
-                    table = gabarit.clone();
+                    table = defaut.clone();
                 }
                 if ui.button("Fermer").clicked() {
                     fermer = true;
@@ -150,8 +150,8 @@ impl Application {
         });
         if appliquer {
             let mut p = projet.clone();
-            // table identique à celle du gabarit : le projet suit le gabarit
-            p.plumes = if table.iter().zip(&gabarit).all(|(a, b)| (a - b).abs() < 1e-9) { Vec::new() } else { table.clone() };
+            // le projet porte sa table (le gabarit n'est plus relu)
+            p.plumes = table.clone();
             match self.appliquer_projet(p) {
                 Ok(()) => {
                     self.coupe_dirty = true;
@@ -177,7 +177,7 @@ impl Application {
         let Some(mut d) = projet.definition_motif(&MotifCoupe::hachures(&choisi)) else { return };
         let avant = d.clone();
         let du_projet = projet.motifs.iter().any(|x| x.nom == choisi);
-        let de_base = DefinitionMotif::base().iter().any(|x| x.nom == choisi) || modele::gabarit::actif().motifs.iter().any(|x| x.nom == choisi);
+        let de_base = DefinitionMotif::base().iter().any(|x| x.nom == choisi);
         let utilise = projet.materiaux.iter().any(|m| [Some(&m.motif), m.surface_motif.as_ref(), m.surface_fond_motif.as_ref(), m.coupe_fond_motif.as_ref()].into_iter().flatten().any(|x| x.nom_hachures() == Some(choisi.as_str())));
         if self.tirets_saisis.0 != choisi {
             self.tirets_saisis = (choisi.clone(), d.lignes.iter().map(|l| l.tirets.iter().map(|t| noyau::nombres::format_real(*t)).collect::<Vec<_>>().join(" ")).collect());
@@ -211,7 +211,7 @@ impl Application {
                     let libelle = if de_base && du_projet { "Rétablir" } else { "Supprimer" };
                     let possible = du_projet && (de_base || !utilise);
                     if ui.add_enabled(possible, egui::Button::new(libelle))
-                        .on_disabled_hover_text(if !du_projet { "Motif du gabarit ou de base, inchangé" } else { "Motif utilisé par un matériau" })
+                        .on_disabled_hover_text(if !du_projet { "Motif de base, inchangé" } else { "Motif utilisé par un matériau" })
                         .clicked()
                     {
                         action = Some("supprimer");

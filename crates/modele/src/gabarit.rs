@@ -129,6 +129,23 @@ pub struct TypeVue {
     pub profondeur: f64,
 }
 
+impl TypeVue {
+    /// Types de vues du code (projet sans types de vues) : une coupe et une élévation.
+    pub fn par_defaut() -> Vec<TypeVue> {
+        vec![
+            TypeVue { elevation: false, nom: "Coupe".into(), aide: "Coupe générale".into(), echelle: 100.0, profondeur: 15_000.0 },
+            TypeVue { elevation: true, nom: "Élévation".into(), aide: "Façade".into(), echelle: 100.0, profondeur: 30_000.0 },
+        ]
+    }
+}
+
+impl crate::Projet {
+    /// Types de coupe et d'élévation du projet, sinon ceux du code.
+    pub fn types_de_vues(&self) -> Vec<TypeVue> {
+        if self.types_vues.is_empty() { TypeVue::par_defaut() } else { self.types_vues.clone() }
+    }
+}
+
 impl Gabarit {
     pub fn defaut() -> Gabarit {
         Gabarit::lire(DEFAUT).expect("gabarit par défaut valide")
@@ -168,8 +185,16 @@ impl Gabarit {
 
     /// Matériau d'après son nom ; à défaut, couleur stable tirée du nom.
     pub fn materiau(&self, nom: &str) -> Materiau {
+        materiau_d_apres(&self.materiaux, nom)
+    }
+}
+
+/// Matériau nommé `nom` d'après la première famille dont un mot figure dans le nom ;
+/// aucune : couleur claire tirée du nom, hachures diagonales (défaut du code).
+pub fn materiau_d_apres(familles: &[FamilleMateriau], nom: &str) -> Materiau {
+    {
         let n = nom.to_lowercase();
-        match self.materiaux.iter().find(|f| f.mots.iter().any(|m| n.contains(&m.to_lowercase()))) {
+        match familles.iter().find(|f| f.mots.iter().any(|m| n.contains(&m.to_lowercase()))) {
             Some(f) => Materiau {
                 id: noyau::uuid::uuid(),
                 nom: nom.into(),
@@ -271,5 +296,27 @@ mod tests {
         assert!(Gabarit::lire(r#"{"format":"x","version":1,"nom":"x"}"#).is_err());
         let sans_vues = DEFAUT.replace("\"elevation\": true", "\"elevation\": false");
         assert!(Gabarit::lire(&sans_vues).is_err());
+    }
+
+    /// G1 : la création copie du gabarit plumes, motifs, familles de matériaux et types
+    /// de vues ; un projet qui ne les a pas prend les défauts du code, jamais le gabarit.
+    #[test]
+    fn projet_porte_ses_donnees_sans_relire_le_gabarit() {
+        let g = Gabarit::defaut();
+        let p = crate::Projet::depuis_gabarit("G1", &g);
+        assert_eq!(p.plumes, g.plumes);
+        assert_eq!(p.motifs.len(), g.motifs.len());
+        assert_eq!(p.familles_materiaux.len(), g.materiaux.len());
+        assert_eq!(p.types_de_vues().len(), g.types_vues.len());
+        let beton = g.materiaux.iter().flat_map(|f| f.mots.iter()).next().expect("une famille de matériau").clone();
+        assert_eq!(p.materiau_par_defaut(&beton).couleur, g.materiau(&beton).couleur);
+        // projet sans ces données : défauts du code
+        let vide = crate::Projet::nouveau("vide");
+        assert_eq!(vide.epaisseurs_plumes(), crate::PLUMES.to_vec());
+        assert_eq!(vide.types_de_vues().len(), 2);
+        assert_eq!(vide.materiau_par_defaut(&beton).motif, crate::MotifCoupe::Diagonales);
+        let motif_gabarit = g.motifs.iter().find(|m| !crate::DefinitionMotif::base().iter().any(|b| b.nom == m.nom)).expect("un motif propre au gabarit");
+        assert!(vide.definition_motif(&crate::MotifCoupe::hachures(&motif_gabarit.nom)).is_none());
+        assert!(p.definition_motif(&crate::MotifCoupe::hachures(&motif_gabarit.nom)).is_some());
     }
 }

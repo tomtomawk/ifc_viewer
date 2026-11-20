@@ -93,19 +93,16 @@ impl RubanEdition {
         let onglet = self.categorie_mur.unwrap_or(categorie_actuelle);
         // largeur du panneau mesurée hors de la ligne, qui grandirait avec la liste
         let largeur = ui.available_width();
-        // types de la catégorie : (type du projet, type du gabarit à ajouter, nom, couches)
-        type Ligne = (Option<String>, Option<modele::gabarit::TypeGabarit>, String, Vec<modele::Couche>);
+        // types de la catégorie : (type du projet, nom, couches)
+        type Ligne = (Option<String>, String, Vec<modele::Couche>);
         let mut lignes: Vec<Ligne> = Vec::new();
         if generique && onglet == CategorieMur::Mur {
-            lignes.push((None, None, "Générique (épaisseur libre)".into(), Vec::new()));
+            lignes.push((None, "Générique (épaisseur libre)".into(), Vec::new()));
         }
         let mut types: Vec<_> = projet.types_murs.iter().filter(|t| t.categorie_mur() == onglet).collect();
         types.sort_by(|a, b| a.nom.cmp(&b.nom));
-        lignes.extend(types.into_iter().map(|t| (Some(t.id.clone()), None, t.nom.clone(), t.couches.clone())));
-        // types du gabarit absents du projet : copiés dans le projet au choix
-        let gabarit = modele::gabarit::actif();
-        lignes.extend(gabarit.types_murs.iter().filter(|t| t.categorie_mur() == onglet && !projet.types_murs.iter().any(|p| p.nom == t.nom)).map(|t| (None, Some(t.clone()), t.nom.clone(), t.couches.clone())));
-        let rangs = CategorieMur::TOUTES.iter().map(|c| projet.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + gabarit.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + 1).max().unwrap_or(1);
+        lignes.extend(types.into_iter().map(|t| (Some(t.id.clone()), t.nom.clone(), t.couches.clone())));
+        let rangs = CategorieMur::TOUTES.iter().map(|c| projet.types_murs.iter().filter(|t| t.categorie_mur() == *c).count() + 1).max().unwrap_or(1);
         let mut choix_onglet = None;
         let mut choisi: Option<Ligne> = None;
         let mut editer: Option<String> = None;
@@ -160,37 +157,37 @@ impl RubanEdition {
             if crayon.clicked() { editer = Some(type_mur.id.clone()); }
         }
         let bouton = bouton.on_hover_text(bulle);
-        let largeur_liste = selecteur::largeur_liste(ui, lignes.iter().map(|l| &l.2), 64.0 + 50.0, CategorieMur::TOUTES.len(), 96.0);
+        let largeur_liste = selecteur::largeur_liste(ui, lignes.iter().map(|l| &l.1), 64.0 + 50.0, CategorieMur::TOUTES.len(), 96.0);
         selecteur::liste(&bouton, largeur_liste, selecteur::HAUTEUR_CADRE + rangs as f32 * selecteur::HAUTEUR_LIGNE, |ui| {
             choix_onglet = selecteur::onglets(ui, &CategorieMur::TOUTES, onglet, 96.0, |c| c.nom().into(), onglet.aide(), icone_categorie_mur);
             for ligne in &lignes {
                 let courant = match (&ligne.0, &self.type_mur) {
-                    (None, None) => ligne.1.is_none(),
+                    (None, None) => true,
                     (Some(a), Some(b)) => a == b,
                     _ => false,
                 };
-                let actions: &[(selecteur::ActionType, &str)] = match (ligne.3.is_empty(), ligne.0.is_some()) {
+                let actions: &[(selecteur::ActionType, &str)] = match (ligne.2.is_empty(), ligne.0.is_some()) {
                     (true, _) => &[],
                     (false, true) => &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci"), (selecteur::ActionType::Modifier, "Modifier le type")],
                     (false, false) => &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci")],
                 };
                 let l = selecteur::Ligne {
-                    nom: &ligne.2,
+                    nom: &ligne.1,
                     courant,
-                    etiquette: ligne.1.as_ref().map(|_| "gabarit"),
+                    etiquette: None,
                     sous_titre: None,
-                    detail: (!ligne.3.is_empty()).then(|| unite.afficher(epaisseur(&ligne.3))),
+                    detail: (!ligne.2.is_empty()).then(|| unite.afficher(epaisseur(&ligne.2))),
                     actions,
                 };
                 let mut bande = |ui: &mut egui::Ui, r: egui::Rect| {
-                    if !ligne.3.is_empty() {
-                        peindre_bande_couches(ui.painter(), r.shrink2(egui::vec2(0.0, 3.0)), projet, &projet.materiaux, &ligne.3, None);
+                    if !ligne.2.is_empty() {
+                        peindre_bande_couches(ui.painter(), r.shrink2(egui::vec2(0.0, 3.0)), projet, &projet.materiaux, &ligne.2, None);
                     }
                 };
                 let clic = selecteur::ligne(ui, &l, Some(&mut bande));
                 match clic.action {
                     Some(selecteur::ActionType::Modifier) => editer = ligne.0.clone(),
-                    Some(selecteur::ActionType::Dupliquer) => dupliquer = Some((ligne.2.clone(), ligne.3.clone())),
+                    Some(selecteur::ActionType::Dupliquer) => dupliquer = Some((ligne.1.clone(), ligne.2.clone())),
                     None if clic.choisi => choisi = Some(ligne.clone()),
                     None => {}
                 }
@@ -209,18 +206,10 @@ impl RubanEdition {
         if let Some(c) = choix_onglet {
             self.categorie_mur = Some(c);
         }
-        if let Some((id, gabarit, _, _)) = choisi {
+        if let Some((id, _, _)) = choisi {
             self.categorie_mur = None;
-            match gabarit {
-                Some(t) => self.type_mur_gabarit = Some(t),
-                None => self.type_mur = id,
-            }
+            self.type_mur = id;
         }
-    }
-
-    /// Type de mur du gabarit choisi dans le sélecteur, à ajouter au projet.
-    pub fn prendre_type_gabarit(&mut self) -> Option<modele::gabarit::TypeGabarit> {
-        self.type_mur_gabarit.take()
     }
 
     /// Crée (ou remplace) un type composé et le choisit pour les prochains murs (pilote).

@@ -344,6 +344,28 @@ def arbres():
     return out
 
 
+def identifiant(espace, cle):
+    """Identifiant stable, comme `modele::identifiant`."""
+    m = (1 << 64) - 1
+
+    def h(graine):
+        x = graine
+        for b in espace.encode() + b"\0" + cle.encode():
+            x = ((x ^ b) * 0x100000001B3) & m
+        return x
+    a, b = h(0xCBF29CE484222325), h(0x6C62272E07BB0142)
+    return f"{a >> 32:08x}-{(a >> 16) & 0xffff:04x}-{a & 0xffff:04x}-{b >> 48:04x}-{b & 0xffffffffffff:012x}"
+
+
+def communs_gabarit():
+    """Données que `Projet::depuis_gabarit` copie du gabarit par défaut : plumes, motifs,
+    familles de matériaux, types de vues."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gabarits", "defaut.gabarit.json"), encoding="utf-8") as f:
+        g = json.load(f)
+    motifs = [dict(id=identifiant("motif", "gabarit:" + m["nom"]), **m) for m in g["motifs"]]
+    return {"plumes": g["plumes"], "motifs": motifs, "familles_materiaux": g["materiaux"], "types_vues": g["types_vues"]}
+
+
 def vegetaux():
     """Arbres en composants de la catégorie Végétation : un type par nom, essence et
     dimensions, sur la famille de son essence (`familles_vegetales.json`, familles par
@@ -494,6 +516,7 @@ def projet():
         "quadrillages": [], "annotations": [], "feuilles": [], "nomenclatures": [],
         "attaches_toitures": attaches,
         "implantations": {},
+        **communs_gabarit(),
     }
 
 

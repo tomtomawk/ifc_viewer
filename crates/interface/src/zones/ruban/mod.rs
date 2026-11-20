@@ -331,9 +331,12 @@ pub struct ParametresCoupe {
     pub profondeur: f64,
 }
 
-/// Types de coupe et d'élévation du gabarit (échelle, profondeur par défaut).
-fn types_coupe() -> Vec<modele::gabarit::TypeVue> {
-    modele::gabarit::actif().types_vues.clone()
+impl RubanEdition {
+    /// Types de coupe et d'élévation du projet (échelle, profondeur par défaut), sinon
+    /// ceux du code.
+    fn types_coupe(&self) -> Vec<modele::gabarit::TypeVue> {
+        if self.types_vues.is_empty() { modele::gabarit::TypeVue::par_defaut() } else { self.types_vues.clone() }
+    }
 }
 
 /// Pictogramme d'une coupe (trait, têtes et flèches) ou d'une élévation (cercle et
@@ -411,7 +414,7 @@ pub(crate) fn pile_couches(ui: &mut egui::Ui, r: egui::Rect, projet: &modele::Pr
     let mut y = r.top();
     for c in couches {
         let h = 2.0 + reste * (c.epaisseur / total) as f32;
-        let m = c.materiau.as_ref().and_then(|n| projet.materiau(n)).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
+        let m = c.materiau.as_ref().and_then(|n| projet.materiau(n)).cloned().unwrap_or_else(|| projet.materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
         let bande = egui::Rect::from_min_size(egui::pos2(r.left(), y), egui::vec2(r.width(), h));
         peindre_materiau_coupe(p, bande, projet, &m, false);
         p.rect_stroke(bande, 0.0, egui::Stroke::new(0.5, Color32::from_gray(90)), egui::StrokeKind::Inside);
@@ -591,10 +594,11 @@ pub struct RubanEdition {
     pub niveau_dalle: Option<String>,
     /// Onglet de catégorie ouvert dans le sélecteur de type de mur.
     categorie_mur: Option<modele::CategorieMur>,
+    /// Types de coupe et d'élévation du projet actif (repris à chaque image ; vides :
+    /// ceux du code).
+    pub types_vues: Vec<modele::gabarit::TypeVue>,
     /// Onglet du sélecteur de type d'ouverture (None : celui du type courant).
     categorie_ouverture: Option<modele::GenreOuverture>,
-    /// Type de mur du gabarit choisi, à copier dans le projet.
-    type_mur_gabarit: Option<modele::gabarit::TypeGabarit>,
     /// Toiture : arêtes tracées sans pente (toiture plate).
     toiture_plate: bool,
     /// Tracé des dalles par deux coins (sinon polygone).
@@ -734,7 +738,7 @@ impl RubanEdition {
         if self.selection != Some(Outil::VueCoupe) {
             return None;
         }
-        let types = types_coupe();
+        let types = self.types_coupe();
         let t = &types[self.type_coupe.min(types.len() - 1)];
         let profondeur = match self.valeurs.get(&(Outil::VueCoupe, 0)) {
             Some(Valeur::Nombre(v)) => *v,
@@ -750,7 +754,7 @@ impl RubanEdition {
     }
     pub(crate) fn coupe_identique(&mut self, vue: &modele::Vue) -> Result<(), String> {
         let modele::GenreVue::Coupe { profondeur, elevation, .. } = vue.genre else { return Err("Sélectionnez une coupe ou une élévation.".into()) };
-        let types = types_coupe();
+        let types = self.types_coupe();
         self.type_coupe = types.iter().position(|t| t.nom == vue.type_vue && t.elevation == elevation).or_else(|| types.iter().position(|t| t.elevation == elevation)).unwrap_or(0);
         self.selection = Some(Outil::VueCoupe);
         self.coupe_identique = Some((vue.type_vue.clone(), vue.echelle, elevation));
@@ -765,7 +769,7 @@ impl RubanEdition {
     /// Sélecteur de type de l'outil Coupe, comme celui des éléments horizontaux : un
     /// onglet Coupe, un onglet Élévation, leurs types (échelle, profondeur par défaut).
     pub fn selecteur_coupe(&mut self, ui: &mut egui::Ui) {
-        let types = types_coupe();
+        let types = self.types_coupe();
         let k = self.type_coupe.min(types.len() - 1);
         let courant = &types[k];
         let sorte = |e: bool| if e { "Élévation" } else { "Coupe" };
@@ -801,7 +805,7 @@ impl RubanEdition {
 
     /// Emplacement « paramètres » de la coupe : profondeur, échelle du type, consigne de tracé.
     pub fn parametres_coupe(&mut self, ui: &mut egui::Ui) {
-        let types = types_coupe();
+        let types = self.types_coupe();
         let k = self.type_coupe.min(types.len() - 1);
         crate::zones::palette_creation::titre_parametres(ui, "Coupe / élévation");
         egui::Grid::new("parametres_coupe").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {

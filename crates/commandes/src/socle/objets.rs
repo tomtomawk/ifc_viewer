@@ -91,6 +91,8 @@ pub const COLLECTIONS: &[(&str, PolitiqueCollection)] = &[
     ("phases", PolitiqueCollection::Atomique),
     ("sous_projets", PolitiqueCollection::Atomique),
     ("plumes", PolitiqueCollection::Atomique),
+    ("familles_materiaux", PolitiqueCollection::Atomique),
+    ("types_vues", PolitiqueCollection::Atomique),
 ];
 
 fn politique_collection(c: &str) -> Option<PolitiqueCollection> {

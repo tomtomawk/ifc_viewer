@@ -151,7 +151,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         }
         // matériau d'un mur monocouche (couche d'assemblage) : couleur et motif de coupe
         let materiau = match type_mur.couches.as_slice() {
-            [c] => c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n))),
+            [c] => c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(n))),
             _ => None,
         };
         let couleur = materiau.as_ref().map_or([0.72, 0.72, 0.69, 1.0], |x| {
@@ -168,7 +168,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             // ossature : la couche découpée en membrures et travées de remplissage
             let cases = modele::murs::ossature::bandes_mur(projet, m);
             if let (Some(o), false) = (modele::murs::ossature::ossature_mur(projet, m), cases.is_empty()) {
-                let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+                let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| projet.materiau_par_defaut(o.materiau()));
                 // membrures à la plume de la couche, remplissage à une plume plus fine
                 let trait_mm = bandes[0].trait_mm;
                 let trait_remplissage = projet.epaisseurs_plumes()[(o.plume_remplissage() - 1) as usize];
@@ -239,7 +239,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             if c.fonction == modele::FonctionCouche::LameAir { continue; }
             let tris = modele::elements::pente::couche(&d.contours, &plans, z0, bas, haut);
             if tris.is_empty() { continue; }
-            let m = c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n)));
+            let m = c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(n)));
             let couleur = m.as_ref().map_or([0.70, 0.70, 0.68, 1.0], |x| {
                 let [r, g, b] = x.couleur.map(|c| c as f32 / 255.0);
                 [r, g, b, 1.0]
@@ -248,7 +248,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             if let Some(m) = &m {
                 // bandes de coupe entre le dessous et le dessus de la couche (m, repère du fichier)
                 let solives = c.ossature.as_ref().filter(|o| o.valide()).map(|o| {
-                    let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+                    let membrure = projet.materiau(o.materiau()).cloned().unwrap_or_else(|| projet.materiau_par_defaut(o.materiau()));
                     (membrure, modele::murs::ossature::bandes_dalle(o, &d.contours))
                 }).filter(|(_, cases)| !cases.is_empty());
                 for jeu in modele::elements::pente::bandes_contours(&d.contours, &plans, z0, bas, haut) {
@@ -268,7 +268,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                 let cases = modele::murs::ossature::bandes_dalle(o, &d.contours);
                 let en_mm: Vec<[glam::DVec3; 3]> = tris.iter().map(|t| t.map(|v| v * 1000.0)).collect();
                 let (remplissage, membrures) = modele::murs::ossature::repartir(&en_mm, &cases);
-                (!membrures.is_empty() && !remplissage.is_empty()).then(|| (projet.materiau(o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau())), remplissage, membrures))
+                (!membrures.is_empty() && !remplissage.is_empty()).then(|| (projet.materiau(o.materiau()).cloned().unwrap_or_else(|| projet.materiau_par_defaut(o.materiau())), remplissage, membrures))
             });
             rendu.push(m.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences)));
             noms.push(m.as_ref().map(|m| m.nom.clone()));
@@ -300,7 +300,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             model.parent.insert(id, racine);
             model.children.entry(racine).or_default().push(id);
             let nom = projet.type_remblai(d).materiau.unwrap_or_else(|| "Remblai".into());
-            let m = projet.materiau(&nom).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(&nom));
+            let m = projet.materiau(&nom).cloned().unwrap_or_else(|| projet.materiau_par_defaut(&nom));
             let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0);
             let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
@@ -349,7 +349,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let tris = modele::volumes::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         // poutre typée : couleur et poché du matériau de son type
         let materiau = b.pose.type_poutre.as_ref().and_then(|t| projet.type_poutre(t)).and_then(|t| t.materiau.as_ref())
-            .map(|n| projet.materiau(n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(n)));
+            .map(|n| projet.materiau(n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(n)));
         match materiau {
             Some(m) => {
                 let [r, g, bl] = m.couleur.map(|c| c as f32 / 255.0);
@@ -396,7 +396,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             rendu = vec![None; parts.len()];
             motifs = vec![Some([0, 0, 0, 1]); parts.len()];
             for (nom, tris) in [(MATERIAU_ECORCE, r.bois), (MATERIAU_FEUILLAGE, r.feuillage)] {
-                let m = projet.materiau(nom).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(nom));
+                let m = projet.materiau(nom).cloned().unwrap_or_else(|| projet.materiau_par_defaut(nom));
                 let [cr, cg, cb] = m.couleur.map(|x| x as f32 / 255.0);
                 let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
                 rendu.push(Some(rendu_materiau(&m, couleur, &mut table_apparences)));
@@ -426,7 +426,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(parent).or_default().push(id);
         // couleur du matériau de chaque élément (métal sombre à défaut), vitrage translucide
         let parts: Vec<Part> = g.solides(projet)?.into_iter().map(|(materiau, vitre, t)| {
-            let m = materiau.map(|n| projet.materiau(&n).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(&n)));
+            let m = materiau.map(|n| projet.materiau(&n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(&n)));
             let [r, v, b] = m.as_ref().map_or(if vitre { [158, 199, 219] } else { [77, 79, 84] }, |m| m.couleur).map(|c| c as f32 / 255.0);
             Part { color: [r, v, b, if vitre { 0.35 } else { 1.0 }], tris: t.into_iter().map(|t| t.map(|v| v * 0.001)).collect() }
         }).collect();
@@ -444,8 +444,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let couches = modele::elements::terre_plein::couches_terrain(projet, t)?;
         let (mut parts, mut noms, mut rendu, mut motifs) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for (k, (nom, tris)) in couches.parts.into_iter().enumerate() {
-            let du_gabarit = nom.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| modele::murs::assemblage::materiau_par_defaut(n));
-            let materiau = nom.as_ref().and_then(|n| projet.materiau(n)).or(du_gabarit.as_ref());
+            let par_defaut = nom.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| projet.materiau_par_defaut(n));
+            let materiau = nom.as_ref().and_then(|n| projet.materiau(n)).or(par_defaut.as_ref());
             let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
             let couleur = opacite(materiau, couleur);
             if k == 0 && let Some(m) = materiau {

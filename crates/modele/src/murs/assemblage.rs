@@ -4,10 +4,6 @@
 //! sens horaire.
 use crate::*;
 
-/// Matériaux reconnus par leur nom (familles du gabarit) : couleur et motif de coupe.
-pub fn materiau_par_defaut(nom: &str) -> Materiau {
-    crate::gabarit::actif().materiau(nom)
-}
 
 /// Implantation d'un mur composé : ligne tracée par rapport à ses couches.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -187,7 +183,7 @@ impl Projet {
         let noms: Vec<String> = self.types_murs.iter().chain(&self.types_dalles).flat_map(|t| t.couches.iter().flat_map(|c| c.materiau.clone().into_iter().chain(c.ossature.as_ref().map(|o| o.materiau().to_string())))).chain(self.types_terrains.iter().filter_map(|t| t.materiau.clone())).collect();
         for n in noms {
             if self.materiau(&n).is_none() {
-                self.materiaux.push(materiau_par_defaut(&n));
+                self.materiaux.push(self.materiau_par_defaut(&n));
             }
         }
     }
@@ -357,6 +353,7 @@ mod tests {
     #[test]
     fn eclater_dissocier_associer() {
         let mut p = Projet::nouveau("A");
+        p.familles_materiaux = crate::gabarit::Gabarit::defaut().materiaux;
         p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur::default()).unwrap();
         p.types_murs.push(type_trois_couches());
         let id = p.murs[0].id.clone();

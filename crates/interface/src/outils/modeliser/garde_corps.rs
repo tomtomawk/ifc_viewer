@@ -60,7 +60,8 @@ fn materiaux_du_type(t: &TypeGardeCorps) -> Vec<String> {
 fn completer_materiaux(q: &mut Projet, t: &TypeGardeCorps) {
     for nom in materiaux_du_type(t) {
         if q.materiau(&nom).is_none() {
-            q.materiaux.push(modele::murs::assemblage::materiau_par_defaut(&nom));
+            let m = q.materiau_par_defaut(&nom);
+            q.materiaux.push(m);
         }
     }
 }

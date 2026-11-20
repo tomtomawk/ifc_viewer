@@ -78,7 +78,9 @@ impl Application {
             self.ouvrir_famille_document_projet(fichier, Some(id));
             return;
         }
-        let Some(profil) = modele::gabarit::actif().profils.first().cloned().or_else(|| modele::gabarit::Gabarit::defaut().profils.first().cloned()) else { return };
+        // nouveau profil : d'après le premier profil du projet, sinon rectangle du code
+        let profil = self.natif.as_ref().and_then(|(p, _)| p.profils.first().cloned())
+            .unwrap_or_else(|| modele::famille::profil::Profil::depuis_contour("Profil", vec![[-50.0, -50.0], [50.0, -50.0], [50.0, 50.0], [-50.0, 50.0]]));
         let noms: Vec<String> = self.natif.as_ref().map(|(p, _)| p.profils.iter().map(|x| x.nom.clone()).collect()).unwrap_or_default();
         let mut document = *profil.document_famille;
         document.nom = (1..).map(|n| format!("Profil {n}")).find(|nom| !noms.iter().any(|x| x.eq_ignore_ascii_case(nom))).unwrap();

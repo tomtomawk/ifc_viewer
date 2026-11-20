@@ -80,7 +80,8 @@ fn bouton_attacher_toiture_active_la_selection_graphique() {
 fn apercu_des_couches_dessine_le_motif_de_coupe() {
     use modele::{Materiau, MotifCoupe, Projet};
     let ctx = egui::Context::default();
-    let projet = Projet::nouveau("Aperçu");
+    // motifs du gabarit (« Béton ») copiés à la création du projet
+    let projet = Projet::depuis_gabarit("Aperçu", &modele::gabarit::Gabarit::defaut());
     let dessin = |motif| {
         let materiau = Materiau { motif, ..Default::default() };
         let mut sortie = ctx.run_ui(egui::RawInput {

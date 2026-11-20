@@ -120,12 +120,12 @@ pub(super) fn peindre_bande_couches<'a>(p: &egui::Painter, r: egui::Rect, projet
         let l = (c.epaisseur.max(0.0) / total) as f32 * r.width();
         let case = egui::Rect::from_min_size(egui::pos2(x, r.top()), egui::vec2(l, r.height()));
         let m = c.materiau.as_ref().and_then(|n| materiaux.iter().find(|m| &m.nom == n)).cloned()
-            .unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
+            .unwrap_or_else(|| projet.materiau_par_defaut(c.materiau.as_deref().unwrap_or("Mur générique")));
         peindre_materiau_coupe(p, case, projet, &m, true);
         // ossature : un montant en coupe au milieu de la couche
         if let Some(o) = c.ossature.as_ref().filter(|_| l > 3.0) {
             let montant = egui::Rect::from_center_size(case.center(), egui::vec2(l, (case.height() * 0.4).max(4.0)));
-            let bois = materiaux.iter().find(|m| m.nom == o.materiau()).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(o.materiau()));
+            let bois = materiaux.iter().find(|m| m.nom == o.materiau()).cloned().unwrap_or_else(|| projet.materiau_par_defaut(o.materiau()));
             peindre_materiau_coupe(p, montant, projet, &bois, true);
             p.rect_stroke(montant, 0.0, egui::Stroke::new(0.6, Color32::from_gray(60)), egui::StrokeKind::Inside);
         }

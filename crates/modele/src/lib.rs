@@ -73,12 +73,22 @@ pub struct Projet {
     /// Matériaux nommés par les couches : couleur et motif de coupe.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materiaux: Vec<Materiau>,
-    /// Épaisseurs des plumes 1 à 12 (mm du papier) ; vide : celles du gabarit.
+    /// Épaisseurs des plumes 1 à 12 (mm du papier), copiées du gabarit à la création ;
+    /// vide : celles du code (`PLUMES`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plumes: Vec<f64>,
-    /// Motifs de hachures du projet (en plus de ceux du gabarit et de base).
+    /// Motifs de hachures du projet (copiés du gabarit à la création ; en plus des motifs
+    /// de base du code).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub motifs: Vec<DefinitionMotif>,
+    /// Familles de matériaux (mots du nom -> couleur, motifs, apparence), copiées du
+    /// gabarit à la création : apparence d'un matériau nommé absent du projet.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub familles_materiaux: Vec<crate::gabarit::FamilleMateriau>,
+    /// Types de coupe et d'élévation (échelle, profondeur), copiés du gabarit à la
+    /// création ; vide : `gabarit::TypeVue::par_defaut`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_vues: Vec<crate::gabarit::TypeVue>,
     pub ouvertures: Vec<Ouverture>,
     pub dalles: Vec<Dalle>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1142,7 +1152,7 @@ impl Projet {
     pub fn figer_references(&mut self) {
         if self.references_figees{return;}
         self.plumes=self.epaisseurs_plumes();
-        for mut motif in crate::gabarit::actif().motifs.iter().cloned().chain(DefinitionMotif::base()) {
+        for mut motif in DefinitionMotif::base() {
             if !self.motifs.iter().any(|m|m.nom==motif.nom){
                 motif.id=identifiant("motif-fige",&format!("{}:{}",self.identite,motif.nom));self.motifs.push(motif);
             }
@@ -1201,7 +1211,8 @@ impl Projet {
         self.contextes.entry(id.into()).or_insert_with(|| ContexteElement { phase: Some(PHASE_EXISTANT.into()), ..Default::default() });
     }
 
-    /// Projet vide portant les niveaux et les types de murs du gabarit, et leurs matériaux.
+    /// Projet amorcé par le gabarit : niveaux, types, profils, plumes, motifs, familles de
+    /// matériaux, types de vues. Le gabarit n'est plus lu ensuite (`docs/AGENTS.md`).
     pub fn depuis_gabarit(nom: &str, g: &crate::gabarit::Gabarit) -> Projet {
         let mut p = Projet::nouveau(nom);
         for n in &g.niveaux {
@@ -1224,6 +1235,10 @@ impl Projet {
             p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None, famille_nom: None });
         }
         p.types_terrains = g.types_terrains.clone();
+        p.plumes = g.plumes.clone();
+        p.motifs = g.motifs.iter().cloned().map(|mut m| { m.id = identifiant("motif", &format!("gabarit:{}", m.nom)); m }).collect();
+        p.familles_materiaux = g.materiaux.clone();
+        p.types_vues = g.types_vues.clone();
         p.completer_materiaux();
         p
     }
@@ -1244,11 +1259,15 @@ impl Projet {
         self.materiaux.iter().find(|m| m.nom == nom)
     }
 
-    /// Épaisseurs des plumes 1 à 12 (mm du papier) : du projet, sinon du gabarit, sinon
-    /// par défaut.
+    /// Matériau d'un nom absent du projet : d'après les familles de matériaux du projet
+    /// (copiées du gabarit à sa création), sinon défaut du code.
+    pub fn materiau_par_defaut(&self, nom: &str) -> Materiau {
+        crate::gabarit::materiau_d_apres(&self.familles_materiaux, nom)
+    }
+
+    /// Épaisseurs des plumes 1 à 12 (mm du papier) : du projet, sinon par défaut.
     pub fn epaisseurs_plumes(&self) -> Vec<f64> {
-        let g = crate::gabarit::actif();
-        let mut v = if !self.plumes.is_empty() { self.plumes.clone() } else if !g.plumes.is_empty() { g.plumes.clone() } else { PLUMES.to_vec() };
+        let mut v = if !self.plumes.is_empty() { self.plumes.clone() } else { PLUMES.to_vec() };
         v.resize(12, 0.25);
         v
     }
@@ -1258,22 +1277,20 @@ impl Projet {
         self.epaisseurs_plumes()[(c.plume().clamp(1, 12) - 1) as usize]
     }
 
-    /// Définition d'un motif de hachures : celle du projet, sinon du gabarit, sinon de base.
+    /// Définition d'un motif de hachures : celle du projet, sinon de base.
     pub fn definition_motif(&self, m: &MotifCoupe) -> Option<DefinitionMotif> {
         let nom = m.nom_hachures()?;
         self.motifs
             .iter()
             .find(|d| d.nom == nom)
             .cloned()
-            .or_else(|| (!self.references_figees).then(||crate::gabarit::actif().motifs.iter().find(|d| d.nom == nom).cloned()).flatten())
             .or_else(|| (!self.references_figees).then(||DefinitionMotif::base().into_iter().find(|d| d.nom == nom)).flatten())
     }
 
-    /// Noms des motifs de hachures disponibles : projet, gabarit, base, sans doublon.
+    /// Noms des motifs de hachures disponibles : base, projet, sans doublon.
     pub fn noms_motifs(&self) -> Vec<String> {
         let mut noms: Vec<String> = Vec::new();
-        let g = crate::gabarit::actif();
-        for d in DefinitionMotif::base().iter().chain(g.motifs.iter()).chain(self.motifs.iter()) {
+        for d in DefinitionMotif::base().iter().chain(self.motifs.iter()) {
             if !noms.contains(&d.nom) {
                 noms.push(d.nom.clone());
             }
@@ -1562,8 +1579,8 @@ mod tests {
     fn plume_par_couche() {
         let mut p = Projet::nouveau("P");
         let mut c = Couche { materiau: None, epaisseur: 200.0, fonction: FonctionCouche::Structure, plume: None, retour: false, ossature: None };
-        // structure : plume 5 du gabarit embarqué (0,10 mm)
-        assert_eq!(p.trait_couche(&c), 0.10);
+        // structure : plume 5 du code (0,18 mm), le projet n'ayant pas de table
+        assert_eq!(p.trait_couche(&c), PLUMES[4]);
         c.plume = Some(8);
         assert_eq!(p.trait_couche(&c), 0.50);
         // table du projet prioritaire, complétée à 12 plumes

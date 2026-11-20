@@ -98,7 +98,9 @@ fn isolant_courbe_aux_unites_de_la_scene() {
 fn isolant_suit_le_mur_courbe_dans_la_coupe_native() {
     use modele::{Axe, Couche, FonctionCouche, Projet, TypeCompose};
     use modele::creation::ParametresMur;
+    // familles de matériaux du gabarit (isolation hachurée), copiées à la création
     let mut projet = Projet::nouveau("Mur courbe");
+    projet.familles_materiaux = modele::gabarit::Gabarit::defaut().materiaux;
     projet.types_murs.push(TypeCompose { sorte: None, id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 100.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
     let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
     projet.ajouter_mur_axe(Axe::Arc { debut: [17000.0, -8000.0], fin: [12000.0, -3000.0], centre: [12000.0, -8000.0], direct: true }, &options).unwrap();

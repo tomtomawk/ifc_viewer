@@ -116,12 +116,12 @@ fn selecteur_quadrillage(_: &mut Application, ui: &mut egui::Ui, _: &str) {
 fn selecteur_poteau(_: &mut Application, ui: &mut egui::Ui, _: &str) {
     entete_generique(ui, "Poteau", Some("Section rectangulaire"));
 }
-/// Coupe ou élévation : type de vue du gabarit (même liste qu'à la création, de la même
+/// Coupe ou élévation : type de vue du projet (même liste qu'à la création, de la même
 /// sorte) ; le type choisi donne aussi son échelle.
 fn selecteur_coupe(a: &mut Application, ui: &mut egui::Ui, id: &str) {
     let Some(vue) = a.natif.as_ref().and_then(|(p, _)| p.vues.iter().find(|v| v.id == id)).cloned() else { return };
     let modele::GenreVue::Coupe { elevation, .. } = vue.genre else { return };
-    let types: Vec<modele::gabarit::TypeVue> = modele::gabarit::actif().types_vues.iter().filter(|t| t.elevation == elevation).cloned().collect();
+    let types: Vec<modele::gabarit::TypeVue> = a.natif.as_ref().map_or_else(modele::gabarit::TypeVue::par_defaut, |(p, _)| p.types_de_vues()).into_iter().filter(|t| t.elevation == elevation).collect();
     let sorte = if elevation { "Élévation" } else { "Coupe" };
     let nom = if vue.type_vue.is_empty() { "Générique" } else { vue.type_vue.as_str() };
     let titre = format!("{sorte} · {nom}");

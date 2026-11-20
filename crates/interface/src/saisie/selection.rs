@@ -151,12 +151,7 @@ impl Application {
             self.ruban_edition.type_mur=Some(actuel.clone());
             self.ruban_edition.selecteur_type_mur(ui,&projet,false);
             let mut q=projet.clone();
-            let gabarit=self.ruban_edition.prendre_type_gabarit();
-            let choisi=if let Some(t)=gabarit {
-                match self.ruban_edition.definir_type_mur(&mut q,&t.nom,t.couches,t.categorie) {
-                    Ok(id)=>Some(id),Err(e)=>{self.error=Some(e);None}
-                }
-            } else {self.ruban_edition.type_mur.clone()};
+            let choisi=self.ruban_edition.type_mur.clone();
             self.ruban_edition.type_mur=type_creation;
             let Some(choisi)=choisi.filter(|id|id!=&actuel) else{return None};
             match cible {
