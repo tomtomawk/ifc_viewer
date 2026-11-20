@@ -147,8 +147,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   glissement est une seule étape d'annulation. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
 - **Modéliser → Terrain** : choisir le type (épaisseur, matériau) dans le sélecteur
   « Terrain · nom » (vignette des couches ; Dupliquer et Modifier au survol d'une ligne :
-  Modifier ouvre la fenêtre « Type de terrain » — nom, profondeur nominale, matériau,
-  couches de haut en bas avec une couche variable au plus ; « + Nouveau type de terrain… » ;
+  Modifier ouvre l'éditeur des types de murs, adapté au terrain — nom, profondeur
+  nominale, couches de haut en bas (matériau, épaisseur, glisser-déposer) avec une
+  couche variable au plus, enregistrées par « Enregistrer » ; « + Nouveau type de terrain… » ;
   un projet sans type de terrain propose le type par défaut « Terrain naturel », inscrit
   dans le projet à la première utilisation ; les types du gabarit ne sont repris qu'à
   la création d'un projet), tracer un périmètre

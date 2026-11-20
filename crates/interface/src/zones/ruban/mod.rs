@@ -3,6 +3,7 @@
 
 mod affichage;
 mod murs;
+mod editeur_type;
 mod options;
 mod ouvertures;
 pub(crate) use ouvertures::nom_genre;
@@ -617,6 +618,18 @@ struct EditeurType {
     erreur: Option<String>,
     /// Couche en cours de glisser-déposer.
     glisse: Option<usize>,
+    /// Type de terrain édité (même fenêtre) : profondeur, couche variable ; None : type de mur.
+    terrain: Option<TerrainEdite>,
+}
+
+/// Données propres à un type de terrain dans l'éditeur de type composé.
+struct TerrainEdite {
+    /// Profondeur nominale (mm) : du point le plus bas du terrain naturel au fond plat.
+    profondeur: f64,
+    /// Matériau du type (gardé si le type n'a qu'une couche variable).
+    materiau: Option<String>,
+    /// Couche variable (qui comble jusqu'au fond), une au plus, alignée sur `couches`.
+    variables: Vec<bool>,
 }
 
 fn nom_champ(c: &Champ) -> &'static str {

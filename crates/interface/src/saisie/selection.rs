@@ -59,7 +59,8 @@ impl Application {
             let choix = crate::zones::communes::selecteur_type_terrain(ui, p, Some(&actuel), 1);
             ui.separator();
             if let Some(t) = choix.modifier {
-                self.type_terrain_edite = Some(t);
+                // même éditeur que les types de murs
+                self.ruban_edition.ouvrir_editeur_type_terrain(p, &t);
                 return None;
             }
             let mut q = p.clone();
