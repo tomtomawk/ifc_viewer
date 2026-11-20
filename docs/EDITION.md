@@ -147,8 +147,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   glissement est une seule étape d'annulation. Leurs quantités et classes `IfcColumn` / `IfcBeam` sont exportées.
 - **Modéliser → Terrain** : choisir le type (épaisseur, matériau) dans le sélecteur
   « Terrain · nom » (Dupliquer au survol d'une ligne, « + Nouveau type de terrain… » ;
-  un type du gabarit choisi dans un projet qui n'a pas encore de types de terrain les
-  fait adopter par le projet avec leurs matériaux), tracer un périmètre
+  un projet sans type de terrain propose le type par défaut « Terrain naturel », inscrit
+  dans le projet à la première utilisation ; les types du gabarit ne sont repris qu'à
+  la création d'un projet), tracer un périmètre
   fermé et le fermer par clic droit, F ou en cliquant le premier sommet. Les cotes sont
   **NGF**, dans l'unité du projet, et se règlent à côté de chaque sommet (S1, S2…) et de
   chaque point coté. Glisser un sommet ou un point le déplace ; glisser le milieu d'un

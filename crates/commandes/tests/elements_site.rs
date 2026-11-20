@@ -43,18 +43,17 @@ fn site_en_phase_existant_cotes_ngf_et_epaisseur_du_type() {
     assert!(p.contextes.is_empty());
 }
 
-/// Terrain créé avec un type du gabarit dans un projet sans types de terrain : le projet
-/// adopte les types du gabarit et les matériaux qu'ils citent.
+/// Terrain créé avec le type par défaut dans un projet sans types de terrain : le projet
+/// reçoit ce seul type, jamais ceux du gabarit (le gabarit n'amorce que la création).
 #[test]
-fn terrain_type_du_gabarit_adopte() {
+fn terrain_type_par_defaut_sans_gabarit() {
     use commandes::Commande;
     let mut p = modele::Projet::nouveau("Site");
     p.types_terrains.clear();
-    let gabarit = p.types_terrains_disponibles();
-    let t = gabarit.iter().find(|t| t.materiau.is_some()).expect("type du gabarit avec matériau").clone();
-    let terrain = Terrain { id: String::new(), nom: "Terrain".into(), contour: vec![[0.,0.,0.], [4000.,0.,0.], [4000.,4000.,0.], [0.,4000.,0.]], points: vec![], type_terrain: Some(t.id.clone()) };
+    let disponibles = p.types_terrains_disponibles();
+    assert_eq!(disponibles, vec![TypeTerrain::defaut()]);
+    let terrain = Terrain { id: String::new(), nom: "Terrain".into(), contour: vec![[0.,0.,0.], [4000.,0.,0.], [4000.,4000.,0.], [0.,4000.,0.]], points: vec![], type_terrain: Some(disponibles[0].id.clone()) };
     let (p, _) = p.executer(Commande::Terrain { terrain }).unwrap();
-    assert_eq!(p.types_terrains.len(), gabarit.len());
-    assert!(p.materiau(t.materiau.as_deref().unwrap()).is_some());
+    assert_eq!(p.types_terrains, vec![TypeTerrain::defaut()]);
     p.verifier().unwrap();
 }

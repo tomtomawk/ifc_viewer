@@ -78,7 +78,7 @@ impl Application {
             ui.separator();
             if choisi != actuel.id {
                 let mut p = projet.clone();
-                p.adopter_types_terrains();
+                p.fixer_types_terrains();
                 if let Some(x) = p.dalles.iter_mut().find(|x| x.id == d.id) { x.type_remblai = Some(choisi); }
                 nouveau = Some(p);
             }

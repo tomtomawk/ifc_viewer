@@ -43,9 +43,10 @@ pub(crate) fn selecteur_type_terrain(ui: &mut egui::Ui, projet: &Projet, courant
 }
 
 /// Copie le type de terrain `source` sous un nom libre (« Terrain naturel 2 ») ; renvoie
-/// l'identifiant du nouveau type. Le type par défaut devient d'abord un type du projet.
+/// l'identifiant du nouveau type. Le type par défaut du code devient d'abord un type du
+/// projet (le gabarit n'est jamais relu).
 pub(crate) fn dupliquer_type_terrain(p: &mut Projet, source: &str) -> Option<String> {
-    p.adopter_types_terrains();
+    p.fixer_types_terrains();
     let modele = p.types_terrains.iter().find(|t| t.id == source)?.clone();
     let mut k = 2;
     let (id, nom) = loop {
@@ -78,7 +79,7 @@ impl Application {
         let type_actuel = type_actuel?;
         let mut p = projet.clone();
         // le type par défaut devient un type du projet dès qu'on le modifie
-        let enregistrer_types = |p: &mut Projet| p.adopter_types_terrains();
+        let enregistrer_types = |p: &mut Projet| p.fixer_types_terrains();
         let mut modifie = false;
         titre_parametres(ui, if terrains.len() > 1 { "Terrains" } else { "Terrain" });
         egui::Grid::new("terrains").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
@@ -229,8 +230,9 @@ pub(crate) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &modele::Projet,
 mod tests {
     use super::*;
 
-    /// Dupliquer le type par défaut l'enregistre dans le projet, puis ajoute une copie au
-    /// nom libre ; une seconde copie prend le numéro suivant.
+    /// Dupliquer le type par défaut l'enregistre dans le projet (lui seul, pas ceux du
+    /// gabarit), puis ajoute une copie au nom libre ; une seconde copie prend le numéro
+    /// suivant.
     #[test]
     fn dupliquer_type_terrain_noms_libres() {
         let mut p = Projet::nouveau("Essai");
@@ -239,11 +241,8 @@ mod tests {
         let a = dupliquer_type_terrain(&mut p, &source.id).unwrap();
         let b = dupliquer_type_terrain(&mut p, &source.id).unwrap();
         assert_ne!(a, b);
-        let n = p.types_terrains.len();
-        assert!(n >= 3 && p.types_terrains[0].id == source.id);
-        let copies: Vec<&str> = p.types_terrains[n - 2..].iter().map(|t| t.nom.as_str()).collect();
-        assert_eq!(copies, [format!("{} 2", source.nom), format!("{} 3", source.nom)]);
-        assert!(p.types_terrains[n - 2..].iter().all(|t| t.epaisseur == source.epaisseur));
+        let noms: Vec<&str> = p.types_terrains.iter().map(|t| t.nom.as_str()).collect();
+        assert_eq!(noms, [source.nom.clone(), format!("{} 2", source.nom), format!("{} 3", source.nom)]);
         assert!(dupliquer_type_terrain(&mut p, "absent").is_none());
         p.verifier().unwrap();
         let mut m = modele::Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap();

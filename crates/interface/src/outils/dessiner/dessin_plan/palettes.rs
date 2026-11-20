@@ -18,7 +18,7 @@ impl Application {
                 }
             }
         } else if let Some(id) = choix.choisi {
-            // un type du gabarit est adopté par le projet à la création du terrain
+            // type par défaut : inscrit dans le projet à la création du terrain
             self.dessin2d.terrain_type = Some(id);
         }
     }

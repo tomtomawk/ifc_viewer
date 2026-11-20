@@ -80,7 +80,7 @@ fn appliquer_composants(q: &mut Projet, ids: &[String], t: Option<&str>) -> Resu
 
 fn appliquer_terrains(q: &mut Projet, ids: &[String], t: Option<&str>) -> Result<(), String> {
     // le type par défaut devient un type du projet dès qu'on l'affecte
-    q.adopter_types_terrains();
+    q.fixer_types_terrains();
     q.terrains.iter_mut().filter(|x| ids.contains(&x.id)).for_each(|x| x.type_terrain = t.map(str::to_string));
     Ok(())
 }

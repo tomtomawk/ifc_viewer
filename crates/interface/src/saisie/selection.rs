@@ -63,7 +63,7 @@ impl Application {
                 (Some(t), None) if t != actuel => t,
                 _ => return None,
             };
-            q.adopter_types_terrains();
+            q.fixer_types_terrains();
             if let Some(t) = q.terrains.iter_mut().find(|t| &t.id == id) { t.type_terrain = Some(nouveau); }
             return Some(q);
         }

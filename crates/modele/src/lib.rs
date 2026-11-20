@@ -1171,23 +1171,21 @@ impl Projet {
         types.into_iter().find(|t| t.id == voulu).unwrap_or_else(|| site::TypeTerrain { id: "remblai".into(), nom: "Remblai".into(), epaisseur: 1000.0, materiau: Some("Remblai".into()), couches: Vec::new() })
     }
 
-    /// Types de terrain proposés : ceux du projet, sinon ceux du gabarit, sinon le type
-    /// par défaut.
+    /// Types de terrain proposés : ceux du projet, sinon le type par défaut du code. Le
+    /// gabarit n'est pas relu : il n'amorce que la création d'un projet (`depuis_gabarit`).
     pub fn types_terrains_disponibles(&self) -> Vec<site::TypeTerrain> {
         if !self.types_terrains.is_empty() {
             return self.types_terrains.clone();
         }
-        let g = crate::gabarit::actif();
-        if g.types_terrains.is_empty() { vec![site::TypeTerrain::defaut()] } else { g.types_terrains.clone() }
+        vec![site::TypeTerrain::defaut()]
     }
 
-    /// Les types de terrain du gabarit deviennent ceux du projet s'il n'en a pas, avec les
-    /// matériaux qu'ils citent (à faire avant d'affecter ou de modifier un type).
-    pub fn adopter_types_terrains(&mut self) {
+    /// Un projet sans type de terrain reçoit le type par défaut du code avant qu'on en
+    /// affecte ou en modifie un (jamais ceux du gabarit).
+    pub fn fixer_types_terrains(&mut self) {
         if self.types_terrains.is_empty() {
-            self.types_terrains = self.types_terrains_disponibles();
+            self.types_terrains = vec![site::TypeTerrain::defaut()];
         }
-        self.completer_materiaux();
     }
 
     /// Range un élément du site nouvellement créé dans la phase Existant (créée au
