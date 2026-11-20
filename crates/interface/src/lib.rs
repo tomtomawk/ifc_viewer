@@ -497,6 +497,8 @@ pub struct Application {
     rvt_geom: Result<String, String>,
     rvt_preview: Option<egui::TextureHandle>,
     loading: Option<Receiver<LoadMsg>>,
+    /// Drapeau d'abandon du chargement en cours (lu par son fil à chaque étape).
+    annule_chargement: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     partage_en_cours: bool,
     status: String,
     /// Information ou avertissement temporaire, affiché sous le bandeau de dessin.
@@ -739,6 +741,7 @@ impl Application {
             rvt_geom: Err(String::new()),
             rvt_preview: None,
             loading: None,
+            annule_chargement: None,
             partage_en_cours: false,
             status: "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into(),
             message: None,

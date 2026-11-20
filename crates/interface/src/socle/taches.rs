@@ -212,6 +212,16 @@ impl Application {
     }
 
     /// Export multiformat d'un jeu (n° 13) : un fichier après l'autre.
+    /// SVG d'un dessin déjà calculé : mise en texte et écriture en arrière-plan.
+    pub(crate) fn exporter_svg_arriere_plan(&mut self, ctx: &egui::Context, d: noyau::trace2d::Dessin, titre: String, chemin: PathBuf) {
+        self.lancer_tache(ctx, "Export SVG", move |c| {
+            c.etape("Écriture du SVG…");
+            let texte = d.svg(&titre);
+            c.ecrire(&chemin, texte.as_bytes())?;
+            Ok(Fin::Fichiers(format!("{} : {} primitives exportées", chemin.display(), d.primitives.len())))
+        });
+    }
+
     pub(crate) fn exporter_jeu_arriere_plan(&mut self, ctx: &egui::Context, jeu: String, a_ecrire: Vec<crate::documenter::export_jeu::Fichier>, dossier: PathBuf) {
         let Some((projet, _)) = self.natif.clone() else { return };
         self.lancer_tache(ctx, "Export du jeu", move |c| {

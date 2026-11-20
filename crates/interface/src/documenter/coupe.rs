@@ -175,12 +175,18 @@ impl Application {
         Ok(trace2d::Dessin { droite, haut, echelle: self.echelle, primitives })
     }
 
-    /// Export SVG du dessin de la vue ; nombre de primitives écrites.
-    pub(crate) fn exporter_svg(&self, chemin: &std::path::Path) -> Result<usize, String> {
+    /// Dessin de la vue et titre de son SVG.
+    fn dessin_et_titre(&self) -> Result<(trace2d::Dessin, String), String> {
         let d = self.dessin_vue()?;
         let s = self.scene.as_ref().ok_or("aucun fichier ouvert")?;
         let vue = self.vue_active.and_then(|i| s.navigateur.as_ref()?.vues.get(i)).map(|v| format!(" — {} : {}", v.genre, v.nom)).unwrap_or_default();
         let titre = format!("{}{vue} — 1:{}", s.file_name, d.echelle);
+        Ok((d, titre))
+    }
+
+    /// Export SVG du dessin de la vue ; nombre de primitives écrites.
+    pub(crate) fn exporter_svg(&self, chemin: &std::path::Path) -> Result<usize, String> {
+        let (d, titre) = self.dessin_et_titre()?;
         std::fs::write(chemin, d.svg(&titre)).map_err(|e| format!("écriture impossible : {e}"))?;
         Ok(d.primitives.len())
     }
@@ -382,15 +388,14 @@ impl Application {
     }
 
     /// Export SVG du dessin de la vue, après choix du fichier.
-    pub(crate) fn exporter_svg_dialogue(&mut self) {
-        {
-            let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
-            if let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() {
-                match self.exporter_svg(&chemin) {
-                    Ok(n) => self.status = format!("{} : {n} primitives exportées", chemin.display()),
-                    Err(e) => self.error = Some(e),
-                }
-            }
+    /// Export SVG de la vue : le dessin est pris sur le fil de l'interface (il dépend de
+    /// l'état de la vue), sa mise en SVG et l'écriture se font en arrière-plan.
+    pub(crate) fn exporter_svg_dialogue(&mut self, ctx: &egui::Context) {
+        let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
+        let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() else { return };
+        match self.dessin_et_titre() {
+            Ok((d, titre)) => self.exporter_svg_arriere_plan(ctx, d, titre, chemin),
+            Err(e) => self.error = Some(e),
         }
     }
 

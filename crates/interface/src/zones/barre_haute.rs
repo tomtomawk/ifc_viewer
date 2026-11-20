@@ -335,7 +335,7 @@ impl Application {
                         "synchro" => self.demander_synchro(),
                         "enregistrer" => self.enregistrer_projet_arriere_plan(&ctx),
                         "enregistrer_sous" => self.enregistrer_sous(),
-                        "svg" => self.exporter_svg_dialogue(),
+                        "svg" => self.exporter_svg_dialogue(&ctx),
                         "pdf" => self.export_pdf_dialogue(&ctx),
                         "ifc" => self.export_ifc_dialogue(&ctx),
                         "jeu_pdf" => {

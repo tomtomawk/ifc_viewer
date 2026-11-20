@@ -28,16 +28,26 @@ impl Application {
         let (tx, rx) = channel();
         let ctx = ctx.clone();
         self.partage_en_cours=false;
+        // un chargement précédent encore en cours s'arrête à sa prochaine étape
+        self.abandonner_chargement();
+        let annule = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.annule_chargement = Some(annule.clone());
         self.loading = Some(rx);
         self.error = None;
         self.status = format!("Chargement de {}…", path.display());
         std::thread::Builder::new()
             .stack_size(64 << 20)
             .spawn(move || {
+                // abandon (document fermé, autre chargement) : le calcul s'arrête à la
+                // prochaine étape annoncée, par un déroulement sans message de panique
                 let progress = |s: String| {
+                    if annule.load(std::sync::atomic::Ordering::Relaxed) {
+                        std::panic::resume_unwind(Box::new(ChargementAbandonne));
+                    }
                     let _ = tx.send(LoadMsg::Progress(s));
                     ctx.request_repaint();
                 };
+                let resultat = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 if ::collaboration::partage::extension_partage(&path) {
                     let res=Self::charger_partage(&path,&progress);
                     let _=tx.send(LoadMsg::Partage(res,None));
@@ -45,8 +55,8 @@ impl Application {
                     match std::fs::read_to_string(if restaurer{&recuperation}else{&path}).map_err(|e|format!("Lecture impossible : {e}")) {
                         Ok(json) if ::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
                         texte=>{
-                            let res=texte.and_then(|json|modele::Projet::lire_json(&json))
-                                .and_then(|projet|maillage::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path)));
+                            let res=texte.and_then(|json|{progress("Lecture du projet…".into());modele::Projet::lire_json(&json)})
+                                .and_then(|projet|{progress("Construction de la scène…".into());maillage::depuis_natif(&projet,&path).map(|scene|(Box::new(scene),projet,path))});
                             let _=tx.send(LoadMsg::Natif(res));
                         }
                     }
@@ -63,9 +73,23 @@ impl Application {
                     let res = formats::ifc::assemblage::load(&path, &progress).map(Box::new);
                     let _ = tx.send(LoadMsg::Done(res));
                 }
+                }));
+                // une vraie panique (pas un abandon) : le récepteur voit le fil coupé
+                if let Err(e) = resultat && !e.is::<ChargementAbandonne>() {
+                    std::panic::resume_unwind(e);
+                }
                 ctx.request_repaint();
             })
             .expect("thread de chargement");
+    }
+
+    /// Arrête le chargement en cours, s'il y en a un : son fil s'interrompt à sa
+    /// prochaine étape et son résultat est ignoré.
+    pub(crate) fn abandonner_chargement(&mut self) {
+        if let Some(a) = self.annule_chargement.take() {
+            a.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.loading = None;
     }
 
     pub(crate) fn poll_loading(&mut self) {
@@ -651,7 +675,7 @@ impl Application {
         self.avant_saisie = None;
         self.vues_ouvertes.clear();
         self.etats_vues.clear();
-        self.loading = None;
+        self.abandonner_chargement();
         self.scene = None;
         self.rvt = None;
         self.rvt_source = None;
@@ -722,3 +746,6 @@ impl Application {
     }
 
 }
+
+/// Charge utile du déroulement qui arrête un chargement abandonné.
+struct ChargementAbandonne;
