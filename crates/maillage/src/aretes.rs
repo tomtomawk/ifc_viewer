@@ -13,7 +13,8 @@ pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<Stri
     use std::collections::HashMap;
     let mut groupes: HashMap<String, Vec<([DVec3; 3], usize)>> = HashMap::new();
     for (k, (g, noms)) in geoms.iter().zip(materiaux).enumerate().filter(|(_, (g, _))| !exclus.contains(&g.id)) {
-        for (i, p) in g.parts.iter().enumerate() {
+        // parties du style Réaliste seulement (géométrie de rendu) : sans arête
+        for (i, p) in g.parts.iter().enumerate().filter(|(i, _)| !formats::ifc::assemblage::rendu_seul(g, *i)) {
             let cle = noms.get(i).cloned().flatten().unwrap_or_else(|| format!("\u{0}{k}:{i}"));
             groupes.entry(cle).or_default().extend(p.tris.iter().map(|t| (*t, k)));
         }

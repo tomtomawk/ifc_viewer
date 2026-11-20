@@ -19,7 +19,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `scene`, `for
 
 ## Quand modifier ici
 
-Ce que l'on voit d'un élément du modèle dans la scène (couleurs, matériaux, arêtes, objets). Les parties des familles (ouvertures, composants) portent leur masque de visibilité (`ProductGeom::visibilite`) ; leurs arêtes sont alors calculées par masque à l'assemblage, pas jointes aux autres éléments. Les volumes eux-mêmes restent dans `modele::volumes`.
+Ce que l'on voit d'un élément du modèle dans la scène (couleurs, matériaux, arêtes, objets). Les parties des familles (ouvertures, composants) portent leur masque de visibilité (`ProductGeom::visibilite`) ; leurs arêtes sont alors calculées par masque à l'assemblage, pas jointes aux autres éléments. Un composant dont la famille désigne une géométrie de rendu (paramètre texte `Rendu`, `modele::elements::vegetation::rendu_reference`) reçoit en plus ces parties, ajustées à l'encombrement de ses solides : motif de style 2 (Réaliste seulement, sans arête : `formats::ifc::assemblage::rendu_seul`), ses solides passant en style 1 (Graphique seulement). Les volumes eux-mêmes restent dans `modele::volumes`.
 
 ## Pièges
 

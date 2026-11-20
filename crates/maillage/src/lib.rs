@@ -114,6 +114,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     // bandes en mètres dans le repère du fichier (dalles, ossatures), ramenées à la scène
     let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();
     let mut geoms = Vec::new();
+    // composants à géométrie de rendu végétale (surfaces lissées)
+    let mut vegetaux: Vec<noyau::Id> = Vec::new();
     // matériau de chaque partie des éléments (jonctions sans arête entre mêmes matériaux)
     let mut materiaux_parts: Vec<Vec<Option<String>>> = Vec::new();
     let mut table_motifs: Vec<(String, [f32; 4])> = Vec::new();
@@ -407,13 +409,39 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             [r, g, b, 1.0]
         });
         let solides = c.solides(projet)?;
-        let visibilite = solides.iter().map(|(_, masque, _)| *masque).collect();
-        let parts: Vec<Part> = solides.into_iter().map(|(materiau, _, tris)| Part {
+        // géométrie de rendu désignée par la famille (paramètre « Rendu »), ajustée à
+        // l'encombrement de la géométrie graphique : style Réaliste seulement
+        let reference = projet.types_composants.iter().find(|t| t.id == c.type_composant).and_then(|t| t.modele.reference_rendu());
+        let remplacement = reference.and_then(|r| {
+            let (min, max) = solides.iter().flat_map(|s| s.2.iter().flatten()).fold((glam::DVec3::splat(f64::MAX), glam::DVec3::splat(f64::MIN)), |(a, b), p| (a.min(*p), b.max(*p)));
+            (min.x <= max.x).then(|| modele::elements::vegetation::rendu_reference(r, min, max, &c.id)).flatten()
+        });
+        let mut visibilite: Vec<u8> = solides.iter().map(|(_, masque, _)| *masque).collect();
+        let mut noms: Vec<Option<String>> = solides.iter().map(|s| s.0.clone()).collect();
+        let mut parts: Vec<Part> = solides.into_iter().map(|(materiau, _, tris)| Part {
             color: materiau.as_ref().and_then(|m| projet.materiau(m)).map_or(couleur, |m| { let [r, g, b] = m.couleur.map(|x| x as f32 / 255.0); [r, g, b, 1.0] }),
             tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
         }).collect();
-        materiaux_parts.push(vec![None; parts.len()]);
-        geoms.push(ProductGeom { visibilite, id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        let (mut rendu, mut motifs) = (Vec::new(), Vec::new());
+        if let Some(r) = remplacement {
+            use modele::elements::arbre::{MATERIAU_ECORCE, MATERIAU_FEUILLAGE};
+            // géométrie graphique : style Graphique seulement (4ᵉ octet du motif : 1)
+            rendu = vec![None; parts.len()];
+            motifs = vec![Some([0, 0, 0, 1]); parts.len()];
+            for (nom, tris) in [(MATERIAU_ECORCE, r.bois), (MATERIAU_FEUILLAGE, r.feuillage)] {
+                let m = projet.materiau(nom).cloned().unwrap_or_else(|| modele::murs::assemblage::materiau_par_defaut(nom));
+                let [cr, cg, cb] = m.couleur.map(|x| x as f32 / 255.0);
+                let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
+                rendu.push(Some(rendu_materiau(&m, couleur, &mut table_apparences)));
+                motifs.push(Some([0, 0, 0, 2]));
+                visibilite.push(modele::famille::modelee::PARTOUT);
+                noms.push(Some(nom.into()));
+                parts.push(Part { color: couleur, tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect() });
+            }
+            vegetaux.push(id);
+        }
+        materiaux_parts.push(if rendu.is_empty() { vec![None; parts.len()] } else { noms });
+        geoms.push(ProductGeom { visibilite, id, parts, lignes: Vec::new(), rendu, motifs });
     }
     for e in &projet.escaliers {
         let id = id_natif("escalier", &e.id);
@@ -522,6 +550,12 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     chrono("scène : assemblage", &mut t_etape);
     for a in &projet.arbres {
         if let Some(&o) = scene.object_of.get(&id_natif("arbre", &a.id)) {
+            let r = scene.objects[o as usize].opaque;
+            lisser(&mut scene.vertices[r.start as usize..(r.start + r.count) as usize]);
+        }
+    }
+    for id in vegetaux {
+        if let Some(&o) = scene.object_of.get(&id) {
             let r = scene.objects[o as usize].opaque;
             lisser(&mut scene.vertices[r.start as usize..(r.start + r.count) as usize]);
         }

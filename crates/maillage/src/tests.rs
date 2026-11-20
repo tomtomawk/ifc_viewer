@@ -128,3 +128,27 @@ fn famille_visible_selon_detail_et_type_de_vue() {
     assert!(compte(NiveauDetail::Eleve, TypeVue::Vue3d).0 < eleve);
     assert_eq!(compte(NiveauDetail::Eleve, TypeVue::Coupe).0, eleve);
 }
+
+/// V1 : un composant végétal montre en plus, dans le style Réaliste, la géométrie de
+/// rendu désignée par le paramètre « Rendu » ; elle n'ajoute aucune arête.
+#[test]
+fn vegetal_rendu_par_reference_sans_arete() {
+    use modele::elements::arbre::Essence;
+    use modele::elements::composant::Composant;
+    use modele::elements::vegetation::type_vegetal;
+    let scene = |reference: &str| {
+        let mut p = Projet::nouveau("T");
+        p.niveaux.push(modele::Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+        let mut t = type_vegetal(Essence::Feuillu);
+        t.modele.parametres.iter_mut().find(|x| x.nom == modele::famille::modelee::PARAMETRE_RENDU).unwrap().formule = reference.into();
+        p.composants.push(Composant { id: "c".into(), nom: "c".into(), type_composant: t.id.clone(), niveau: "n".into(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 });
+        p.types_composants.push(t);
+        depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap()
+    };
+    let (avec, sans) = (scene("arbre:feuillu"), scene(""));
+    let objet = |s: &scene::Scene| { let o = &s.objects[s.object_of[&id_natif("composant", "c")] as usize]; (o.opaque, o.aretes) };
+    let ((fa, aa), (fb, ab)) = (objet(&avec), objet(&sans));
+    assert!(fa.count > fb.count, "{} {}", fa.count, fb.count);
+    assert_eq!(aa.count, ab.count);
+    assert!(ab.count > 0);
+}

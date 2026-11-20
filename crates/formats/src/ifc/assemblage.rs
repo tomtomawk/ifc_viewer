@@ -61,6 +61,12 @@ pub fn assemble(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String) -> 
 
 /// Comme [`assemble`], les arêtes de certains objets étant données (jonctions entre
 /// éléments d'un même matériau, calculées ensemble).
+/// Partie montrée dans le style Réaliste seulement (4ᵉ octet du motif : 2) : géométrie
+/// de rendu, sans arête.
+pub fn rendu_seul(g: &ProductGeom, k: usize) -> bool {
+    g.motifs.get(k).copied().flatten().is_some_and(|m| m[3] == 2)
+}
+
 pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String, mut imposees: std::collections::HashMap<Id, noyau::aretes::Aretes>) -> Scene {
     let mut gmin = DVec3::splat(f64::MAX);
     let mut gmax = DVec3::splat(f64::MIN);
@@ -102,11 +108,11 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
             if annotation(g) {
                 return Vec::new();
             }
-            let mut masques: Vec<u8> = (0..g.parts.len()).map(|k| masque(g, k)).collect();
+            let mut masques: Vec<u8> = (0..g.parts.len()).filter(|k| !rendu_seul(g, *k)).map(|k| masque(g, k)).collect();
             masques.sort_unstable();
             masques.dedup();
             masques.into_iter().map(|m| {
-                let tris: Vec<[DVec3; 3]> = g.parts.iter().enumerate().filter(|(k, _)| masque(g, *k) == m).flat_map(|(_, p)| p.tris.iter().copied()).collect();
+                let tris: Vec<[DVec3; 3]> = g.parts.iter().enumerate().filter(|(k, _)| masque(g, *k) == m && !rendu_seul(g, *k)).flat_map(|(_, p)| p.tris.iter().copied()).collect();
                 (m, noyau::aretes::aretes(&tris))
             }).collect()
         })
