@@ -829,10 +829,11 @@ sans multiéchantillonnage, `BIMEDIT_MSAA=0` désactive l'anticrénelage de la v
 Fenêtre « Motifs de hachures » (matériau › Motifs de hachures…) : « Dessiner un motif… »
 (nouveau) ou « Redessiner… » (motif du projet) ouvre un onglet « Hachure ». La hachure
 occupe toute la vue : seul le carré central (la tuile) se dessine, le reste, grisé, en
-répète le dessin. Bandeau : Ligne (deux clics), Polyligne (traits enchaînés, clic droit
-ou Échap pour finir), Effacer (clic sur un trait), côté du carré (mm du papier),
-divisions de la grille d'accrochage (modifiables tant que le carré est vide), nom,
-Défaire (Ctrl+Z), Tout effacer, Annuler, Valider. Les extrémités s'accrochent aux nœuds
+répète le dessin. Bandeau de dessin commun (`outils/bandeau.rs`, comme les autres
+commandes) : Ligne (deux clics), Polyligne (traits enchaînés, clic droit ou Échap pour
+finir), Effacer (clic sur un trait), côté du carré (mm du papier), divisions de la grille
+d'accrochage (modifiables tant que le carré est vide), nom, Défaire (Ctrl+Z), Vider, puis
+Valider et Annuler. Les extrémités s'accrochent aux nœuds
 de la grille ; Valider enregistre le motif dans le projet (familles de traits déduites
 de la tuile, matériaux suivis si le motif est renommé) et ferme l'onglet, comme sa croix
 ou Annuler (sans enregistrer).

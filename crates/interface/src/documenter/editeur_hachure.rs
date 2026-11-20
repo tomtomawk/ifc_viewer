@@ -120,49 +120,10 @@ impl Application {
         Ok(())
     }
 
-    /// Onglet de l'éditeur : bandeau, puis la hachure sur toute la vue.
-    pub(crate) fn vue_hachure(&mut self, ui: &mut egui::Ui) {
-        let Some(ed) = self.editeur_hachure.as_mut() else { return };
-        let (mut valider, mut annuler) = (false, false);
-        // bandeau de dessin
-        egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(egui::Margin::symmetric(8, 5)).show(ui, |ui| {
-            // bandeau replié sur plusieurs lignes si la vue est étroite
-            ui.horizontal_wrapped(|ui| {
-                for (o, nom, aide) in [
-                    (OutilHachure::Ligne, "Ligne", "Deux clics : un trait"),
-                    (OutilHachure::Polyligne, "Polyligne", "Traits enchaînés ; clic droit ou Échap pour finir"),
-                    (OutilHachure::Effacer, "Effacer", "Clic sur un trait : le retirer"),
-                ] {
-                    if ui.selectable_label(ed.outil == o, nom).on_hover_text(aide).clicked() {
-                        ed.outil = o;
-                        ed.depart = None;
-                    }
-                }
-                ui.separator();
-                ui.label("Côté");
-                ui.add(egui::DragValue::new(&mut ed.tuile.cote).speed(0.1).range(0.5..=100.0).max_decimals(2).suffix(" mm")).on_hover_text("Côté du carré répété, en mm du papier");
-                ui.label("Divisions");
-                let vide = ed.tuile.segments.is_empty();
-                ui.add_enabled(vide, egui::DragValue::new(&mut ed.tuile.divisions).range(1..=DIVISIONS_MAX))
-                    .on_hover_text("Nœuds de la grille d'accrochage par côté")
-                    .on_disabled_hover_text("Effacer le dessin pour changer la grille");
-                ui.separator();
-                ui.label("Nom");
-                ui.add(egui::TextEdit::singleline(&mut ed.nom).desired_width(130.0));
-                ui.separator();
-                if ui.add_enabled(!ed.historique.is_empty(), egui::Button::new("Défaire")).on_hover_text("Ctrl+Z").clicked()
-                    && let Some(s) = ed.historique.pop() {
-                    ed.tuile.segments = s;
-                }
-                if ui.add_enabled(!vide, egui::Button::new("Tout effacer")).clicked() {
-                    ed.historique.push(std::mem::take(&mut ed.tuile.segments));
-                    ed.depart = None;
-                }
-                ui.separator();
-                annuler = ui.button("Annuler").on_hover_text("Fermer sans enregistrer").clicked();
-                valider = ui.button(RichText::new("Valider").strong()).on_hover_text("Enregistrer le motif dans le projet").clicked();
-            });
-        });
+    /// Onglet de l'éditeur : la hachure sur toute la vue, le bandeau de dessin commun
+    /// (`outils::bandeau`) en haut à gauche ; renvoie le bas du bandeau (messages).
+    pub(crate) fn vue_hachure(&mut self, ui: &mut egui::Ui) -> f32 {
+        let Some(ed) = self.editeur_hachure.as_mut() else { return 0.0 };
         let rect = ui.available_rect_before_wrap();
         let reponse = ui.allocate_rect(rect, Sense::click());
         let peintre = ui.painter().with_clip_rect(rect);
@@ -240,10 +201,46 @@ impl Application {
         if ui.memory(|m| m.focused().is_none()) && ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z)) && let Some(s) = ed.historique.pop() {
             ed.tuile.segments = s;
         }
-        if annuler {
-            self.fermer_editeur_hachure();
-        } else if valider && let Err(e) = self.valider_editeur_hachure() {
-            self.error = Some(e);
+        // bandeau de dessin commun : outils et réglages, puis Valider / Annuler
+        use crate::outils::bandeau::{bandeau, Action, Fin};
+        let mut options = |ui: &mut egui::Ui| {
+            for (o, nom, aide) in [
+                (OutilHachure::Ligne, "Ligne", "Deux clics : un trait"),
+                (OutilHachure::Polyligne, "Polyligne", "Traits enchaînés ; clic droit ou Échap pour finir"),
+                (OutilHachure::Effacer, "Effacer", "Clic sur un trait : le retirer"),
+            ] {
+                if ui.selectable_label(ed.outil == o, nom).on_hover_text(aide).clicked() {
+                    ed.outil = o;
+                    ed.depart = None;
+                }
+            }
+            ui.separator();
+            ui.label("Côté");
+            ui.add(egui::DragValue::new(&mut ed.tuile.cote).speed(0.1).range(0.5..=100.0).max_decimals(2).suffix(" mm")).on_hover_text("Côté du carré répété, en mm du papier");
+            ui.label("Divisions");
+            let vide = ed.tuile.segments.is_empty();
+            ui.add_enabled(vide, egui::DragValue::new(&mut ed.tuile.divisions).range(1..=DIVISIONS_MAX))
+                .on_hover_text("Nœuds de la grille d'accrochage par côté")
+                .on_disabled_hover_text("Effacer le dessin pour changer la grille");
+            ui.separator();
+            ui.label("Nom");
+            ui.add(egui::TextEdit::singleline(&mut ed.nom).desired_width(100.0));
+            ui.separator();
+            if ui.add_enabled(!ed.historique.is_empty(), egui::Button::new("Défaire")).on_hover_text("Ctrl+Z").clicked()
+                && let Some(s) = ed.historique.pop() {
+                ed.tuile.segments = s;
+            }
+            if ui.add_enabled(!vide, egui::Button::new("Vider")).on_hover_text("Effacer tout le dessin").clicked() {
+                ed.historique.push(std::mem::take(&mut ed.tuile.segments));
+                ed.depart = None;
+            }
+        };
+        let retour = bandeau(ui, rect, "hachure", Fin::COMPLETE, Some(&mut options));
+        match retour.action {
+            Some(Action::Annuler) => self.fermer_editeur_hachure(),
+            Some(Action::Valider) => if let Err(e) = self.valider_editeur_hachure() { self.error = Some(e) },
+            None => {}
         }
+        retour.bas
     }
 }

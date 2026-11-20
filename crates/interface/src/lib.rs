@@ -1038,12 +1038,11 @@ impl eframe::App for Application {
             }
             egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
             egui::CentralPanel::no_frame().show(ui, |ui| {
-                let mut rect = ui.available_rect_before_wrap();
+                let rect = ui.available_rect_before_wrap();
                 let mut bas_barre = 0.0;
                 if self.hachure_active && self.editeur_hachure.is_some() {
-                    self.vue_hachure(ui);
-                    // messages sous le bandeau de l'éditeur
-                    rect.min.y += 40.0;
+                    // messages sous le bandeau de dessin de l'éditeur
+                    bas_barre = self.vue_hachure(ui);
                 } else if self.famille_active && self.famille.is_some() {
                     self.vue_famille(ui);
                 } else if self.scene.is_some() && self.vues_ouvertes.is_empty() {
