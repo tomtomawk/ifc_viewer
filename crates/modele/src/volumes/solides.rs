@@ -766,7 +766,7 @@ mod tests_jonctions {
     /// calcul mur par mur, erreurs comprises.
     #[test]
     fn calcul_groupe_identique_au_calcul_unitaire() {
-        for f in [concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/ilot_demo/ilot_demo.modele.json"), concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")] {
+        for f in [concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/ilot_demo/ilot_demo.bem"), concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")] {
             let p = Projet::lire_json(&std::fs::read_to_string(f).unwrap()).unwrap();
             let j = crate::murs::jonctions::coupes(&p);
             assert!(!p.murs.is_empty(), "{f}");

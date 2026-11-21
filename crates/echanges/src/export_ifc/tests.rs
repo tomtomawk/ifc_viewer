@@ -35,7 +35,7 @@ fn entete_nom_et_horodatage() {
 
 /// Projet natif de démonstration et son export relu par `ifc_base`.
 fn maison() -> (Projet, String, ifc_base::semantique::IfcModel) {
-    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap();
+    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")).unwrap();
     let p = Projet::lire_json(&json).unwrap();
     let s = exporter(&p).unwrap();
     let m = ifc_base::semantique::IfcModel::new(ifc_base::step::StepFile::parse(s.as_bytes()).expect("relecture STEP"));
@@ -83,7 +83,7 @@ fn terrain_et_limite_dans_le_site() {
 
 #[test]
 fn un_type_ifc_par_type_utilise() {
-    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap();
+    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")).unwrap();
     let mut p = Projet::lire_json(&json).unwrap();
     // une porte typée, une fenêtre sans type
     p.types_ouvertures.push(TypeOuverture { id: "porte90".into(), nom: "Porte 90".into(), genre: GenreOuverture::Porte, largeur: 900.0, hauteur: 2100.0, famille: None, modele: None, origine: None, famille_nom: None });
@@ -160,7 +160,7 @@ fn un_style_par_materiau_reutilise() {
 
 #[test]
 fn usage_des_couches_coherent_avec_l_axe_du_mur() {
-    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap();
+    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")).unwrap();
     let mut p = Projet::lire_json(&json).unwrap();
     // mur à deux couches : enduit extérieur 20 mm puis béton 200 mm
     let t = &mut p.types_murs[0];

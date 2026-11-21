@@ -62,7 +62,7 @@ def run(exe):
                     if p.poll() is not None or time.monotonic() > fin:
                         raise AssertionError((root / "instance.log").read_text(encoding="utf-8"))
                     time.sleep(0.2)
-            chemin = str(root / "Projet avec espaces.modele.json")
+            chemin = str(root / "Projet avec espaces.bem")
             commande("nouveau", {"chemin": chemin, "nom": "Essai pilote"})
             commande("nouveau", {"chemin": chemin}, ok=False)
             commande("mur", "0 0 4000 0 2800 200")
@@ -116,7 +116,7 @@ def run(exe):
                 commande("export", {"format": fmt, "chemin": str(sortie), "id": nid, "jeu": "Plans"})
                 assert sortie.stat().st_size > 10
             commande("enregistrer")
-            commande("importer", {"source": str(root / "Sortie avec espaces ifc.ifc"), "sortie": str(root / "Import.modele.json")})
+            commande("importer", {"source": str(root / "Sortie avec espaces ifc.ifc"), "sortie": str(root / "Import.bem")})
             attendre(charge)
             assert len(commande("documents")["documents"]) == 2
             commande("collaborer", str(root / "Projet partagé.bimpartage"))

@@ -35,16 +35,16 @@ jobs:
         run: cargo run --release -p bimedit -- --stats samples/test_ifc4.ifc
       - name: Livrables du projet natif autonome
         run: |
-          cargo run --release -p bimedit -- --export-ifc samples/maison_native.modele.json target/maison.ifc
-          cargo run --release -p bimedit -- --export-feuille samples/maison_native.modele.json A01 target/maison.pdf
-          cargo run --release -p bimedit -- --quantites samples/maison_native.modele.json target/quantites.csv
+          cargo run --release -p bimedit -- --export-ifc samples/maison_native.bem target/maison.ifc
+          cargo run --release -p bimedit -- --export-feuille samples/maison_native.bem A01 target/maison.pdf
+          cargo run --release -p bimedit -- --quantites samples/maison_native.bem target/quantites.csv
       - name: Validation IFC indépendante (Linux x64)
         if: matrix.nom == 'linux-x64'
         run: |
           python3 -m pip install ifcopenshell==0.9.0.post1 pytest
           python3 tools/valider_ifc.py --donnees target/maison.ifc
-          cargo run --release -p bimedit -- --modele samples/test_ifc4_proprietes.ifc target/proprietes.modele.json
-          cargo run --release -p bimedit -- --export-ifc target/proprietes.modele.json target/proprietes.ifc
+          cargo run --release -p bimedit -- --modele samples/test_ifc4_proprietes.ifc target/proprietes.bem
+          cargo run --release -p bimedit -- --export-ifc target/proprietes.bem target/proprietes.ifc
           python3 tools/valider_ifc.py --donnees target/proprietes.ifc
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

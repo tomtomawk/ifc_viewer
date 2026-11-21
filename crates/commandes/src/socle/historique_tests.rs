@@ -3,7 +3,7 @@ use crate::socle::libelles::CATEGORIES_PROJET;
 use crate::{Commande, Execution};
 
 fn maison() -> Projet {
-    Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap()
+    Projet::lire_json(include_str!("../../../../samples/maison_native.bem")).unwrap()
 }
 
 /// Ancien calcul du libellé (lecture complète des deux états), pour comparaison.
@@ -161,7 +161,7 @@ fn liste_des_identifiants() {
 /// JSON) : quelques centaines d'octets, contre environ 200 ko par instantané compressé.
 #[test]
 fn memoire_proportionnelle_au_changement() {
-    let p = Projet::lire_json(include_str!("../../../../samples/immeuble_essai_murs/immeuble_essai_murs.modele.json")).unwrap();
+    let p = Projet::lire_json(include_str!("../../../../samples/immeuble_essai_murs/immeuble_essai_murs.bem")).unwrap();
     let taille = p.json().unwrap().len();
     let q = p.executer(Commande::Deplacer { ids: vec![p.murs[0].id.clone()], delta: [10.0, 0.0, 0.0] }).unwrap().0;
     let mut h: Historique = Historique::default();

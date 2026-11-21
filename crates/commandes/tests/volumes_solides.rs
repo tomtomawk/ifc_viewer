@@ -8,7 +8,7 @@ use modele::volumes::solides::*;
 /// la mémoire les découpes inchangées) rend encore exactement le calcul mur par mur.
 #[test]
 fn recalcul_partiel_identique_apres_modification() {
-    let f = concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json");
+    let f = concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem");
     let mut p = Projet::lire_json(&std::fs::read_to_string(f).unwrap()).unwrap();
     let j = modele::murs::jonctions::coupes(&p);
     let avant = murs(&p, &j);

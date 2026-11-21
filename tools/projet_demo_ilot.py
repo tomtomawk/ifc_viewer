@@ -525,6 +525,6 @@ if __name__ == "__main__":
     os.makedirs(TEX, exist_ok=True)
     for f in (briques, beton, enduit, bois, ardoise, feuilles, ecorce, enrobe, paves):
         f()
-    with open(os.path.join(SORTIE, "ilot_demo.modele.json"), "w", encoding="utf-8") as fichier:
+    with open(os.path.join(SORTIE, "ilot_demo.bem"), "w", encoding="utf-8") as fichier:
         json.dump(projet(), fichier, ensure_ascii=False, indent=1)
     print("Projet écrit dans", os.path.abspath(SORTIE))

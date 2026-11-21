@@ -9,7 +9,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats`, `e
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `main.rs` | `--mcp`, aiguillage des options, repli sur la fenêtre |
-| `modes/modele.rs` | `--modele <fichier.rvt\|.rfa\|.ifc> [sortie.json]` : conversion, projet JSON et rapport |
+| `modes/modele.rs` | `--modele <fichier.rvt\|.rfa\|.ifc> [sortie.bem]` : conversion, projet JSON et rapport |
 | `modes/stats.rs`, `modes/rvt_stats.rs` | `--stats <fichier.ifc\|.rvt\|.rfa\|.rte>` (IFC, Revit) |
 | `modes/rvt_parametres.rs`, `rvt_images.rs`, `rvt_decodage.rs`, `rvt_nomenclatures.rs` | `--parametres`, `--images <fichier> <dossier>`, `--decodage`, `--nomenclatures` |
 | `tests/dependances.rs` | garde-fou : sens des dépendances entre crates, egui/wgpu hors des crates autorisées |

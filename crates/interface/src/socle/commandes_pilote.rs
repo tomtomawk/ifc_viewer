@@ -428,7 +428,7 @@ impl Application {
             "enregistrer" => {
                 if self.natif.is_none() && self.rvt_source.is_some() {
                     let sortie = if argument.trim().is_empty() {
-                        let Some(p) = self.rvt_sortie.clone() else { return erreur("usage : enregistrer <chemin.modele.json> pour le premier enregistrement d’un RVT") };
+                        let Some(p) = self.rvt_sortie.clone() else { return erreur("usage : enregistrer <chemin.bem> pour le premier enregistrement d’un RVT") };
                         p
                     } else { PathBuf::from(argument.trim().trim_matches('"')) };
                     return match self.demarrer_enregistrement_rvt(ctx,sortie) {

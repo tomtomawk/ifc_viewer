@@ -111,7 +111,7 @@ mod tests {
     use super::*;
 
     fn projet() -> Projet {
-        Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap()
+        Projet::lire_json(include_str!("../../../../samples/maison_native.bem")).unwrap()
     }
 
     #[test]

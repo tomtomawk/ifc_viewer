@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(noms, [source.nom.clone(), format!("{} 2", source.nom), format!("{} 3", source.nom)]);
         assert!(dupliquer_type_terrain(&mut p, "absent").is_none());
         p.verifier().unwrap();
-        let mut m = modele::Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap();
+        let mut m = modele::Projet::lire_json(include_str!("../../../../samples/maison_native.bem")).unwrap();
         let id = m.types_terrains_disponibles()[0].id.clone();
         dupliquer_type_terrain(&mut m, &id).unwrap();
         m.verifier().unwrap();

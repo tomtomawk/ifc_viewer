@@ -5,7 +5,7 @@ use modele::liens::LienIfc;
 use modele::identifiants::id_natif;
 
 fn maison() -> modele::Projet {
-    modele::Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap()
+    modele::Projet::lire_json(include_str!("../../../samples/maison_native.bem")).unwrap()
 }
 
 fn lien(chemin: &str, decalage: [f64; 3], rotation: f64) -> LienIfc {

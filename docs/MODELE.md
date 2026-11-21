@@ -8,15 +8,20 @@ Code : `crates/modele/src/` (types : `lib.rs`) et `crates/echanges/src/` (conver
 lecture de paramètres dans une géométrie : `geometrie.rs` ; rapport : `rapport.rs`).
 
 ```
-bimedit --modele <fichier.rvt|.rfa|.ifc> [sortie.json]
+bimedit --modele <fichier.rvt|.rfa|.ifc> [sortie.bem]
 ```
 
-écrit le projet (`fichier.modele.json` par défaut), le rapport de conversion
-(`fichier.modele.rapport.md`) et affiche ce rapport.
+écrit le projet (`fichier.bem` par défaut), le rapport de conversion
+(`fichier.rapport.md`) et affiche ce rapport.
+
+Les projets utilisent l’extension `.bem` et les familles l’extension `.bef`.
+Le contenu reste du JSON. Les fichiers JSON existants de même schéma, notamment
+`.modele.json` et `.famille.json`, s’ouvrent avec le même lecteur. Le fichier
+d’entrée d’un projet partagé conserve l’extension `.bimpartage`.
 
 ## Principes
 
-Dans l'interface, **Début → Nouveau…** (Ctrl+N) crée un fichier `.modele.json`
+Dans l'interface, **Début → Nouveau…** (Ctrl+N) crée un fichier `.bem`
 nommé d'après le fichier choisi et l'ouvre dans une vue 3D vide, en conservant les
 autres documents. Il utilise `Projet::nouveau` : en-tête v0, collections vides,
 aucun niveau, type ou élément ajouté implicitement. **Sortie → Enregistrer**
@@ -49,7 +54,7 @@ La conversion complète est effectuée en arrière-plan depuis le fichier source
 dont la taille et la date sont vérifiées par rapport à son ouverture. Elle utilise
 les mêmes règles de reconnaissance et de conservation en éléments importés que
 la conversion en ligne de commande. Le JSON est validé avant remplacement du fichier
-de destination ; un rapport `.modele.rapport.md` est écrit à côté. L'application
+de destination ; un rapport `.rapport.md` est écrit à côté. L'application
 garde le RVT et ses vues ouverts, sans changer automatiquement de document (Début → Importer ouvre le document natif).
 
 1. **Deux niveaux** : paramétrique (niveaux, murs, ouvertures, dalles) ou importé (maillage +
@@ -75,7 +80,7 @@ garde le RVT et ses vues ouverts, sans changer automatiquement de document (Déb
 | `sources[]` | `id` (« s1 »), `fichier`, `format` (RVT, IFC), `octets`, `modifie` (s depuis 1970) | Fichiers d'origine |
 | `phases[]`, `sous_projets[]` | Noms | Choix de création ; listes vides si absentes des anciens fichiers. À défaut : Projet et Sous-projet 1 au premier mur. Les listes Revit sont reprises lors de la conversion. |
 | `variantes[]` | `id`, `nom`, `jeu` | Options Revit reprises à la conversion, distinguées par jeu ; une variante absente sur un mur désigne le modèle principal. |
-| `profils[]` | `id`, `nom`, `document_famille` | Famille de catégorie `profil` (même JSON qu'un fichier `.famille.json`) ; la section est son contour fermé en plan (`section_profil` le désigne s'il y en a plusieurs), en mm. Contour fermé et non croisé. |
+| `profils[]` | `id`, `nom`, `document_famille` | Famille de catégorie `profil` (même JSON qu'un fichier `.bef`) ; la section est son contour fermé en plan (`section_profil` le désigne s'il y en a plusieurs), en mm. Contour fermé et non croisé. |
 | `familles_cartouches[]` | `id`, `nom`, `largeur`, `hauteur` (mm papier), `document_famille` | Famille de catégorie `cartouche` ; seuls les éléments 2D de sa vue en plan sont rendus sur la feuille, en mm du papier depuis le coin inférieur gauche du cartouche. |
 | `familles_etiquettes[]` | `id`, `nom`, `document_famille` | Famille de catégorie `etiquette_piece` ; seuls les éléments 2D de sa vue en plan sont rendus, en mm du papier autour du point de la pièce (textes centrés). |
 | `gabarits_vues[]`, `gabarits_vue_affectes` | `id`, `nom`, `echelle`, `poche`, `phase`, `variante` ; correspondance vue → gabarit | Paramètres partagés, répercutés dans les vues et leurs contextes. La clé `3d` désigne la vue 3D par défaut ; ses valeurs conservées sont `echelle_vue_3d` et `poche_vue_3d`. |
@@ -88,7 +93,7 @@ garde le RVT et ses vues ouverts, sans changer automatiquement de document (Déb
 | `familles_materiaux[]` | `mots[]`, `couleur`, `motif`, `coupe_couleur`, `coupe_fond`, `coupe_fond_motif`, `surface_fond_motif`, `surface_motif`, `surface_couleur`, `apparence` (comme `materiaux[]` du gabarit) | Copiées du gabarit à la création : un matériau nommé absent du projet (import, nouveau type) prend la couleur et les motifs de la première famille dont un mot figure dans son nom ; aucune : couleur claire tirée du nom, hachures diagonales |
 | `types_vues[]` | `elevation`, `nom`, `aide`, `echelle`, `profondeur` (mm) | Types de coupe et d'élévation, copiés du gabarit à la création ; absents : « Coupe » 1:100, 15 m et « Élévation » 1:100, 30 m |
 | `assemblages[]` | `id`, `nom`, `type_mur`, `couches[]` (ids de murs), `origine` | Mur composé : **chaque couche est un mur** à part entière (type monocouche, niveaux, hauteur, phase, sous-projet propres), listées de l'extérieur vers l'intérieur. Une ouverture dont `mur` vaut l'id de l'assemblage traverse toutes ses couches |
-| Fichier `.famille.json` | `format` (« famille-ouverture 3 »), `nom`, `largeur`, `hauteur`, `profondeur`, `famille` (comme `modele`) | Famille d'ouverture échangée entre projets (éditeur : « Enregistrer sous… », arborescence : « Charger une famille… ») |
+| Fichier `.bef` | `format` (« famille-ouverture 3 »), `nom`, `largeur`, `hauteur`, `profondeur`, `famille` (comme `modele`) | Famille d'ouverture échangée entre projets (éditeur : « Enregistrer sous… », arborescence : « Charger une famille… ») |
 | `escaliers[]` | `id`, `nom`, `niveau`, `niveau_haut` (facultatif), `decalage_bas`, `hauteur` (sans niveau d'arrivée), `trace` (ligne de foulée [x, y]), `largeur`, `hauteur_marche` (visée), `paillasse` (épaisseur verticale), `sous_face` (facultatif, `crantee` par défaut ou `lissee`) (`balance` facultatif : nombre de marches balancées de part et d'autre de chaque tournant, à la place des paliers) | Volées et paliers (un par sommet intermédiaire) ; contremarches = hauteur / hauteur visée arrondie |
 | `barres[]` | `id`, `nom`, `genre` (poteau, poutre), `niveau`, `debut`, `fin` (mm, Z relatif au niveau), `largeur`, `hauteur`, `rotation`, `origine` (facultative : barre convertie d'un IFC) ; poutre : `type_poutre`, `justification` (gauche, axe, droite), `arase` (superieure, axe, inferieure), facultatifs | Poutre : la ligne tracée est sa face gauche, son axe ou sa face droite ; Z désigne son arase supérieure, son axe ou son arase inférieure. Sans type : section `largeur` × `hauteur` |
 | `pieces[]` | `id`, `nom`, `numero`, `niveau`, `point` [x, y] (mm), `contour` (calculé) ; facultatifs : `etiquette`, `donnees`, `origine` | `contour` : faces intérieures des murs autour de `point`, recalculé après chaque modification. `donnees` : données lues dans la source (import IFC : jeux de l'`IfcSpace`, dont `Pset_SpaceCommon` et `Qto_SpaceBaseQuantities`), même forme et mêmes vérifications que les champs `proprietes`, `materiau`, `couleur` d'`importes[]`, omis si vide ; lecture seule, réécrites à l'export IFC (sauf `Qto_SpaceBaseQuantities`, recalculé). `origine` : `IfcSpace` d'origine ; son GUID est repris à l'export. Une pièce copiée perd son `origine` |
@@ -401,7 +406,7 @@ Chaque volume (`volumes[]`), forme à profil (`extrusions[]`) et élément 2D (`
 
 **Maillages de famille (20/11/2026).** `maillages[]` : `nom`, `sommets` ([x, y, z] dans la boîte du type : x et y de −0,5 à 0,5 multipliés par Largeur et Epaisseur, z de 0 à 1 multiplié par Hauteur), `triangles` (indices), `traits_plan` (polylignes [x, y] tracées en plan), `materiau_parametre`, `visible`, `visibilite`, `generateur` (référence d'une géométrie produite par le code, `arbre:<essence>:<houppier|tronc|symbole>` : le fichier ne garde que la référence, sommets et traits sont recalculés à l'ouverture ; la forme est tirée de l'identifiant de chaque occurrence, donc propre à chaque arbre). Géométrie libre qui suit les dimensions du type ; elle ne s'édite pas sommet par sommet (l'éditeur montre la visibilité et permet la suppression). Champ nouveau : les familles d'arbres des anciens fichiers gardent leurs révolutions. L'outil Arbre place ces composants ; un type livré avec le code (table, végétaux : `composant::types_par_defaut`) entre au projet au premier placement. Un composant végétal s'exporte en `IfcGeographicElement` (`USERDEFINED`, type d'objet `VEGETATION`).
 
-**Changement incompatible (20/11/2026)** : la liste `arbres[]` du projet (essence, hauteur, diamètre du houppier) est retirée ; elle est ignorée à la lecture, les arbres d'un ancien fichier sont donc perdus. Aucune conversion : l'exemple `samples/ilot_demo/ilot_demo.modele.json` a été réécrit (31 composants, 16 types végétaux, un par nom, essence et dimensions).
+**Changement incompatible (20/11/2026)** : la liste `arbres[]` du projet (essence, hauteur, diamètre du houppier) est retirée ; elle est ignorée à la lecture, les arbres d'un ancien fichier sont donc perdus. Aucune conversion : l'exemple `samples/ilot_demo/ilot_demo.bem` a été réécrit (31 composants, 16 types végétaux, un par nom, essence et dimensions).
 
 Le modèle de famille porte une `categorie` explicite et peut contenir des `elements_2d` associés à une vue, avec les formes d'annotation du projet et une hauteur de texte en millimètres papier. Les cartouches, étiquettes et profils chargés depuis ce modèle conservent le document complet ; leur rendu ou leur section est recalculé depuis la vue en plan. Un profil nécessite une seule polyligne fermée en plan. Les profils embarqués du gabarit sont définis par des plans contraints et des formules dans leur document de famille. L'ajout de `categorie` modifie le JSON des familles ; les anciens fichiers ne sont pas migrés.
 

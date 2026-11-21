@@ -297,7 +297,7 @@ cargo build --release
 ./tools/qualifier_collaboration.ps1
 python tools/test_collaboration_ui.py
 python tools/test_partage_ui.py
-cargo run --release -- --collaboration mesures samples/maison_native.modele.json rapport.json
+cargo run --release -- --collaboration mesures samples/maison_native.bem rapport.json
 ```
 
 Les tests Rust couvrent les créations sans collision, fusions et conflits, suppression

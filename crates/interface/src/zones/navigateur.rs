@@ -466,7 +466,7 @@ impl Application {
                     if ui.small_button("Nouvelle fenêtre…").clicked() {
                         nouvelle_ouverture = Some(G::Fenetre);
                     }
-                    if ui.small_button("Charger une famille…").on_hover_text("Fichier .famille.json : un nouveau type dans le projet").clicked() {
+                    if ui.small_button("Charger une famille…").on_hover_text("Fichier .bef : un nouveau type dans le projet").clicked() {
                         charger_famille = true;
                     }
                 });
@@ -554,7 +554,7 @@ impl Application {
         if nouveau_profil { self.ouvrir_profil(None); }
         if charger_profil { self.charger_profil_fichier(); }
         if charger_famille
-            && let Some(c) = rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file()
+            && let Some(c) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[echanges::enregistrement::EXTENSION_FAMILLE, "json"]).pick_file()
                 && let Err(e) = self.charger_famille_fichier(&c) {
                     self.error = Some(e);
                 }

@@ -363,7 +363,7 @@ mod tests {
     }
 
     fn projet() -> modele::Projet {
-        modele::Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap()
+        modele::Projet::lire_json(include_str!("../../../../samples/maison_native.bem")).unwrap()
     }
 
     /// Annulé avant l'écriture : le fichier existant n'est pas touché.

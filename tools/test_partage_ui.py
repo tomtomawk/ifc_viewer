@@ -20,8 +20,8 @@ exe=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else repo/'target/release/bim
 root=Path(tempfile.mkdtemp(prefix='bimedit-partage-ui-'))
 entree=root/'Maison.bimpartage'
 cache=root/'cache-local'
-source=root/'maison.modele.json'
-shutil.copyfile(repo/'samples/maison_native.modele.json',source)
+source=root/'maison.bem'
+shutil.copyfile(repo/'samples/maison_native.bem',source)
 empreinte_source=hashlib.sha256(source.read_bytes()).hexdigest()
 processus=[]
 journaux=[]

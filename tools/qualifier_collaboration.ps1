@@ -18,7 +18,7 @@ $local = Join-Path $CopieParent $id
 New-Item -ItemType Directory -Path $local -Force | Out-Null
 $a = Join-Path $local 'a.json'
 $b = Join-Path $local 'b.json'
-Copy-Item -LiteralPath "$PSScriptRoot\..\samples\maison_native.modele.json" -Destination $a
+Copy-Item -LiteralPath "$PSScriptRoot\..\samples\maison_native.bem" -Destination $a
 Copy-Item -LiteralPath $a -Destination $b
 foreach ($copie in @($a, $b)) {
     Invoke-Bim @('--collaboration', 'associer', $copie, $depot)

@@ -5,6 +5,21 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Instant, SystemTime};
 
+/// Extensions proposées pour les documents natifs JSON.
+pub const EXTENSION_PROJET: &str = "bem";
+pub const EXTENSION_FAMILLE: &str = "bef";
+
+pub fn extension_projet(chemin: &Path) -> bool {
+    chemin.extension().is_some_and(|e| {
+        e.eq_ignore_ascii_case(EXTENSION_PROJET) || e.eq_ignore_ascii_case("json")
+    })
+}
+
+pub fn fichier_famille(chemin: &Path) -> bool {
+    chemin.extension().is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION_FAMILLE))
+        || chemin.file_name().is_some_and(|n| n.to_string_lossy().to_ascii_lowercase().ends_with(".famille.json"))
+}
+
 #[derive(Clone)]
 pub struct SourceRvt {
     pub chemin: PathBuf,
@@ -57,8 +72,8 @@ pub fn ecrire_atomique(chemin: &Path, contenu: &[u8]) -> Result<(), String> {
 }
 
 pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(String)) -> Result<Bilan, String> {
-    if !sortie.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
-        return Err("La destination doit être un fichier .modele.json ou .json.".into());
+    if !extension_projet(sortie) {
+        return Err("La destination doit être un fichier .bem ou .json.".into());
     }
     if sortie.canonicalize().ok().as_ref() == Some(&source.chemin) {
         return Err("Le fichier Revit source ne peut pas être remplacé.".into());
@@ -84,7 +99,7 @@ pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(Stri
 
 /// Valide et remplace un fichier natif sans écriture partielle.
 pub fn enregistrer_natif(p: &Projet, chemin: &Path) -> Result<(), String> {
-    if !chemin.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) {return Err("Un projet natif doit être enregistré dans un fichier .json.".into());}
+    if !extension_projet(chemin) {return Err("Un projet natif doit être enregistré dans un fichier .bem ou .json.".into());}
     p.verifier()?;
     let json=p.json()?;
     Projet::lire_json(&json)?;
@@ -161,6 +176,23 @@ pub fn effacer_recuperation(chemin: &Path) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn projet_bem_et_famille_bef() {
+        let dir = dossier();
+        let chemin = dir.join("Maison.BEM");
+        let projet = Projet::nouveau("Maison");
+        enregistrer_natif(&projet, &chemin).unwrap();
+        let relu = Projet::lire_json(&std::fs::read_to_string(&chemin).unwrap()).unwrap();
+        assert_eq!(relu.identite, projet.identite);
+        assert!(extension_projet(Path::new("Maison.modele.json")));
+        assert!(!extension_projet(Path::new("Fenêtre.bef")));
+        assert!(fichier_famille(Path::new("Fenêtre.BEF")));
+        assert!(fichier_famille(Path::new("Fenêtre.famille.json")));
+        assert!(!fichier_famille(Path::new("Maison.bem")));
+        std::fs::remove_file(chemin).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
+
     /// L'échec d'une copie de récupération écrite en arrière-plan est rendu à
     /// l'interface, une seule fois.
     #[test]
@@ -189,7 +221,7 @@ mod tests {
         let source = SourceRvt::ouvrir(&entree).unwrap();
         assert!(enregistrer_rvt(&source,&entree,&|_|{}).is_err());
         std::fs::write(&entree,b"source modifiee sur disque").unwrap();
-        let sortie = p.join("projet.modele.json");
+        let sortie = p.join("projet.bem");
         std::fs::write(&sortie,b"ancienne sauvegarde").unwrap();
         assert!(enregistrer_rvt(&source,&sortie,&|_|{}).unwrap_err().contains("changé"));
         assert_eq!(std::fs::read(&sortie).unwrap(),b"ancienne sauvegarde");
@@ -202,7 +234,7 @@ mod tests {
         if !entree.exists() { eprintln!("fichier d'essai absent : {}",entree.display()); return; }
         let source = SourceRvt::ouvrir(&entree).unwrap();
         let p = dossier();
-        let sortie = p.join("projet.modele.json");
+        let sortie = p.join("projet.bem");
         std::fs::write(&sortie,b"ancienne sauvegarde").unwrap();
         let bilan = enregistrer_rvt(&source,&sortie,&|_|{}).unwrap();
         assert_eq!(bilan.murs,1);

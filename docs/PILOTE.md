@@ -74,15 +74,15 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
 
 ## Fichiers et sorties sans boîte de dialogue
 
-- `nouveau {"chemin":"C:/travail/projet.modele.json","nom":"Projet"}` : crée et
+- `nouveau {"chemin":"C:/travail/projet.bem","nom":"Projet"}` : crée et
   ouvre un nouveau document, conserve les précédents ; refuse une destination existante.
 - `ouvrir <chemin>` : IFC, RVT/RFA/RTE, JSON natif ou `.bimpartage` ; attend le chargement.
 - `fermer [abandonner]` : ferme le document ; modifications non enregistrées refusées
   sauf abandon explicite. Refuse une opération en cours.
-- `importer {"source":"C:/source.ifc","sortie":"C:/projet.modele.json"}` : lance
+- `importer {"source":"C:/source.ifc","sortie":"C:/projet.bem"}` : lance
   la conversion dans un nouveau document natif. Consulter `etat.chargement` jusqu'à
   false, puis `erreur_chargement`. Refuse une destination existante.
-- `enregistrer [chemin.modele.json]` : enregistrer/enregistrer sous ; un RVT démarre
+- `enregistrer [chemin.bem]` : enregistrer/enregistrer sous ; un RVT démarre
   une conversion suivie dans `etat.enregistrement`. Une copie collaborative garde son chemin.
 - `exporter <chemin.svg>` ; `exporter_pdf <chemin.pdf>` : dessin de la vue active.
 - `exporter_ifc <chemin.ifc>` : projet natif en IFC4.

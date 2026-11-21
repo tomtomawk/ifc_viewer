@@ -85,7 +85,7 @@ fn attacher_ajoute_les_toits_et_supprimer_ne_detache_que_le_toit_vise() {
     use commandes::{Commande, Execution};
 
     let mut p = modele::Projet::lire_json(include_str!(
-        "../../../samples/maison_native.modele.json"
+        "../../../samples/maison_native.bem"
     )).unwrap();
     let mur = "etage-m0".to_owned();
     let toit_initial = "toiture".to_owned();

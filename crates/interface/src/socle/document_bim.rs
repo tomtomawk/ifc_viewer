@@ -2,6 +2,7 @@
 //! exécution des commandes (`executer_bim`) ; interface et pilote utilisent les mêmes transactions.
 
 use crate::*;
+use echanges::enregistrement::{EXTENSION_PROJET, extension_projet};
 use commandes::Execution;
 impl Application {
     pub(crate) fn parcourir_historique(&mut self, retablir: bool) {
@@ -82,16 +83,18 @@ impl Application {
         let Some((p, ancien)) = &self.natif else {
             return;
         };
+        let nom = ancien.file_stem().unwrap_or_default().to_string_lossy();
+        let nom = nom.strip_suffix(".modele").unwrap_or(&nom);
         let Some(mut chemin) = rfd::FileDialog::new()
             .set_title("Enregistrer sous")
-            .add_filter("Modèle natif", &["json"])
-            .set_file_name(ancien.file_name().unwrap_or_default().to_string_lossy())
+            .add_filter("Projet BIMedit", &[EXTENSION_PROJET])
+            .set_file_name(format!("{nom}.bem"))
             .save_file()
         else {
             return;
         };
         if chemin.extension().is_none() {
-            chemin.set_extension("modele.json");
+            chemin.set_extension(EXTENSION_PROJET);
         }
         match echanges::enregistrement::enregistrer_natif(p, &chemin) {
             Ok(()) => {
@@ -144,14 +147,14 @@ impl Application {
         let nom = source.file_stem().unwrap_or_default().to_string_lossy();
         let Some(mut sortie) = rfd::FileDialog::new()
             .set_title("Destination du projet natif")
-            .set_file_name(format!("{nom}.modele.json"))
-            .add_filter("Modèle natif", &["json"])
+            .set_file_name(format!("{nom}.bem"))
+            .add_filter("Projet BIMedit", &[EXTENSION_PROJET])
             .save_file()
         else {
             return;
         };
         if sortie.extension().is_none() {
-            sortie.set_extension("modele.json");
+            sortie.set_extension(EXTENSION_PROJET);
         }
         self.importer_natif(source, sortie, ctx);
     }
@@ -177,11 +180,8 @@ impl Application {
                     if source.canonicalize().ok() == sortie.canonicalize().ok() && sortie.exists() {
                         return Err("La source ne peut pas être remplacée.".into());
                     }
-                    if !sortie
-                        .extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("json"))
-                    {
-                        return Err("Choisissez une destination .json.".into());
+                    if !extension_projet(&sortie) {
+                        return Err("Choisissez une destination .bem ou .json.".into());
                     }
                     let (p, mesures) = if is_revit_file(&source) {
                         echanges::depuis_rvt::convertir(&source, &progress)?

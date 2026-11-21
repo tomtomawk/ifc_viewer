@@ -9,7 +9,7 @@ fn importe() -> Projet {
     depuis_ifc::convertir(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4_murs.ifc")), &|_| {}).unwrap().0
 }
 fn maison() -> Projet {
-    Projet::lire_json(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json"))).unwrap()
+    Projet::lire_json(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem"))).unwrap()
 }
 fn commande(p: Projet, decalage: [f64; 3]) -> Commande {
     serde_json::from_value(serde_json::json!({"action": "fusionner", "projet": serde_json::to_value(&p).unwrap(), "decalage": decalage})).unwrap()

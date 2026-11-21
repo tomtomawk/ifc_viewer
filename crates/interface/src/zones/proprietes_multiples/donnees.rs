@@ -219,7 +219,7 @@ mod tests {
 
     fn projet() -> modele::Projet {
         modele::Projet::lire_json(include_str!(
-            "../../../../../samples/maison_native.modele.json"
+            "../../../../../samples/maison_native.bem"
         ))
         .unwrap()
     }

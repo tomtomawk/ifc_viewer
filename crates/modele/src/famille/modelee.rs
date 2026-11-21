@@ -1100,7 +1100,7 @@ impl FamilleModelee {
     }
 }
 
-/// Fichier de famille (`.famille.json`), à la manière d'un `.rfa` : la famille et les
+/// Fichier de famille (`.bef`), à la manière d'un `.rfa` : la famille et les
 /// cotes de son type, à charger dans un autre projet.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FichierFamille {

@@ -1,4 +1,5 @@
 //! Documents famille : ouverture, onglets, enregistrement, pilotage.
+use echanges::enregistrement::EXTENSION_FAMILLE;
 use super::*;
 
 impl Application {
@@ -663,9 +664,16 @@ impl Application {
     /// Enregistre la famille de l'éditeur dans un fichier.
     pub(crate) fn enregistrer_famille_fichier(&mut self, chemin: &std::path::Path) -> Result<(), String> {
         let ed = self.famille.as_mut().ok_or("Éditeur fermé.")?;
+        let mut chemin = chemin.to_path_buf();
+        if chemin.extension().is_none() {
+            chemin.set_extension(EXTENSION_FAMILLE);
+        }
+        if !chemin.extension().is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION_FAMILLE) || e.eq_ignore_ascii_case("json")) {
+            return Err("Une famille BIMedit doit être enregistrée dans un fichier .bef ou .json.".into());
+        }
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
-        echanges::enregistrement::ecrire_atomique(chemin, ed.fichier().json()?.as_bytes())?;
-        ed.document_famille.chemin_fichier = Some(chemin.to_path_buf());
+        echanges::enregistrement::ecrire_atomique(&chemin, ed.fichier().json()?.as_bytes())?;
+        ed.document_famille.chemin_fichier = Some(chemin.clone());
         ed.marquer_enregistree();
         self.status = format!("Famille enregistrée : {}", chemin.display());
         Ok(())
@@ -754,10 +762,10 @@ impl Application {
         Ok(id)
     }
 
-    /// Charger une famille : choix d'un fichier `.famille.json`, chargé dans le projet ;
+    /// Charger une famille : choix d'un fichier `.bef`, chargé dans le projet ;
     /// `placer` : le nouveau type devient celui des prochaines ouvertures.
     pub(crate) fn charger_famille_dialogue(&mut self, placer: bool) -> Result<(), String> {
-        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille", &["json"]).set_title("Charger une famille").pick_file() else { return Ok(()) };
+        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE, "json"]).set_title("Charger une famille").pick_file() else { return Ok(()) };
         let id = self.charger_famille_fichier(&chemin)?;
         let Some(t) = self.natif.as_ref().and_then(|(p, _)| p.types_ouvertures.iter().find(|t| t.id == id)).cloned() else { return Ok(()) };
         if placer {
@@ -788,12 +796,12 @@ impl Application {
             }
             ActionFamille::Enregistrer | ActionFamille::EnregistrerSous => {
                 let nom = self.famille.as_ref().map_or_else(String::new, |e| e.nom.trim().to_string());
-                match rfd::FileDialog::new().add_filter("Famille", &["json"]).set_file_name(format!("{nom}.famille.json")).save_file() {
+                match rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_file_name(format!("{nom}.bef")).save_file() {
                     Some(c) => self.enregistrer_famille_fichier(&c),
                     None => Ok(()),
                 }
             }
-            ActionFamille::Ouvrir => match rfd::FileDialog::new().add_filter("Famille", &["json"]).pick_file() {
+            ActionFamille::Ouvrir => match rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE, "json"]).pick_file() {
                 Some(c) => self.ouvrir_famille_fichier(&c),
                 None => Ok(()),
             },
@@ -843,7 +851,7 @@ impl Application {
                 if autonome {
                     let chemin = self.famille.as_ref().and_then(|e| e.document_famille.chemin_fichier.clone()).or_else(|| {
                         let nom = self.famille.as_ref().map_or("Famille", |e| e.nom.as_str());
-                        rfd::FileDialog::new().add_filter("Famille", &["json"]).set_file_name(format!("{nom}.famille.json")).save_file()
+                        rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_file_name(format!("{nom}.bef")).save_file()
                     });
                     if let Some(chemin) = chemin {
                         match self.enregistrer_famille_fichier(&chemin) {

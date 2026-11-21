@@ -1,6 +1,6 @@
 # Éditeur BIM natif
 
-Le document `.modele.json` reste la source de vérité. Les ajouts de cette itération
+Le document `.bem` reste la source de vérité. Les ajouts de cette itération
 utilisent le format v0. Aucun fichier RVT n'est écrit. Pendant l'alpha, le genre
 d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
 
@@ -10,7 +10,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   fichier de famille. Le profil s'ouvre dans l'éditeur commun des familles, sur sa
   vue en plan : la section est la polyligne fermée du plan (choisie dans les
   propriétés s'il y en a plusieurs), pilotée par les plans, cotes et paramètres de
-  la famille. Charger dans le projet, ou enregistrer un fichier `.famille.json`. Le
+  la famille. Charger dans le projet, ou enregistrer un fichier `.bef`. Le
   gabarit embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
   Ces familles de profils sont éditables indépendamment ; un type de poutre peut
   en prendre une comme section (`TypePoutre::profil`).
@@ -361,7 +361,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   « Nouvelle famille… » sous le sélecteur de type (gabarit Porte ou Fenêtre selon
   l'onglet), ou depuis la rubrique Familles de l'arborescence du projet (Portes,
   Fenêtres : clic pour ouvrir ; « Nouvelle porte… », « Nouvelle fenêtre… »,
-  « Charger une famille… » pour un fichier `.famille.json`). L'éditeur s'ouvre dans
+  « Charger une famille… » pour un fichier `.bef`). L'éditeur s'ouvre dans
   un onglet « Famille … » (« * » : modifications non chargées dans le projet ;
   plusieurs familles s'ouvrent chacune dans son onglet, rouvrir un type déjà ouvert
   active son onglet) : le
@@ -665,7 +665,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   schéma, chaque géométrie et la présence du site, des types, de `Pset_WallCommon`
   et de `Qto_WallBaseQuantities`.
 
-L'exemple autonome `samples/maison_native.modele.json` contient deux niveaux, huit
+L'exemple autonome `samples/maison_native.bem` contient deux niveaux, huit
 murs, des ouvertures, deux planchers, une toiture, des murs attachés, des annotations,
 une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvrent
 également les conversions et les murs courbes.
@@ -779,7 +779,7 @@ editer {"action":"attacher","ids":["etage-m0"],"toiture":"toiture"}
 editer {"action":"supprimer","ids":["porte"]}
 annuler
 retablir
-enregistrer /chemin/projet.modele.json
+enregistrer /chemin/projet.bem
 ```
 
 Une deuxième commande `attacher` avec une autre toiture ajoute une jonction.
@@ -794,11 +794,11 @@ identifiant existant = modification.
 Sans fenêtre, les mêmes documents peuvent être traités en ligne de commande :
 
 ```sh
-cargo run -- --editer projet.modele.json commande.json sortie.modele.json
-cargo run -- --export-ifc projet.modele.json sortie.ifc
-cargo run -- --export-vue projet.modele.json plan-rdc plan.pdf
-cargo run -- --export-feuille projet.modele.json A01 feuille.pdf
-cargo run -- --quantites projet.modele.json quantites.csv Murs
+cargo run -- --editer projet.bem commande.json sortie.bem
+cargo run -- --export-ifc projet.bem sortie.ifc
+cargo run -- --export-vue projet.bem plan-rdc plan.pdf
+cargo run -- --export-feuille projet.bem A01 feuille.pdf
+cargo run -- --quantites projet.bem quantites.csv Murs
 ```
 
 La sortie de dessin accepte `.svg` ou `.pdf`. `--editer` remplace le fichier d'entrée
@@ -830,8 +830,8 @@ segments, une valeur non finie, un arc entre deux sommets confondus. La forme `a
 
 ```sh
 cargo test --locked
-cargo run -- --export-ifc samples/maison_native.modele.json target/maison.ifc
-cargo run -- --export-feuille samples/maison_native.modele.json A01 target/maison.pdf
+cargo run -- --export-ifc samples/maison_native.bem target/maison.ifc
+cargo run -- --export-feuille samples/maison_native.bem A01 target/maison.pdf
 python tools/valider_ifc.py target/maison.ifc
 ```
 

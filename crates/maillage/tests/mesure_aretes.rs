@@ -26,7 +26,7 @@ fn empreinte(chemin: &str) {
 #[test]
 #[ignore]
 fn empreintes() {
-    for f in ["samples/ilot_demo/ilot_demo.modele.json", "samples/immeuble_essai_murs/immeuble_essai_murs.modele.json", "samples/maison_native.modele.json"] {
+    for f in ["samples/ilot_demo/ilot_demo.bem", "samples/immeuble_essai_murs/immeuble_essai_murs.bem", "samples/maison_native.bem"] {
         empreinte(&format!("{}/../../{f}", env!("CARGO_MANIFEST_DIR")));
     }
 }

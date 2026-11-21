@@ -1,5 +1,6 @@
 //! Ouverture, chargement, enregistrement et onglets de documents.
 use crate::*;
+use echanges::enregistrement::{EXTENSION_FAMILLE, EXTENSION_PROJET, extension_projet, fichier_famille};
 
 impl Application {
     /// Identifiants de scène masqués par les filtres temporaires de contexte.
@@ -13,12 +14,12 @@ impl Application {
     }
     pub(crate) fn open(&mut self, path: PathBuf, ctx: &egui::Context) {
         if crate::outils::modeliser::liens::est_ifc(&path) { self.error = Some(crate::outils::modeliser::liens::IFC_NON_OUVERT.into()); return; }
-        if path.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().ends_with(".famille.json")) {
+        if fichier_famille(&path) {
             if let Err(e) = self.ouvrir_famille_fichier(&path) { self.error = Some(e); }
             return;
         }
         let recuperation=echanges::enregistrement::chemin_recuperation(&path);
-        let restaurer=if path.extension().is_some_and(|e|e.eq_ignore_ascii_case("json")) && recuperation.exists() {
+        let restaurer=if extension_projet(&path) && recuperation.exists() {
             match rfd::MessageDialog::new().set_title("Récupération du projet").set_description("Une copie de récupération existe. Restaurer les modifications non enregistrées ?").set_buttons(rfd::MessageButtons::YesNoCancel).show() {
                 rfd::MessageDialogResult::Yes=>true,
                 rfd::MessageDialogResult::No=>false,
@@ -51,7 +52,7 @@ impl Application {
                 if ::collaboration::partage::extension_partage(&path) {
                     let res=Self::charger_partage(&path,&progress);
                     let _=tx.send(LoadMsg::Partage(res,None));
-                } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
+                } else if extension_projet(&path) {
                     match std::fs::read_to_string(if restaurer{&recuperation}else{&path}).map_err(|e|format!("Lecture impossible : {e}")) {
                         Ok(json) if ::collaboration::partage::contenu_partage(&json)=>{let _=tx.send(LoadMsg::Partage(Self::charger_partage(&path,&progress),None));},
                         texte=>{
@@ -333,9 +334,9 @@ impl Application {
     pub(crate) fn creer_projet(&mut self) {
         if self.partage_en_cours {self.error=Some("Attendre la fin de la création du partage".into());return;}
         let Some(mut chemin) = rfd::FileDialog::new().set_title("Nouveau projet natif v0")
-            .add_filter("Modèle natif v0", &["json"]).set_file_name("Nouveau projet.modele.json").save_file() else { return };
+            .add_filter("Projet BIMedit", &[EXTENSION_PROJET]).set_file_name("Nouveau projet.bem").save_file() else { return };
         if chemin.extension().is_none() {
-            chemin.set_extension("modele.json");
+            chemin.set_extension(EXTENSION_PROJET);
         }
         let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
         let projet = modele::Projet::depuis_gabarit(&nom, &modele::gabarit::actif());
@@ -440,9 +441,9 @@ impl Application {
             None => {
                 let nom = source.chemin.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Projet".into());
                 let dialogue = rfd::FileDialog::new().set_title("Enregistrer le projet Revit en modèle natif v0")
-                    .add_filter("Modèle natif v0", &["json"]).set_file_name(format!("{nom}.modele.json"));
+                    .add_filter("Projet BIMedit", &[EXTENSION_PROJET]).set_file_name(format!("{nom}.bem"));
                 let Some(mut p) = dialogue.save_file() else { return };
-                if p.extension().is_none() { p.set_extension("modele.json"); }
+                if p.extension().is_none() { p.set_extension(EXTENSION_PROJET); }
                 p
             }
         };
@@ -501,9 +502,10 @@ impl Application {
 
     pub(crate) fn open_dialog(&mut self, ctx: &egui::Context) {
         if let Some(p) = rfd::FileDialog::new()
-             .add_filter("Projet BIMedit et Revit", &["bimpartage", "json", "rvt", "rfa", "rte", "rft"])
+             .add_filter("Documents BIMedit et Revit", &["bimpartage", EXTENSION_PROJET, EXTENSION_FAMILLE, "json", "rvt", "rfa", "rte", "rft"])
             .add_filter("Projet partagé BIMedit", &["bimpartage"])
-            .add_filter("Modèle natif", &["json"])
+            .add_filter("Projet BIMedit", &[EXTENSION_PROJET, "json"])
+            .add_filter("Famille BIMedit", &[EXTENSION_FAMILLE, "json"])
             .add_filter("Revit (murs et métadonnées)", &["rvt", "rfa", "rte", "rft"])
             .pick_file()
         {

@@ -2,7 +2,7 @@
 #[test]
 #[ignore]
 fn mesurer() {
-    let p = modele::Projet::lire_json(include_str!("../../../samples/immeuble_essai_murs/immeuble_essai_murs.modele.json")).unwrap();
+    let p = modele::Projet::lire_json(include_str!("../../../samples/immeuble_essai_murs/immeuble_essai_murs.bem")).unwrap();
     let t = std::time::Instant::now();
     let json = p.json().unwrap();
     eprintln!("instantané : {} octets, {:.1} ms", json.len(), t.elapsed().as_secs_f64() * 1e3);

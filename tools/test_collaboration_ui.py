@@ -62,7 +62,7 @@ try:
         with socket.socket() as sonde:
             sonde.bind(("127.0.0.1", port))
         copie = essai / f"poste-{n}.json"
-        shutil.copyfile(racine / "samples/maison_native.modele.json", copie)
+        shutil.copyfile(racine / "samples/maison_native.bem", copie)
         journal = open(essai / f"poste-{n}.log", "w", encoding="utf-8")
         journaux.append(journal)
         env = dict(os.environ, BIMEDIT_PORT=str(port), BIMEDIT_ARRIERE_PLAN=os.environ.get("BIMEDIT_ARRIERE_PLAN", "1"))

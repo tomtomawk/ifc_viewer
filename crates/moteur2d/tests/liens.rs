@@ -2,7 +2,7 @@
 //! la feuille redevient celle du projet seul.
 #![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 fn maison() -> modele::Projet {
-    modele::Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap()
+    modele::Projet::lire_json(include_str!("../../../samples/maison_native.bem")).unwrap()
 }
 
 #[test]

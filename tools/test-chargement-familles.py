@@ -40,7 +40,7 @@ def run(exe):
                         if processus.poll() is not None or time.monotonic() > limite:
                             raise RuntimeError("L'instance de test ne démarre pas")
                         time.sleep(0.2)
-                commande("nouveau", {"chemin": str(root / "Projet.modele.json")})
+                commande("nouveau", {"chemin": str(root / "Projet.bem")})
                 composant = commande("famille_nouvelle", "composant")["fichier"]
                 profondeur_initiale = composant["profondeur"]
                 composant["profondeur"] = 750.0
@@ -48,6 +48,11 @@ def run(exe):
                 commande("annuler")
                 assert commande("famille_document")["fichier"]["profondeur"] == profondeur_initiale
                 commande("retablir")
+                assert commande("famille_document")["fichier"]["profondeur"] == 750.0
+                enregistree = root / "Composant.bef"
+                commande("famille_enregistrer", str(enregistree))
+                commande("famille_fermer", "abandonner")
+                commande("ouvrir", str(enregistree))
                 assert commande("famille_document")["fichier"]["profondeur"] == 750.0
                 commande("famille_fermer", "abandonner")
                 fenetre = commande("famille_nouvelle", "fenetre")["fichier"]
@@ -62,7 +67,7 @@ def run(exe):
                     fichier = json.loads(json.dumps(base))
                     fichier["nom"] = "Import " + categorie
                     fichier["famille"]["categorie"] = categorie
-                    chemin = root / (categorie + ".famille.json")
+                    chemin = root / (categorie + ".bef")
                     chemin.write_text(json.dumps(fichier, ensure_ascii=False), encoding="utf-8")
                     commande("famille_charger", str(chemin))
                 apres = commande("projet_natif")["projet"]

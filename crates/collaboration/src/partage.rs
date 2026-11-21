@@ -229,7 +229,7 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
         .collect();
     candidats.sort_by_key(|e| std::cmp::Reverse(e.metadata().and_then(|m| m.modified()).ok()));
     for c in candidats {
-        let local = c.path().join("projet.modele.json");
+        let local = c.path().join("projet.bem");
         if !local.exists() {
             continue;
         }
@@ -261,7 +261,7 @@ pub fn ouvrir(entree: &Path, cache: &Path) -> Resultat<(Projet, PathBuf, Session
     let p = e.projection()?;
     let dir = root.join(uuid());
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
-    let local = dir.join("projet.modele.json");
+    let local = dir.join("projet.bem");
     let mut s = Session::ouvrir(&p, local.clone(), central)?;
     s.copie.base = e;
     s.copie.partage = Some(entree.clone());
@@ -280,7 +280,7 @@ mod tests {
         p
     }
     fn projet_test() -> Projet {
-        Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap()
+        Projet::lire_json(include_str!("../../../samples/maison_native.bem")).unwrap()
     }
     #[test]
     fn partager_ouvrir_deux_copies_et_reutiliser_sans_ecraser() {

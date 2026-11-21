@@ -11,7 +11,7 @@ pub struct ChoixOuverture {
     pub type_choisi: Option<(Option<String>, GenreOuverture)>,
     /// Famille du type à ouvrir dans l'éditeur.
     pub editer: Option<(String, GenreOuverture)>,
-    /// Charger une famille depuis un fichier (`.famille.json`).
+    /// Charger une famille depuis un fichier (`.bef`).
     pub charger: bool,
 }
 

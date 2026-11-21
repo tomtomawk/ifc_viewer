@@ -233,7 +233,7 @@ fn polyligne_segments_d_arc() {
 /// Deux exports de la même feuille donnent le même SVG (comparaisons de fichiers, tests).
 #[test]
 fn svg_feuille_deterministe() {
-    let p = Projet::lire_json(include_str!("../../../samples/maison_native.modele.json")).unwrap();
+    let p = Projet::lire_json(include_str!("../../../samples/maison_native.bem")).unwrap();
     let f = &p.feuilles[0];
     let premier = svg_feuille(&p, f).unwrap();
     for _ in 0..4 {
@@ -248,7 +248,7 @@ fn svg_feuille_deterministe() {
 /// que son DXF, dans les mêmes calques.
 #[test]
 fn dwg_feuille_relue() {
-    let p = modele::Projet::lire_json(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap()).unwrap();
+    let p = modele::Projet::lire_json(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")).unwrap()).unwrap();
     let f = p.feuilles.first().expect("une feuille dans l'exemple");
     let dxf = moteur2d::dxf_feuille(&p, f).unwrap();
     let dwg = moteur2d::dwg_feuille(&p, f).unwrap();

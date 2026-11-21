@@ -18,13 +18,13 @@ texte Yrs, conflits, instantanés, récupération et qualification NAS à deux m
 Pour essayer un projet complet :
 
 ```sh
-cargo run --release -- samples/maison_native.modele.json
+cargo run --release -- samples/maison_native.bem
 ```
 
 ## Utilisation
 
 ```
-cargo run --release -- chemin\vers\projet.modele.json
+cargo run --release -- chemin\vers\projet.bem
 cargo run --release -- --stats chemin\vers\fichier.ifc   # mode console : comptages, volumes, entités ignorées
 cargo run --release -- chemin\vers\projet.rvt
 cargo run --release -- --stats chemin\vers\projet.rvt    # métadonnées, niveaux, éléments par catégorie, volumes, causes d'échec
@@ -35,14 +35,14 @@ cargo run --release -- --modele chemin\vers\projet.rvt     # conversion vers le 
 Ouverture aussi possible par Ctrl+O ou par glisser-déposer.
 
 **Début → Nouveau…** (Ctrl+N) crée et ouvre un projet natif v0 vide
-(`.modele.json`), selon [le schéma du modèle](docs/MODELE.md).
+(`.bem`), selon [le schéma du modèle](docs/MODELE.md).
 **Sortie → Enregistrer** (Ctrl+S) l'enregistre. Les niveaux et murs droits natifs
 sont affichés et peuvent être enregistrés puis rouverts.
 
 Avec un fichier Revit ouvert, **Sortie → Enregistrer** (Ctrl+S) propose un fichier
-`.modele.json` au premier enregistrement, puis réutilise cette destination pour
+`.bem` au premier enregistrement, puis réutilise cette destination pour
 ce document. La conversion v0 s'exécute en arrière-plan, écrit aussi le rapport
-`.modele.rapport.md` et conserve le RVT et ses vues ouverts. Un RVT modifié sur
+`.rapport.md` et conserve le RVT et ses vues ouverts. Un RVT modifié sur
 disque doit être rouvert avant conversion. Le fichier RVT source reste intact.
 
 Le ruban regroupe les commandes dans Début, Modéliser, Modifier, Documenter et Sortie ; tous les bandeaux ont la même hauteur et des icônes (Début : Nouveau, Ouvrir, Fermer, Importer, Fiche Revit, Options ; Sortie : Enregistrer, Enregistrer sous, Dessin SVG, Dessin PDF, IFC4, Jeu PDF (jeu de feuilles en un PDF, une page par feuille) ; Documenter, groupe Documents : Feuilles, Nomenclatures).
@@ -259,7 +259,7 @@ la réadaptant l'implémentation du module `atmosphere` de
 [Bevy](https://github.com/bevyengine/bevy) 0.20, distribué sous licence MIT ou
 Apache 2.0 (Copyright © Bevy Contributors).
 
-Projet de démonstration : `samples/ilot_demo/ilot_demo.modele.json` (îlot à Rennes :
+Projet de démonstration : `samples/ilot_demo/ilot_demo.bem` (îlot à Rennes :
 rue arborée, logements R+3 en brique avec vitrine, bureaux R+4 à mur-rideau sur parvis,
 cour-jardin, trois maisons avec jardins ; vues caméra « rue », « cour » et « aérienne » ;
 textures dans `textures/`, en chemins relatifs).

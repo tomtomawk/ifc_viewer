@@ -11,7 +11,7 @@ pub fn executer(args: &[String]) -> Option<Result<(), String>> {
         return None;
     }
     Some((|| {
-        let entree = args.get(1).ok_or("Fichier .modele.json requis.")?;
+        let entree = args.get(1).ok_or("Fichier projet .bem requis.")?;
         let p = Projet::lire_json(&std::fs::read_to_string(entree).map_err(|e| e.to_string())?)?;
         p.verifier()?;
         if commande == "--mesurer-scene" {

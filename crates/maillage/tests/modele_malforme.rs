@@ -69,7 +69,7 @@ fn modeles_mutes_sans_panique() {
     }));
     let mut a = Alea(0x51_7cc1_b727_220a);
     let (mut lus, mut verifies, mut scenes) = (0, 0, 0);
-    for nom in ["maison_native.modele.json", "ilot_demo/Terreplein2.modele.json"] {
+    for nom in ["maison_native.bem", "ilot_demo/Terreplein2.modele.json"] {
         let texte = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/").to_string() + nom).unwrap();
         let source: Value = serde_json::from_str(&texte).unwrap();
         let n = compter(&source);

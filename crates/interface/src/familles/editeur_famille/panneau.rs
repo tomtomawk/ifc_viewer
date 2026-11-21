@@ -16,7 +16,7 @@ impl Application {
                 C::new("nouveau_type", "Nouveau type", I::Nouveau, if placement { "Crée un type avec cette famille ; il sert au prochain placement" } else { "Crée un type avec cette famille et l'affecte à l'ouverture" }, self.natif.is_some()),
             ];
             let fichier = vec![
-                C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Fichier de famille .famille.json, à charger dans un autre projet", true),
+                C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Fichier de famille .bef, à charger dans un autre projet", true),
                 C::new("ouvrir", "Ouvrir", I::Ouvrir, "Ouvrir un fichier de famille dans l'éditeur", true),
             ];
             let mut action = None;

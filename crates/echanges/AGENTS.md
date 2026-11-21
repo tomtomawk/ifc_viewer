@@ -19,7 +19,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 | `export_ifc/{proprietes,quantites}.rs` | `Pset_*Common` (seulement les valeurs connues du modèle) ; `Qto_*BaseQuantities` pris aux calculs de `modele` des nomenclatures, aucun calcul propre |
 | `export_ifc/importes.rs` | éléments importés : classe IFC d'origine (liste sûre) ou proxy, jeux lus à l'import réécrits, matériaux, couleur ; jeux lus d'une pièce (`jeux_piece`) |
 | `export_ifc/tests.rs` | relecture, hiérarchie, types, Pset, quantités = nomenclature, styles, couches relues par l'import |
-| `enregistrement.rs` | `enregistrer_natif`, `ecrire_atomique`, récupération, `SourceRvt`, `Bilan` |
+| `enregistrement.rs` | extensions natives `.bem` et `.bef`, `enregistrer_natif`, `ecrire_atomique`, récupération, `SourceRvt`, `Bilan` |
 | `rapport.rs` | `markdown` |
 
 `tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `import_proprietes.rs` : données des éléments importés et aller-retour IFC -> natif -> IFC ; `import_barres.rs` : poteaux et poutres convertis ; `import_espaces.rs` : espaces convertis en pièces, repli, aller-retour IFC ; `copies_guid.rs` : GlobalId uniques après copie d'éléments importés ; `fusion_ifc.rs` : IFC converti fusionné dans `maison_native` (`Commande::Fusionner`) ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
@@ -33,6 +33,6 @@ Import IFC ou Revit vers le modèle natif, export IFC, enregistrement atomique, 
 ```
 cargo test -p echanges --release
 cargo tree -p echanges   # aucune crate interne hors noyau, modele, ifc_base, formats (+ commandes, maillage, moteur2d en dev)
-cargo run --release -p bimedit -- --export-ifc samples/maison_native.modele.json target/maison.ifc
+cargo run --release -p bimedit -- --export-ifc samples/maison_native.bem target/maison.ifc
 python3 tools/valider_ifc.py --donnees target/maison.ifc   # ifcopenshell==0.9.0.post1, pytest
 ```

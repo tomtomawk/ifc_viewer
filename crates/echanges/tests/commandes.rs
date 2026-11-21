@@ -122,7 +122,7 @@ fn modifier_deplacer_copier_et_supprimer_une_coupe() {
 #[test]
 fn annotations_et_quadrillages_se_copient_et_se_deplacent() {
     let p = Projet::lire_json(
-        &std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.modele.json")).unwrap(),
+        &std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")).unwrap(),
     )
     .unwrap();
     let texte = p

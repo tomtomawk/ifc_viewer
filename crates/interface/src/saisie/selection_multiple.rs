@@ -212,7 +212,7 @@ mod tests {
     use super::*;
 
     fn projet() -> Projet {
-        let p = modele::Projet::lire_json(include_str!("../../../../samples/maison_native.modele.json")).unwrap();
+        let p = modele::Projet::lire_json(include_str!("../../../../samples/maison_native.bem")).unwrap();
         p.verifier().unwrap();
         p
     }

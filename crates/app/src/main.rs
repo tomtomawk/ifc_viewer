@@ -50,14 +50,14 @@ fn main() {
         };
         std::process::exit(modes::rvt_parametres::rvt_parametres(&PathBuf::from(path)));
     }
-    // Mode console : bimedit --modele fichier.rvt|.ifc [sortie.json]
+    // Mode console : bimedit --modele fichier.rvt|.ifc [sortie.bem]
     if args.first().map(|s| s.as_str()) == Some("--modele") {
         let Some(path) = args.get(1) else {
-            eprintln!("Usage : bimedit --modele <fichier.rvt|.rfa|.ifc> [sortie.json]");
+            eprintln!("Usage : bimedit --modele <fichier.rvt|.rfa|.ifc> [sortie.bem]");
             std::process::exit(2);
         };
         let entree = PathBuf::from(path);
-        let sortie = args.get(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("{path}.modele.json")));
+        let sortie = args.get(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(path).with_extension(echanges::enregistrement::EXTENSION_PROJET));
         std::process::exit(modes::modele::modele(entree, sortie));
     }
     // Mode console : bimedit --stats fichier.ifc
