@@ -12,6 +12,7 @@ Rôle : état et services de l'application autour de `Application` (défini avec
 | `soleil.rs` | lieu, date et heure du soleil, ombres portées en cascades (`soleil`), caméra de vue, mode piéton |
 | `navigation_vue.rs` | type de la vue active (`vue_3d`, `vue_en_plan`) et navigation à la souris (`glisser`, `voler`) |
 | `fenetre.rs` | seul module public : `lancer` (appelé par `app`), `arriere_plan`, `cadre_natif` ; `include_bytes!("../../assets/icone.png")` |
+| `presse_papiers.rs` | instantané des objets copiés, événements du presse-papiers et collage entre projets ou sur un niveau |
 | `parametres.rs` | paramètres personnels, raccourcis clavier |
 | `messages.rs` | messages centralisés sous le bandeau de dessin : `informer`, `signaler` (information, avertissement, erreur), `afficher_messages`, `consigne_vue`, `origine_consigne` ; journal (`Journal`, `suivre_messages` une fois par image, `bouton_journal`, commande `journal` du pilote). `error` et `status` restent écrits directement partout : le journal les relève, ne pas les remplacer par des appels |
 | `aides.rs` | aides communes (icônes, libellés, réticule) ; importé en glob par `lib.rs` |

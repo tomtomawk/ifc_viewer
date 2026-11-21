@@ -4,7 +4,7 @@
 use crate::socle::interne::*;
 use fusion::ExecutionFusion;
 
-mod fusion;
+pub(crate) mod fusion;
 
 /// Exécution des commandes de modélisation.
 pub(crate) trait ExecutionModeliser {

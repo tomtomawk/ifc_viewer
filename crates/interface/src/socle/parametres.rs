@@ -222,8 +222,26 @@ impl Application {
             .collect();
         let mut actions = Vec::new();
         let mut consommer = Vec::new();
+        let mut collage = None;
+        let presse_bim = !focus && !trace && !self.vol.actif && self.loading.is_none()
+            && self.natif.is_some() && !self.mode_famille();
         ctx.input(|i|{
             for (index,e) in i.events.iter().enumerate() {
+                if presse_bim {
+                    match e {
+                        egui::Event::Copy => {
+                            actions.push("copier_presse");
+                            consommer.push(index);
+                            continue;
+                        }
+                        egui::Event::Paste(texte) if Self::texte_est_selection_bim(texte) => {
+                            collage = Some(texte.clone());
+                            consommer.push(index);
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
                 if let egui::Event::Key{key,pressed:true,repeat,modifiers,..}=e {
                     // touche maintenue : seules les commandes du soleil se répètent (U, I)
                     if let Some((c,_))=catalogue.iter().find(|(c,r)| matches!(r,Raccourci::Touche{key:k,modifiers:m} if key==k && modifiers.matches_exact(*m))&&(!focus||c.categorie=="Fichiers")&&(!*repeat||c.id.starts_with("soleil_")))
@@ -303,6 +321,7 @@ impl Application {
         for action in actions {
             self.executer_raccourci(ctx, action);
         }
+        if let Some(texte) = collage { self.coller_presse(&texte); }
     }
 
     fn executer_raccourci(&mut self, ctx: &egui::Context, action: &str) {
@@ -318,7 +337,7 @@ impl Application {
             return;
         }
         match action {
-            "copier_presse" => self.memoriser_copie_niveau(self.selection_bim()),
+            "copier_presse" => self.copier_presse(ctx),
             "coller_niveau" => self.ouvrir_coller_niveau(),
             "nouveau" if self.loading.is_none() => self.creer_projet(),
             "ouvrir" => self.open_dialog(ctx),

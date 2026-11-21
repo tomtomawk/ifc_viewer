@@ -4,6 +4,7 @@
 pub mod alignement;
 pub mod composees;
 pub mod copier;
+pub mod presse_papiers;
 mod scinder_surface;
 pub mod supprimer;
 pub mod transformations;

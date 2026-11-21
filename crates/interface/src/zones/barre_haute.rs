@@ -222,8 +222,7 @@ impl Application {
             match action {
                 Some(crate::zones::ruban::Outil::ModifierContour) => self.commencer_edition_contour(),
                 Some(crate::zones::ruban::Outil::CopierNiveau) => {
-                    self.memoriser_copie_niveau(ids);
-                    self.ouvrir_coller_niveau();
+                    if self.memoriser_copie_niveau(ids) { self.ouvrir_coller_niveau(); }
                 }
                 Some(crate::zones::ruban::Outil::CreerIdentique) => {
                     if let Err(e) = self.creer_identique() { self.error = Some(e); }

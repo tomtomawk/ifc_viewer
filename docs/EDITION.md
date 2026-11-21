@@ -246,6 +246,11 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   quadrillages se sélectionnent aussi en plan, ainsi que les annotations dans leur
   vue ; en coupe et en élévation, les niveaux et les limites de propriété se
   sélectionnent sur leur trait ; leurs propriétés sont accessibles dans Modifier.
+  **Copier-coller entre projets natifs.** Sélectionner les objets, faire Ctrl+C,
+  ouvrir le fichier de destination et faire Ctrl+V. Les copies gardent leur position
+  dans le repère du projet et les types nécessaires sont repris. Pour les dessins
+  et les annotations, ouvrir la vue 2D de destination avant de coller. Dans le
+  fichier d'origine, Ctrl+V propose toujours le niveau de destination.
   **Présélection et Tab** (comme Revit) : au survol, l'élément qui serait pris a ses
   arêtes vues et ses contours coupés surlignés en bleu, sans teinte de ses surfaces
   (pas dans le style Réaliste) ; s'il y en a plusieurs sous le curseur, une bulle « nom · 1/3 ·

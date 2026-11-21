@@ -474,7 +474,7 @@ pub struct Application {
     nom_position_plan: Option<String>,
     /// Nom de la vue native ouverte en cours de saisie (identifiant, texte).
     nom_vue: Option<(String, String)>,
-    copie_presse: Option<(usize,Vec<String>)>,
+    copie_presse: Option<crate::socle::presse_papiers::CopiePresse>,
     copie_niveau: Option<String>,
     /// Début de la ligne de coupe en cours de tracé (mm).
     coupe_depart: Option<[f64; 2]>,

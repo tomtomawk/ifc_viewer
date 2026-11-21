@@ -215,39 +215,6 @@ impl Application {
         }
     }
 
-    pub(crate) fn memoriser_copie_niveau(&mut self,ids:Vec<String>) {
-        if ids.is_empty() {self.status="Sélectionnez les éléments à copier.".into();return;}
-        self.copie_presse=Some((self.document_actif,ids));
-        self.status="Sélection copiée : Ctrl+V pour choisir le niveau de destination.".into();
-    }
-    pub(crate) fn ouvrir_coller_niveau(&mut self) {
-        if self.copie_presse.as_ref().is_none_or(|(document,_)|*document!=self.document_actif) {
-            self.status="Copiez d'abord une sélection dans ce projet.".into();return;
-        }
-        self.copie_niveau=Some(String::new());
-    }
-    pub(crate) fn fenetre_coller_niveau(&mut self,ctx:&egui::Context) {
-        let Some(mut niveau)=self.copie_niveau.take() else{return};
-        let Some((document,ids))=self.copie_presse.clone() else{return};
-        if document!=self.document_actif {return;}
-        let Some((p,_))=&self.natif else{return};
-        let niveaux:Vec<_>=p.niveaux.iter().map(|n|(n.id.clone(),n.nom.clone(),n.altitude)).collect();
-        let mut ouvert=true;let mut valider=false;
-        egui::Window::new("Coller sur un niveau").collapsible(false).resizable(false).open(&mut ouvert).show(ctx,|ui| {
-            ui.label(format!("{} élément(s) sélectionné(s) · position en plan conservée",ids.len()));
-            egui::ComboBox::from_id_salt("destination_copie_niveau").selected_text(niveaux.iter().find(|n|n.0==niveau).map_or("Choisir un niveau",|n|n.1.as_str())).show_ui(ui,|ui| {
-                for (id,nom,z) in &niveaux {ui.selectable_value(&mut niveau,id.clone(),format!("{} · {}",nom,modele::unite::unite().afficher(*z)));}
-            });
-            valider=ui.add_enabled(!niveau.is_empty(),egui::Button::new("Coller")).clicked();
-        });
-        if valider {
-            match self.executer_bim(commandes::Commande::CopierSurNiveau{ids,niveau}) {
-                Ok(copies)=>self.status=format!("{} élément(s) collé(s) sur le niveau — Ctrl+Z pour annuler.",copies.len()),
-                Err(e)=>self.error=Some(e),
-            }
-        } else if ouvert {self.copie_niveau=Some(niveau);}
-    }
-
     pub(crate) fn demarrer_cadrage_vue(&mut self) {
         if self.vue_en_plan() && self.vue_native_id().is_some() {
             self.reinitialiser_forme_cadrage();

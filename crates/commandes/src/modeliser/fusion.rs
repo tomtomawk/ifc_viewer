@@ -16,18 +16,28 @@ pub(crate) trait ExecutionFusion {
 fn contenu<T: Serialize>(x: &T) -> Value {
     let mut v = serde_json::to_value(x).unwrap_or(Value::Null);
     if let Value::Object(o) = &mut v {
-        for cle in ["id", "nom", "origine"] { o.remove(cle); }
+        for cle in ["id", "nom", "origine"] {
+            o.remove(cle);
+        }
     }
     v
 }
 
 /// Nom libre parmi `pris` : `nom`, sinon « nom (import) », « nom (import 2) »…
 fn nom_libre(nom: &str, pris: &HashSet<String>) -> String {
-    if !pris.contains(nom) { return nom.to_string(); }
+    if !pris.contains(nom) {
+        return nom.to_string();
+    }
     let mut n = 1;
     loop {
-        let candidat = if n == 1 { format!("{nom} (import)") } else { format!("{nom} (import {n})") };
-        if !pris.contains(&candidat) { return candidat; }
+        let candidat = if n == 1 {
+            format!("{nom} (import)")
+        } else {
+            format!("{nom} (import {n})")
+        };
+        if !pris.contains(&candidat) {
+            return candidat;
+        }
         n += 1;
     }
 }
@@ -36,13 +46,19 @@ fn nom_libre(nom: &str, pris: &HashSet<String>) -> String {
 /// et `origine` (textes libres et références à la source).
 fn renommer_ids(v: &mut Value, table: &HashMap<String, String>) {
     match v {
-        Value::String(s) => { if let Some(n) = table.get(s.as_str()) { *s = n.clone(); } }
+        Value::String(s) => {
+            if let Some(n) = table.get(s.as_str()) {
+                *s = n.clone();
+            }
+        }
         Value::Array(a) => a.iter_mut().for_each(|x| renommer_ids(x, table)),
         Value::Object(o) => {
             let anciens = std::mem::take(o);
             let mut nouveau = Map::new();
             for (cle, mut val) in anciens {
-                if cle != "nom" && cle != "origine" { renommer_ids(&mut val, table); }
+                if cle != "nom" && cle != "origine" {
+                    renommer_ids(&mut val, table);
+                }
                 nouveau.insert(table.get(&cle).cloned().unwrap_or(cle), val);
             }
             *o = nouveau;
@@ -57,7 +73,10 @@ fn renommer_cle(v: &mut Value, cle: &str, table: &HashMap<String, String>) {
         Value::Array(a) => a.iter_mut().for_each(|x| renommer_cle(x, cle, table)),
         Value::Object(o) => {
             for (k, val) in o.iter_mut() {
-                if k == cle && let Value::String(s) = val && let Some(n) = table.get(s.as_str()) {
+                if k == cle
+                    && let Value::String(s) = val
+                    && let Some(n) = table.get(s.as_str())
+                {
                     *s = n.clone();
                     continue;
                 }
@@ -69,14 +88,30 @@ fn renommer_cle(v: &mut Value, cle: &str, table: &HashMap<String, String>) {
 }
 
 fn nouvel_id(ancien: &str) -> String {
-    let genre = ancien.split(['-', ':']).next().filter(|g| !g.is_empty() && g.len() <= 24 && g.chars().all(|c| c.is_ascii_alphabetic() || c == '_')).unwrap_or("import");
+    let genre = ancien
+        .split(['-', ':'])
+        .next()
+        .filter(|g| {
+            !g.is_empty() && g.len() <= 24 && g.chars().all(|c| c.is_ascii_alphabetic() || c == '_')
+        })
+        .unwrap_or("import");
     format!("{genre}-{}", noyau::uuid::uuid())
 }
 
 /// Rapproche des types identifiés par leur contenu : identifiant existant si un type
 /// identique existe, sinon nouvel identifiant et nom distinct.
-fn rapprocher<T: Serialize>(existants: &[T], importes: &mut [T], id: fn(&mut T) -> &mut String, nom: fn(&mut T) -> &mut String, table: &mut HashMap<String, String>, existants_ids: impl Fn(&T) -> (String, String)) {
-    let connus: Vec<(Value, String)> = existants.iter().map(|e| (contenu(e), existants_ids(e).0)).collect();
+fn rapprocher<T: Serialize>(
+    existants: &[T],
+    importes: &mut [T],
+    id: fn(&mut T) -> &mut String,
+    nom: fn(&mut T) -> &mut String,
+    table: &mut HashMap<String, String>,
+    existants_ids: impl Fn(&T) -> (String, String),
+) {
+    let connus: Vec<(Value, String)> = existants
+        .iter()
+        .map(|e| (contenu(e), existants_ids(e).0))
+        .collect();
     let mut noms: HashSet<String> = existants.iter().map(|e| existants_ids(e).1).collect();
     for t in importes.iter_mut() {
         let c = contenu(t);
@@ -94,100 +129,263 @@ fn rapprocher<T: Serialize>(existants: &[T], importes: &mut [T], id: fn(&mut T) 
 
 macro_rules! rapprocher_types {
     ($self:ident, $imp:ident, $champ:ident, $table:ident) => {
-        rapprocher(&$self.$champ, &mut $imp.$champ, |t| &mut t.id, |t| &mut t.nom, &mut $table, |t| (t.id.clone(), t.nom.clone()))
+        rapprocher(
+            &$self.$champ,
+            &mut $imp.$champ,
+            |t| &mut t.id,
+            |t| &mut t.nom,
+            &mut $table,
+            |t| (t.id.clone(), t.nom.clone()),
+        )
     };
 }
 
+/// Colle un instantané dans une copie du projet destinataire, en une transaction.
+pub fn coller_selection(
+    destination: &Projet,
+    fragment: Projet,
+    vue: Option<&str>,
+) -> Result<(Projet, Vec<String>), String> {
+    if !fragment.annotations.is_empty()
+        && !vue.is_some_and(|id| {
+            destination
+                .vues
+                .iter()
+                .any(|v| v.id == id && !matches!(v.genre, GenreVue::Camera { .. }))
+        })
+    {
+        return Err("Ouvrez une vue 2D de destination pour coller les annotations.".into());
+    }
+    let mut projet = destination.clone();
+    let mut ids = fusionner_dans(&mut projet, fragment, [0.0; 3], Some(vue))?;
+    ids.retain(|id| {
+        !projet
+            .murs
+            .iter()
+            .any(|m| &m.id == id && m.assemblage.is_some())
+    });
+    crate::verrous::verifier(destination, &projet)?;
+    projet.recaler_menuiseries(destination)?;
+    projet.actualiser_pieces();
+    projet.verifier()?;
+    Ok((projet, ids))
+}
+
 impl ExecutionFusion for Projet {
-    fn fusionner(&mut self, mut imp: Projet, decalage: [f64; 3]) -> Result<Vec<String>, String> {
-        imp.verifier().map_err(|e| format!("Projet importé non valide : {e}"))?;
-        if !decalage.iter().all(|x| x.is_finite()) { return Err("Décalage non valide.".into()); }
-        // sources : clés renumérotées à la suite de celles du projet
-        let mut sources = HashMap::new();
-        for s in &mut imp.sources {
-            let mut n = self.sources.len() + sources.len() + 1;
-            while self.sources.iter().any(|x| x.id == format!("s{n}")) { n += 1; }
-            sources.insert(s.id.clone(), format!("s{n}"));
-            s.id = format!("s{n}");
+    fn fusionner(&mut self, imp: Projet, decalage: [f64; 3]) -> Result<Vec<String>, String> {
+        fusionner_dans(self, imp, decalage, None)
+    }
+}
+
+fn fusionner_dans(
+    cible: &mut Projet,
+    mut imp: Projet,
+    decalage: [f64; 3],
+    collage: Option<Option<&str>>,
+) -> Result<Vec<String>, String> {
+    imp.verifier()
+        .map_err(|e| format!("Projet importé non valide : {e}"))?;
+    if !decalage.iter().all(|x| x.is_finite()) {
+        return Err("Décalage non valide.".into());
+    }
+    // sources : clés renumérotées à la suite de celles du projet
+    let mut sources = HashMap::new();
+    for s in &mut imp.sources {
+        let mut n = cible.sources.len() + sources.len() + 1;
+        while cible.sources.iter().any(|x| x.id == format!("s{n}")) {
+            n += 1;
         }
-        // matériaux (référencés par leur nom) : identiques réutilisés, sinon renommés
-        let mut noms_mat: HashSet<String> = self.materiaux.iter().map(|m| m.nom.clone()).collect();
-        let mut table_mat = HashMap::new();
-        let mut materiaux = Vec::new();
-        for mut m in std::mem::take(&mut imp.materiaux) {
-            let c = contenu(&m);
-            let identique = |e: &&Materiau| contenu(*e) == c;
-            if let Some(e) = self.materiaux.iter().filter(identique).find(|e| e.nom == m.nom).or_else(|| self.materiaux.iter().find(identique)) {
-                table_mat.insert(m.nom.clone(), e.nom.clone());
-                continue;
-            }
-            let n = nom_libre(&m.nom, &noms_mat);
-            noms_mat.insert(n.clone());
-            table_mat.insert(m.nom.clone(), n.clone());
-            m.nom = n;
-            m.id = noyau::uuid::uuid();
-            materiaux.push(m);
+        sources.insert(s.id.clone(), format!("s{n}"));
+        s.id = format!("s{n}");
+    }
+    let mut noms_motifs = cible
+        .motifs
+        .iter()
+        .map(|m| m.nom.clone())
+        .collect::<HashSet<_>>();
+    let mut table_motifs = HashMap::new();
+    for mut motif in std::mem::take(&mut imp.motifs) {
+        if cible
+            .motifs
+            .iter()
+            .any(|m| m.nom == motif.nom && contenu(m) == contenu(&motif))
+        {
+            continue;
         }
-        let mut v = serde_json::to_value(&imp).map_err(|e| e.to_string())?;
-        renommer_cle(&mut v, "materiau", &table_mat);
-        renommer_cle(&mut v, "source", &sources);
-        imp = serde_json::from_value(v).map_err(|e| e.to_string())?;
-        // profils, puis types (qui citent les profils par identifiant)
-        let mut table = HashMap::new();
-        rapprocher_types!(self, imp, profils, table);
-        let mut v = serde_json::to_value(&imp).map_err(|e| e.to_string())?;
-        renommer_ids(&mut v, &table);
-        imp = serde_json::from_value(v).map_err(|e| e.to_string())?;
-        rapprocher_types!(self, imp, types_murs, table);
-        rapprocher_types!(self, imp, types_dalles, table);
-        rapprocher_types!(self, imp, types_ouvertures, table);
-        rapprocher_types!(self, imp, types_poutres, table);
-        rapprocher_types!(self, imp, types_composants, table);
-        rapprocher_types!(self, imp, types_garde_corps, table);
-        // niveaux : même altitude (à 1 cm), sinon même nom, sinon ajoutés
-        for n in &imp.niveaux {
-            let existant = self.niveaux.iter().find(|e| (e.altitude - n.altitude).abs() <= TOLERANCE_NIVEAU)
-                .or_else(|| self.niveaux.iter().find(|e| e.nom == n.nom));
-            table.insert(n.id.clone(), existant.map(|e| e.id.clone()).unwrap_or_else(|| nouvel_id(&n.id)));
+        let nom = nom_libre(&motif.nom, &noms_motifs);
+        noms_motifs.insert(nom.clone());
+        let ancien = std::mem::replace(&mut motif.nom, nom.clone());
+        motif.id = noyau::uuid::uuid();
+        cible.motifs.push(motif);
+        table_motifs.insert(ancien, nom);
+    }
+    let mut v = serde_json::to_value(&imp).map_err(|e| e.to_string())?;
+    renommer_cle(&mut v, "perso", &table_motifs);
+    imp = serde_json::from_value(v).map_err(|e| e.to_string())?;
+    // matériaux (référencés par leur nom) : identiques réutilisés, sinon renommés
+    let mut noms_mat: HashSet<String> = cible.materiaux.iter().map(|m| m.nom.clone()).collect();
+    let mut table_mat = HashMap::new();
+    let mut materiaux = Vec::new();
+    for mut m in std::mem::take(&mut imp.materiaux) {
+        let c = contenu(&m);
+        let identique = |e: &&Materiau| contenu(*e) == c;
+        if let Some(e) = cible
+            .materiaux
+            .iter()
+            .filter(identique)
+            .find(|e| e.nom == m.nom)
+            .or_else(|| cible.materiaux.iter().find(identique))
+        {
+            table_mat.insert(m.nom.clone(), e.nom.clone());
+            continue;
         }
-        // éléments : tous les identifiants renouvelés
-        let niveaux: HashSet<String> = imp.niveaux.iter().map(|n| n.id.clone()).collect();
-        for id in imp.identifiants() {
-            if !niveaux.contains(&id) { table.insert(id.clone(), nouvel_id(&id)); }
+        let n = nom_libre(&m.nom, &noms_mat);
+        noms_mat.insert(n.clone());
+        table_mat.insert(m.nom.clone(), n.clone());
+        m.nom = n;
+        m.id = noyau::uuid::uuid();
+        materiaux.push(m);
+    }
+    let mut v = serde_json::to_value(&imp).map_err(|e| e.to_string())?;
+    for cle in ["materiau", "materiau_main_courante", "materiau_remplissage"] {
+        renommer_cle(&mut v, cle, &table_mat);
+    }
+    renommer_cle(&mut v, "source", &sources);
+    imp = serde_json::from_value(v).map_err(|e| e.to_string())?;
+    // profils, puis types (qui citent les profils par identifiant)
+    let mut table = HashMap::new();
+    rapprocher_types!(cible, imp, profils, table);
+    let mut v = serde_json::to_value(&imp).map_err(|e| e.to_string())?;
+    renommer_ids(&mut v, &table);
+    imp = serde_json::from_value(v).map_err(|e| e.to_string())?;
+    rapprocher_types!(cible, imp, types_murs, table);
+    rapprocher_types!(cible, imp, types_dalles, table);
+    rapprocher_types!(cible, imp, types_ouvertures, table);
+    rapprocher_types!(cible, imp, types_poutres, table);
+    rapprocher_types!(cible, imp, types_composants, table);
+    rapprocher_types!(cible, imp, types_garde_corps, table);
+    rapprocher_types!(cible, imp, types_terrains, table);
+    rapprocher_types!(cible, imp, familles_etiquettes, table);
+    rapprocher_types!(cible, imp, types_traits, table);
+    // niveaux : même altitude (à 1 cm), sinon même nom, sinon ajoutés
+    let mut noms = cible.niveaux.iter().map(|n| n.nom.clone()).collect();
+    for n in &mut imp.niveaux {
+        let existant = cible
+            .niveaux
+            .iter()
+            .find(|e| (e.altitude - n.altitude).abs() <= TOLERANCE_NIVEAU)
+            .or_else(|| {
+                collage
+                    .is_none()
+                    .then(|| cible.niveaux.iter().find(|e| e.nom == n.nom))
+                    .flatten()
+            });
+        if existant.is_none() {
+            n.nom = nom_libre(&n.nom, &noms);
+            noms.insert(n.nom.clone());
         }
-        let mut v = serde_json::to_value(&imp).map_err(|e| e.to_string())?;
-        renommer_ids(&mut v, &table);
-        imp = serde_json::from_value(v).map_err(|e| e.to_string())?;
-        // ajout : ce qui ne désigne pas déjà un objet du projet
-        let connus = self.identifiants();
-        macro_rules! ajouter {
+        table.insert(
+            n.id.clone(),
+            existant
+                .map(|e| e.id.clone())
+                .unwrap_or_else(|| nouvel_id(&n.id)),
+        );
+    }
+    // éléments : tous les identifiants renouvelés
+    let niveaux: HashSet<String> = imp.niveaux.iter().map(|n| n.id.clone()).collect();
+    for id in imp.identifiants() {
+        if !niveaux.contains(&id) {
+            table.insert(id.clone(), nouvel_id(&id));
+        }
+    }
+    let mut v = serde_json::to_value(&imp).map_err(|e| e.to_string())?;
+    renommer_ids(&mut v, &table);
+    imp = serde_json::from_value(v).map_err(|e| e.to_string())?;
+    // ajout : ce qui ne désigne pas déjà un objet du projet
+    let connus = cible.identifiants();
+    macro_rules! ajouter {
             ($($champ:ident),*) => {{
                 let mut ids = Vec::new();
                 $(
-                    let presents: HashSet<String> = self.$champ.iter().map(|x| x.id.clone()).collect();
+                    let presents: HashSet<String> = cible.$champ.iter().map(|x| x.id.clone()).collect();
                     for x in std::mem::take(&mut imp.$champ) {
                         if presents.contains(&x.id) { continue; }
                         if connus.contains(&x.id) { return Err(format!("Identifiant importé en collision : {}", x.id)); }
                         ids.push(x.id.clone());
-                        self.$champ.push(x);
+                        cible.$champ.push(x);
                     }
                 )*
                 ids
             }};
         }
-        let _ = ajouter!(niveaux, profils, types_murs, types_dalles, types_ouvertures, types_poutres, types_composants, types_garde_corps);
-        let elements = ajouter!(murs, assemblages, ouvertures, dalles, terrains, limites_propriete, barres, escaliers, pieces, composants, garde_corps, importes, quadrillages);
-        self.materiaux.extend(materiaux);
-        self.sources.extend(imp.sources);
-        for (id, r) in imp.implantations { if elements.contains(&id) { self.implantations.insert(id, r); } }
-        for (id, p) in imp.priorites_jonction { if elements.contains(&id) { self.priorites_jonction.insert(id, p); } }
-        for (id, a) in imp.attaches_toitures { if elements.contains(&id) { self.attaches_toitures.insert(id, a); } }
-        for (cat, n) in imp.ignores { *self.ignores.entry(cat).or_default() += n; }
-        if decalage != [0.0; 3] && !elements.is_empty() {
-            let racines: Vec<String> = elements.iter().filter(|id| !self.murs.iter().any(|m| &m.id == *id && m.assemblage.is_some())).cloned().collect();
-            let set = self.dependances_avec(&racines, true)?;
-            self.transformer(&set, decalage, [0.0; 2], 0.0)?;
+    let _ = ajouter!(
+        niveaux,
+        profils,
+        types_murs,
+        types_dalles,
+        types_ouvertures,
+        types_poutres,
+        types_composants,
+        types_garde_corps,
+        types_terrains,
+        familles_etiquettes,
+        types_traits
+    );
+    let mut elements = ajouter!(
+        murs,
+        assemblages,
+        ouvertures,
+        dalles,
+        terrains,
+        limites_propriete,
+        barres,
+        escaliers,
+        pieces,
+        composants,
+        garde_corps,
+        importes,
+        quadrillages
+    );
+    if let Some(Some(vue)) = collage {
+        for mut a in imp.annotations {
+            a.vue = vue.to_owned();
+            elements.push(a.id.clone());
+            cible.annotations.push(a);
         }
-        Ok(elements)
     }
+    cible.materiaux.extend(materiaux);
+    cible.sources.extend(imp.sources);
+    for (id, r) in imp.implantations {
+        if elements.contains(&id) {
+            cible.implantations.insert(id, r);
+        }
+    }
+    for (id, p) in imp.priorites_jonction {
+        if elements.contains(&id) {
+            cible.priorites_jonction.insert(id, p);
+        }
+    }
+    for (id, a) in imp.attaches_toitures {
+        if elements.contains(&id) {
+            cible.attaches_toitures.insert(id, a);
+        }
+    }
+    for (cat, n) in imp.ignores {
+        *cible.ignores.entry(cat).or_default() += n;
+    }
+    if decalage != [0.0; 3] && !elements.is_empty() {
+        let racines: Vec<String> = elements
+            .iter()
+            .filter(|id| {
+                !cible
+                    .murs
+                    .iter()
+                    .any(|m| &m.id == *id && m.assemblage.is_some())
+            })
+            .cloned()
+            .collect();
+        let set = cible.dependances_avec(&racines, true)?;
+        cible.transformer(&set, decalage, [0.0; 2], 0.0)?;
+    }
+    Ok(elements)
 }
