@@ -827,14 +827,15 @@ sans multiéchantillonnage, `BIMEDIT_MSAA=0` désactive l'anticrénelage de la v
 ## Éditeur de hachures dessinées
 
 Fenêtre « Motifs de hachures » (matériau › Motifs de hachures…) : « Dessiner un motif… »
-(nouveau) ou « Redessiner… » (motif du projet) ouvre un onglet « Hachure ». La hachure
-occupe toute la vue : seul le carré central (la tuile) se dessine, le reste, grisé, en
-répète le dessin. Bandeau de dessin commun (`outils/bandeau.rs`, comme les autres
-commandes) : Ligne (deux clics), Polyligne (traits enchaînés, clic droit ou Échap pour
-finir), Effacer (clic sur un trait), côté du carré (mm du papier), divisions de la grille
-d'accrochage (modifiables tant que le carré est vide), nom, puis Valider et Annuler ;
-Ctrl+Z défait le dernier trait. Les extrémités s'accrochent aux nœuds
-de la grille ; Valider enregistre le motif dans le projet (familles de traits déduites
-de la tuile, matériaux suivis si le motif est renommé) et ferme l'onglet, comme sa croix
-ou Annuler (sans enregistrer).
-
+(nouveau) ou « Redessiner… » (motif du projet) ferme la fenêtre et ouvre la vue de dessin
+du motif (« Motif — nom », branche « Vues de dessin »). Le carré central de 400 mm (la
+tuile) se dessine ; le reste de la vue, grisé, en répète le dessin. Les traits se tracent
+avec les outils ordinaires (Documenter › Ligne de dessin, Polyligne : le bandeau de dessin
+n'apparaît qu'avec l'outil lancé) et se modifient par le ruban Modifier (déplacer, copier,
+supprimer…) ; tout point s'accroche au nœud le plus proche de la grille. Propriétés de la
+vue : nom, côté du carré (mm du papier), divisions de la grille, **Terminer** (traits
+ramenés aux nœuds, familles de traits déduites de la tuile, motif ajouté ou remplacé,
+matériaux suivis s'il est renommé, vue retirée) et **Annuler** (vue retirée sans rien
+enregistrer). Seuls les traits droits sont admis (pas d'arc ni de texte). Un seul motif à
+la fois : rappeler l'éditeur rouvre la vue du motif en cours. Défaire après Terminer remet
+la vue, qui n'est plus alors qu'une vue de dessin ordinaire.

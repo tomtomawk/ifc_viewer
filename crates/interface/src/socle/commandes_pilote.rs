@@ -468,6 +468,15 @@ impl Application {
                     None => erreur(self.error.as_deref().unwrap_or("éditeur non ouvert")),
                 }
             }
+            "terminer_motif" => match self.valider_editeur_hachure() {
+                Ok(()) => succes(&[]),
+                Err(e) => erreur(&e),
+            },
+            "annuler_motif" => {
+                if self.editeur_hachure.is_none() { return erreur("aucun motif en cours"); }
+                self.fermer_editeur_hachure();
+                succes(&[])
+            }
             "position" => {
                 // position de la fenêtre (pixels de l'écran) : essais à plusieurs instances
                 let v: Vec<f32> = argument.split_whitespace().filter_map(|x| x.parse().ok()).collect();

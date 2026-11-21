@@ -15,7 +15,7 @@ Rangement par domaine (lot 11b, chantier du découpage §5.19 : `git show 912197
 | `zones/` | `ruban/`, barre haute, panneaux, panneau droit, navigateur, propriétés, menu de la vue, vues natives et Revit, graphismes |
 | `saisie/` | accrochage, repérage, saisie clavier et en plan, sélection, poignées d'annotation |
 | `outils/` | `modeliser/` (`bim/` : état, placements, panneau ; murs courbes, garde-corps, escaliers), `modifier/` (transformer, ajuster, options de Modifier), `dessiner/dessin_plan/` (DAO 2D), `annoter/` (cotation, textes, types de trait) |
-| `documenter/` | feuilles, cartouche, coupe, gabarits de vue |
+| `documenter/` | feuilles, cartouche, coupe, gabarits de vue, éditeur de hachures (vue de dessin du motif : `editeur_hachure.rs`) |
 | `familles/` | `editeur_famille/` (toutes catégories), document de famille, sélection des familles et profils |
 | `projet/` | collaboration, gestion des contextes |
 | `../assets/icone.png` | icône embarquée (`include_bytes!("../../assets/icone.png")` depuis `socle/fenetre.rs` et `zones/barre_haute.rs`) |

@@ -289,8 +289,9 @@ impl Application {
             }
         };
         match action {
-            Some("dessiner") => { self.ouvrir_editeur_hachure(None); return; }
-            Some("redessiner") => { self.ouvrir_editeur_hachure(Some(&choisi)); return; }
+            // la vue du motif s'ouvre à la place de la fenêtre
+            Some("dessiner") => { self.editeur_motifs = false; self.ouvrir_editeur_hachure(None); return; }
+            Some("redessiner") => { self.editeur_motifs = false; self.ouvrir_editeur_hachure(Some(&choisi)); return; }
             Some("nouveau") => {
                 let n = libre(&p, "Motif");
                 p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }], tuile: None });

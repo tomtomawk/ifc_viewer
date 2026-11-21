@@ -19,6 +19,8 @@ impl Application {
 
     pub(crate) fn point_dessin_depuis(&mut self, rect:egui::Rect,c:DVec2,maj:bool,temps:f64,precedent:Option<DVec2>)->(DVec2,Accroche) {
         use crate::saisie::moteur_accrochage::{viser, Geometrie, Visee};
+        // vue d'un motif de hachures : seuls les nœuds de sa grille
+        if let Some(n) = self.noeud_motif(c.to_array()) { return (DVec2::from_array(n), Accroche::Extremite); }
         // tolérance : 12 pixels en mm du plan de la vue
         let tol = self.vers_ecran(rect, c).zip(self.vers_ecran(rect, c + DVec2::X * 1000.0)).map_or(200.0, |(a, b)| crate::saisie::moteur_accrochage::TOLERANCE_PX * 1000.0 / (a.distance(b) as f64).max(1e-6));
         let source = Geometrie { geoms: self.geoms_trace(), droites: Vec::new() };

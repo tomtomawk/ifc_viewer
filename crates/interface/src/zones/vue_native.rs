@@ -116,6 +116,11 @@ impl Application {
     /// coupe (plan) ou profondeur (coupe, élévation), Retourner, Supprimer.
     pub(crate) fn proprietes_vue_native(&mut self, ui: &mut egui::Ui) {
         use modele::GenreVue;
+        // vue d'un motif de hachures : réglages du motif, Terminer, Annuler
+        if self.editeur_motif_actif().is_some() {
+            self.proprietes_motif(ui);
+            return;
+        }
         let Some((projet, _)) = &self.natif else { return };
         let Some(i) = self.vue_active else { return };
         let Some(numero) = self.scene.as_ref().and_then(|s| s.navigateur.as_ref()?.vues.get(i)).map(|v| v.revit_id) else { return };

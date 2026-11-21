@@ -630,7 +630,6 @@ pub struct Application {
     editeur_motifs: bool,
     /// Éditeur de hachures dessinées (onglet) et onglet actif.
     editeur_hachure: Option<crate::documenter::editeur_hachure::EditeurHachure>,
-    hachure_active: bool,
     /// Fenêtre « Épaisseurs de traits » ouverte : table des 12 plumes en cours d'édition.
     editeur_plumes: Option<Vec<f64>>,
     /// Saisie en cours dans un champ (texte, nombre tapé ou glissé hors de la vue) :
@@ -840,7 +839,6 @@ impl Application {
             materiau_apparence: false,
             editeur_motifs: false,
             editeur_hachure: None,
-            hachure_active: false,
             editeur_plumes: None,
             saisie_active: false,
             report_selection: None,
@@ -1033,17 +1031,14 @@ impl eframe::App for Application {
                 self.largeurs_panneaux[p as usize] = reponse.response.rect.width();
             }
             // sous la vue seulement, entre les panneaux ancrés
-            if self.scene.is_some() || !self.onglets_familles().is_empty() || self.editeur_hachure.is_some() {
+            if self.scene.is_some() || !self.onglets_familles().is_empty() {
                 egui::Panel::top("onglets_vues").show(ui, |ui| self.onglets_vues(ui));
             }
             egui::Panel::bottom("barre_vue").show(ui, |ui| self.barre_vue(ui));
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 let rect = ui.available_rect_before_wrap();
                 let mut bas_barre = 0.0;
-                if self.hachure_active && self.editeur_hachure.is_some() {
-                    // messages sous le bandeau de dessin de l'éditeur
-                    bas_barre = self.vue_hachure(ui);
-                } else if self.famille_active && self.famille.is_some() {
+                if self.famille_active && self.famille.is_some() {
                     self.vue_famille(ui);
                 } else if self.scene.is_some() && self.vues_ouvertes.is_empty() {
                     ui.centered_and_justified(|ui| ui.label("Ouvrir une vue depuis l’arborescence du projet."));

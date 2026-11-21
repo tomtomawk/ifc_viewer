@@ -1013,6 +1013,8 @@ impl Application {
         let t = (altitude * 0.001 - scene.origin.z - o.z as f64) / d.z as f64;
         if !t.is_finite() || t <= 0.0 { return None; }
         let p = (o.as_dvec3() + d.as_dvec3() * t + scene.origin) * 1000.0;
+        // vue d'un motif de hachures : seuls les nœuds de sa grille
+        if let Some(n) = self.noeud_motif([p.x, p.y]) { return Some((n, AccrocheMur::Extremite)); }
         let point = [(p.x / 10.0).round() * 10.0, (p.y / 10.0).round() * 10.0];
         let accroche = AccrocheMur::Grille;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));

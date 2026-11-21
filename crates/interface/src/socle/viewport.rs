@@ -482,6 +482,7 @@ impl Application {
         if let Some(f) = self.fenetre_selection {
             f.dessiner(&ui.painter().with_clip_rect(rect));
         }
+        self.dessiner_tuile_motif(ui, rect);
         if self.natif.is_some() && self.vue_en_plan() && !self.vue_de_dessin() {
             self.reperes_coupes(ui, rect, altitude_coupe);
         }
