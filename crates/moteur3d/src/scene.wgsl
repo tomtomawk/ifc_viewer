@@ -196,8 +196,7 @@ fn vs_trait(s: Segment, @builtin(vertex_index) i: u32) -> Varie {
 }
 
 // Herbe en volume : la surface redessinée en couches (une instance par couche) jusqu'à
-// la hauteur des brins ; chaque couche ne garde que les brins (un par cellule, hauteur
-// et inclinaison tirées au hasard), effilés vers la pointe.
+// la hauteur des brins ; chaque couche ne garde que la tranche des brins à sa hauteur.
 const COUCHES_HERBE: u32 = 20u;
 
 struct VarieHerbe {
@@ -232,49 +231,124 @@ fn vs_herbe(s: Sommet, @builtin(instance_index) i: u32) -> VarieHerbe {
     return o;
 }
 
+// Tranche d'un brin d'herbe à la hauteur relative `f` : section aplatie, orientée au
+// hasard, effilée en pointe et courbée vers son plat ; deux brins par cellule (j = 0, 1),
+// pied décalé, hauteur tirée. `haut` : hauteur relative au-delà de laquelle le brin est
+// effacé (fondu au loin). Traînée : la tranche est prolongée vers l'arrière le long du
+// regard (`axe`, sur `lg` cellules), pour couvrir à l'écran l'intervalle jusqu'à la couche
+// du dessus en vue rasante (sinon les brins fins apparaissent en pointillés) ;
+// `par_couche` : longueur de traînée qui correspond à l'écart d'une couche. Un point de la
+// traînée figure le brin entre deux couches : sa hauteur, continue, règle largeur et
+// teinte (pas de marches d'une couche à l'autre).
+struct Brin {
+    touche: bool,
+    t: f32,
+    // direction du plat du brin dans le plan du sol
+    plat: vec2f,
+    // pied du brin dans sa cellule (-0,5..0,5)
+    pied: vec2f,
+    teinte: f32,
+}
+
+fn brin_herbe(cellule: vec2f, local: vec2f, f: f32, j: f32, haut: f32, axe: vec2f, lg: f32, par_couche: f32) -> Brin {
+    var b: Brin;
+    let g = cellule + vec2f(17.3, 5.9) * j;
+    let hb = 0.35 + 0.65 * hachage(g + vec2f(2.7, 9.1));
+    b.t = f / hb;
+    b.touche = false;
+    if b.t > haut {
+        return b;
+    }
+    let a = hachage(g + vec2f(3.9, 4.4)) * 6.2832;
+    let large = vec2f(cos(a), sin(a));
+    b.plat = vec2f(-large.y, large.x);
+    b.pied = (vec2f(hachage(g + vec2f(1.3, 6.1)), hachage(g + vec2f(8.4, 2.2))) - 0.5) * 0.36;
+    let courbe = (hachage(g + vec2f(7.1, 3.3)) - 0.5) * 0.8 * b.t * b.t;
+    var d = local - b.pied - b.plat * courbe;
+    if lg > 1e-4 {
+        let s = clamp(dot(d, axe), 0.0, lg);
+        d -= axe * s;
+        b.t = (f + s / max(par_couche, 1e-4) / f32(COUCHES_HERBE)) / hb;
+    }
+    if b.t >= 1.0 || b.t > haut {
+        return b;
+    }
+    let demi_largeur = 0.13 * pow(1.0 - b.t, 0.6) + 0.02;
+    let q = vec2f(dot(d, large) / demi_largeur, dot(d, b.plat) / 0.06);
+    b.touche = dot(q, q) < 1.0;
+    b.teinte = hachage(g + vec2f(5.3, 1.7));
+    return b;
+}
+
 @fragment
 fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
-    let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-e.n.y, e.n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, abs(e.n.z) > 0.7);
+    let sol = abs(e.n.z) > 0.7;
+    let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-e.n.y, e.n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, sol);
     let uv = uvm * 1000.0;
     let dx = dpdx(uv);
     let dy = dpdy(uv);
     let k = e.rang * 22;
+    let regard = select(e.pos - g.eye.xyz, passe.view_dir.xyz, g.eye.w > 0.5);
     let dist = length(e.pos - g.eye.xyz);
-    // brins : un par cellule de 20 mm près de la caméra ; au loin la cellule double par
-    // niveau (jusqu'à 640 mm) pour qu'un brin couvre toujours quelques pixels, passage
-    // d'un niveau au suivant tramé cellule par cellule (pas de couture nette)
-    let empreinte = max(length(dx), length(dy));
-    let niveau_f = clamp(log2(max(empreinte / 8.0, 1.0)), 0.0, 5.0);
+    // cellules de 16 mm près de la caméra ; au loin la cellule double par niveau (jusqu'à
+    // 128 mm) pour couvrir au moins 6 pixels (brin d'au moins 2 pixels de large),
+    // passage d'un niveau au suivant tramé cellule par cellule (pas de couture nette)
+    // empreinte du pixel en travers du regard (la plus petite) : en vue rasante, l'autre
+    // s'allonge sans que les brins, vus de côté, rapetissent à l'écran
+    let empreinte = min(length(dx), length(dy));
+    let niveau_f = clamp(log2(max(empreinte * 6.0 / 16.0, 1.0)), 0.0, 3.0);
     let niveau0 = floor(niveau_f);
-    let niveau = niveau0 + select(0.0, 1.0, hachage(floor(uv / (20.0 * exp2(niveau0))) + vec2f(4.2, 8.6)) < niveau_f - niveau0);
-    let taille = 20.0 * exp2(niveau);
+    let niveau = niveau0 + select(0.0, 1.0, hachage(floor(uv / (16.0 * exp2(niveau0))) + vec2f(4.2, 8.6)) < niveau_f - niveau0);
+    let taille = 16.0 * exp2(niveau);
     let cellule = floor(uv / taille);
-    // brin décalé dans sa cellule : pas de grille régulière (anneaux de moiré au loin)
-    let local = fract(uv / taille) - 0.5 - (vec2f(hachage(cellule + vec2f(1.3, 6.1)), hachage(cellule + vec2f(8.4, 2.2))) - 0.5) * 0.3;
-    let hb = 0.4 + 0.6 * hachage(cellule + vec2f(2.7, 9.1));
-    // brins effacés quand un brin couvre moins de 2 pixels (pas de moiré), et au loin
-    let fondu = (1.0 - smoothstep(0.3, 1.5, empreinte / taille)) * (1.0 - smoothstep(45.0, 100.0, dist));
-    let t = e.fraction / hb;
-    if t > fondu {
+    let local = fract(uv / taille) - 0.5;
+    // brins effacés quand la cellule couvre moins de 3 pixels (pas de moiré), et au loin
+    let fondu = (1.0 - smoothstep(0.17, 0.35, empreinte / taille)) * (1.0 - smoothstep(30.0, 60.0, dist));
+    if e.fraction > fondu {
         discard;
     }
-    let penche = (vec2f(hachage(cellule), hachage(cellule + vec2f(7.1, 3.3))) - 0.5) * 0.7 * t * t;
-    if length(local - penche) > 0.46 * (1.0 - t) + 0.04 {
-        discard;
+    // traînée : intervalle entre couches (mm) vu sous l'angle du regard, en cellules
+    var axe = vec2f(0.0);
+    var par_couche = 0.0;
+    let horiz = length(regard.xy);
+    if sol && horiz > 1e-6 {
+        let ecart = apparences[k + 2].y / f32(COUCHES_HERBE);
+        axe = regard.xy / horiz;
+        par_couche = ecart / taille / max(abs(regard.z) / horiz, 0.05);
     }
+    let lg = min(par_couche, 0.6);
+    var b = brin_herbe(cellule, local, e.fraction, 0.0, fondu, axe, lg, par_couche);
+    if !b.touche {
+        b = brin_herbe(cellule, local, e.fraction, 1.0, fondu, axe, lg, par_couche);
+        if !b.touche {
+            discard;
+        }
+    }
+    let t = b.t;
     var base = e.couleur;
     if a_carte(k, 0) {
-        // détail du brin mêlé à la teinte moyenne de la texture (celle de la surface au
-        // loin) : pas de démarcation de couleur où les brins s'effacent
+        // teinte du brin : la texture lue à son pied, moyennée sur la cellule (une couleur
+        // par brin : lue à la position de chaque tranche, le détail de la photo dessinait
+        // des stries d'une couche à l'autre), mêlée à la teinte moyenne de la texture
+        // (celle de la surface au loin) : pas de démarcation où les brins s'effacent
+        let uv_pied = (cellule + 0.5 + b.pied) * taille;
+        let g_cellule = vec2f(taille, 0.0);
         let moyenne = carte(k, 0, uv, dx * 48.0, dy * 48.0).rgb;
-        base = mix(moyenne, carte(k, 0, uv, dx, dy).rgb, 0.45);
+        base = mix(moyenne, carte(k, 0, uv_pied, g_cellule, g_cellule.yx).rgb, 0.45);
     }
-    // occlusion de la texture, comme la surface
-    if a_carte(k, 5) {
-        base *= mix(1.0, carte(k, 5, uv, dx, dy).r, intensite(k, 5));
+    // racine sombre, pointe claire, quelques brins plus jaunes ; vers la teinte moyenne du
+    // sol quand les brins s'effacent
+    let jauni = mix(vec3f(1.0), vec3f(1.1, 1.04, 0.72), smoothstep(0.75, 1.0, b.teinte) * 0.4);
+    base *= mix(vec3f(1.0), mix(0.5, 1.05, t) * (0.8 + 0.3 * b.teinte) * jauni, fondu);
+    // éclairage du brin selon son plat (tourné vers l'œil) face au soleil : 0,55 à 1,45
+    // fois celui du sol, 1 en moyenne
+    var face = 0.5;
+    let sh = length(g.soleil.xy);
+    if sol && sh > 1e-4 {
+        let plat = select(b.plat, -b.plat, dot(b.plat, regard.xy) > 0.0);
+        face = 0.5 + 0.5 * dot(plat, g.soleil.xy / sh);
     }
-    // racine sombre, pointe claire ; vers la teinte moyenne du sol quand les brins s'effacent
-    base *= mix(1.0, mix(0.62, 1.12, t) * (0.85 + 0.3 * hachage(cellule + vec2f(5.3, 1.7))), fondu);
+    let relief = mix(1.0, 0.55 + 0.9 * face, fondu);
     let ndl = max(dot(e.n, g.soleil.xyz), 0.0);
     var ombre = 1.0;
     if passe.drapeaux.w == 1u && ndl > 0.0 {
@@ -284,10 +358,10 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
     if g.ciel[1].w > 0.5 {
         let li = lumiere();
         // même éclairage que la surface (soleil, ciel au-dessus), un peu moins de ciel au pied
-        let soleil = li.soleil * ndl * mix(ombre, 1.0, 0.85 * part_couvert());
-        c = vers_srgb(compresser(vers_lineaire(base) * (soleil + li.e_ciel * mix(0.75, 1.0, t)) * li.k));
+        let soleil = li.soleil * ndl * relief * mix(ombre, 1.0, 0.85 * part_couvert());
+        c = vers_srgb(compresser(vers_lineaire(base) * (soleil + li.e_ciel * mix(0.7, 1.0, t)) * li.k));
     } else {
-        c = base * (0.45 + 0.55 * ndl * ombre);
+        c = base * (0.45 + 0.55 * ndl * relief * ombre);
     }
     return vec4f(c, 1.0);
 }
@@ -776,18 +850,75 @@ struct Effet {
 
 // Apparence de rang r : couleur, rugosité, métallique, relief, normales, occlusion,
 // transparence, découpe et émission (cartes dans l'ordre de `CarteTexture::TOUTES`).
-fn effet_apparence(r: i32, uvm: vec2f, dxm: vec2f, dym: vec2f, n0: vec3f, n: vec3f, base: vec3f, vd: vec3f) -> Effet {
+// Projection d'une apparence : point dans le plan de projection (m), ses dérivées à
+// l'écran, axes u et v de ce plan.
+struct Projection {
+    uv: vec2f,
+    dx: vec2f,
+    dy: vec2f,
+    u: vec3f,
+    v: vec3f,
+}
+
+// Projection plane sur la face : repère de la face (le même que celui des motifs de
+// surface).
+fn projection_face(n0: vec3f, uvm: vec2f, dxm: vec2f, dym: vec2f) -> Projection {
+    let vert = abs(n0.z) <= 0.7;
+    let u = select(vec3f(1.0, 0.0, 0.0), normalize(vec3f(-n0.y, n0.x, 0.0) + vec3f(1e-6, 0.0, 0.0)), vert);
+    let v = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), vert);
+    return Projection(uvm, dxm, dym, u, v);
+}
+
+// Projection sur un plan vertical d'axe horizontal `u` (dérivées exactes : `u` constant).
+fn projection_verticale(u: vec3f, pos: vec3f, dpx: vec3f, dpy: vec3f) -> Projection {
+    let v = vec3f(0.0, 0.0, 1.0);
+    return Projection(vec2f(dot(pos, u), pos.z), vec2f(dot(dpx, u), dpx.z), vec2f(dot(dpy, u), dpy.z), u, v);
+}
+
+// Apparence d'une face verticale courbe (normales lissées : troncs, poteaux ronds). La
+// projection de la face y suit la normale : sa coordonnée horizontale dépend alors de la
+// distance à l'origine du projet et non du rayon (texture comprimée, moyennée en
+// aplat). Ici, projections sur les deux plans verticaux des axes, mélangées selon la
+// normale (puissance 4 : mélange court autour des diagonales).
+fn effet_courbe(r: i32, pos: vec3f, dpx: vec3f, dpy: vec3f, n0: vec3f, n: vec3f, base: vec3f, vd: vec3f) -> Effet {
+    let wx = n0.x * n0.x * n0.x * n0.x;
+    let wy = n0.y * n0.y * n0.y * n0.y;
+    let w = wy / max(wx + wy, 1e-6);
+    let ux = vec3f(0.0, select(-1.0, 1.0, n0.x >= 0.0), 0.0);
+    let uy = vec3f(select(1.0, -1.0, n0.y >= 0.0), 0.0, 0.0);
+    if w < 0.02 {
+        return effet_apparence(r, projection_verticale(ux, pos, dpx, dpy), n0, n, base, vd);
+    }
+    if w > 0.98 {
+        return effet_apparence(r, projection_verticale(uy, pos, dpx, dpy), n0, n, base, vd);
+    }
+    let a = effet_apparence(r, projection_verticale(ux, pos, dpx, dpy), n0, n, base, vd);
+    let b = effet_apparence(r, projection_verticale(uy, pos, dpx, dpy), n0, n, base, vd);
+    var e = a;
+    e.base = mix(a.base, b.base, w);
+    e.n = normalize(mix(a.n, b.n, w));
+    e.alpha = mix(a.alpha, b.alpha, w);
+    e.occl = mix(a.occl, b.occl, w);
+    e.rug = mix(a.rug, b.rug, w);
+    e.metal = mix(a.metal, b.metal, w);
+    e.emis = mix(a.emis, b.emis, w);
+    e.coupe = select(a.coupe, b.coupe, w > 0.5);
+    return e;
+}
+
+fn effet_apparence(r: i32, pr: Projection, n0: vec3f, n: vec3f, base: vec3f, vd: vec3f) -> Effet {
     let k = r * 22;
     let p0 = apparences[k];
     let p1 = apparences[k + 1];
     // scène en mètres, textures en mm réels
+    let uvm = pr.uv;
+    let dxm = pr.dx;
+    let dym = pr.dy;
     var uv = uvm * 1000.0;
     let dx = dxm * 1000.0;
     let dy = dym * 1000.0;
-    // repère du plan de la face (le même que celui des motifs de surface)
-    let vert = abs(n0.z) <= 0.7;
-    let u = select(vec3f(1.0, 0.0, 0.0), normalize(vec3f(-n0.y, n0.x, 0.0) + vec3f(1e-6, 0.0, 0.0)), vert);
-    let v = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), vert);
+    let u = pr.u;
+    let v = pr.v;
     let p2 = apparences[k + 2];
     // parallaxe (relief) : marche dans la carte de hauteur le long du regard, 16 pas ;
     // le point trouvé sert à toutes les cartes
@@ -885,6 +1016,12 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
     let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-n.y, n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, an.z > 0.7);
     let dxm = dpdx(uvm);
     let dym = dpdy(uvm);
+    // face verticale courbe (normale qui tourne de plus de 0,2 rad par mètre : rayon de
+    // moins de 5 m) : apparence projetée par `effet_courbe`
+    let dpx = dpdx(e.pos);
+    let dpy = dpdy(e.pos);
+    let courbure = max(length(dpdx(n)), length(dpdy(n))) / max(max(length(dpx), length(dpy)), 1e-6);
+    let courbe = an.z <= 0.7 && courbure > 0.2;
     if retire(e) {
         discard;
     }
@@ -951,7 +1088,11 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
         let rang = i32(e.rendu.a * 255.0 + 0.5) - 128;
         if e.annot == 0u && rang >= 0 && rang < MAX_APPARENCES {
             app = true;
-            fx = effet_apparence(rang, uvm, dxm, dym, n0, n, base, vd);
+            if courbe {
+                fx = effet_courbe(rang, e.pos, dpx, dpy, n0, n, base, vd);
+            } else {
+                fx = effet_apparence(rang, projection_face(n0, uvm, dxm, dym), n0, n, base, vd);
+            }
             if fx.coupe {
                 discard;
             }
