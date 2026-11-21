@@ -216,6 +216,8 @@ pub(crate) struct EditeurFamille {
     /// Sommets de l'esquisse en cours (verrouillés et résolus).
     esquisse: Vec<(PointEsquisse, (f64, f64))>,
     trace_polyligne: Option<moteur2d::dao::Trace>,
+    /// Échap pendant un tracé : il se termine comme par Entrée, puis l'outil est quitté.
+    echap_valide: bool,
     saisie_trace: crate::saisie::saisie_trace::SaisieTrace,
     reperage: crate::saisie::reperage::Reperage,
     axe_revolution: Option<[[f64; 2]; 2]>,
@@ -520,6 +522,7 @@ impl EditeurFamille {
     fn choisir_outil(&mut self, o: OutilFamille) {
         self.outil = if self.outil_disponible(o) { o } else { OutilFamille::Selection };
         self.abandonner_saisie();
+        self.echap_valide = false;
         if let Some(outil) = self.outil.outil_dessin() { self.trace_polyligne = Some(moteur2d::dao::Trace::new(outil)); }
         if self.outil.est_transformation() { self.message = Some(self.invite_transformation().into()); }
         else if self.outil.est_revolution() { self.message = Some("Révolution : cliquer les deux points de l'axe, puis dessiner le profil fermé d'un seul côté de l'axe.".into()); }

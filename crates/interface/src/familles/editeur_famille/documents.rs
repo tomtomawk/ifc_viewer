@@ -236,6 +236,7 @@ impl Application {
             esquisse: Vec::new(),
             trace_polyligne: None,
             saisie_trace: Default::default(),
+            echap_valide: false,
             reperage: Default::default(),
             axe_revolution: None,
             points_transfo: Vec::new(),

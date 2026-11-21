@@ -1,13 +1,16 @@
 //! Canevas de l'éditeur de famille : dessin et interaction.
 use super::*;
 
-/// Saisie commune des deux projections : Échap abandonne d'abord le geste,
-/// puis l'outil et enfin la sélection.
+/// Saisie commune des deux projections : Échap annule un glissement en cours, efface la
+/// valeur tapée ; pendant un tracé (esquisse, chemin), il a l'effet d'Entrée puis quitte
+/// l'outil (`echap_valide`) ; sinon il abandonne la saisie, puis l'outil et enfin la
+/// sélection.
 fn echap_esquisse(ui: &mut egui::Ui, resp: &egui::Response, ed: &mut EditeurFamille) {
     let en_cours = !ed.esquisse.is_empty() || !ed.clics.is_empty() || ed.debut.is_some() || ed.fenetre.is_some() || ed.deplacement_2d.is_some() || !ed.points_transfo.is_empty();
     if (resp.hovered() || en_cours) && !ui.ctx().egui_wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
         if let Some(geste) = ed.deplacement_2d.take() { ed.famille = geste.avant; }
         else if !ed.saisie_trace.texte.is_empty() { ed.saisie_trace.vider(); }
+        else if !ed.esquisse.is_empty() || (ed.outil == OutilFamille::CheminGuidage && !ed.modifier.chemin.points.is_empty()) { ed.echap_valide = true; }
         else if en_cours { ed.abandonner_saisie(); }
         else if ed.outil != OutilFamille::Selection { ed.choisir_outil(OutilFamille::Selection); }
         else { ed.selectionner(Vec::new()); }
@@ -709,7 +712,8 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             let clavier = !ui.ctx().egui_wants_keyboard_input();
             let valider_saisie = ed.saisie_trace.clavier(ui.ctx(), trace.precedent().is_some());
             let fermer = clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
-            let terminer = resp.clicked_by(PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space)));
+            let echap = std::mem::take(&mut ed.echap_valide);
+            let terminer = echap || resp.clicked_by(PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space)));
             if !ed.saisie_trace.texte.is_empty() {
                 crate::socle::messages::consigne_vue(ui, rect, 32.0, &format!("Point : {} · Entrée pour valider · Tab pour l'angle", ed.saisie_trace.texte));
             }
@@ -774,8 +778,12 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 }
             }
             ed.trace_polyligne = Some(trace);
+            if echap {
+                ed.choisir_outil(OutilFamille::Selection);
+            }
         }
         OutilFamille::Extrusion | OutilFamille::ExtrusionVide | OutilFamille::Revolution | OutilFamille::RevolutionVide | OutilFamille::ExtrusionChemin | OutilFamille::Raccordement | OutilFamille::RaccordementChemin | OutilFamille::CoteAngle | OutilFamille::CoteDiametre | OutilFamille::Altimetrie => {
+            let echap = std::mem::take(&mut ed.echap_valide);
             // sommet accroché : sur chaque axe, le plan le plus proche (décalage au-delà
             // de 7 px)
             let accroche = |axe: AxePlan, x: f64| match ed.plan_proche(&r, axe, x) {
@@ -813,7 +821,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 }
             }
             let clavier = !ui.ctx().egui_wants_keyboard_input();
-            let mut finir = resp.clicked_by(PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
+            let mut finir = echap || resp.clicked_by(PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
             if resp.clicked() {
                 if let Some(q) = resp.interact_pointer_pos() {
                     if profil && ferme_profil(ed, &cadre, q) {
@@ -837,6 +845,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
             }
             if finir && ed.outil.est_forme() {
                 ed.erreur = ed.terminer_forme(None).err();
+                if echap && ed.erreur.is_none() { ed.choisir_outil(OutilFamille::Selection); }
                 return;
             }
             if finir {
@@ -856,6 +865,9 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                     }
                     _ => ed.message = Some("Esquisse abandonnée : pas assez de points.".into()),
                 }
+            }
+            if finir && echap {
+                ed.choisir_outil(OutilFamille::Selection);
             }
         }
         OutilFamille::Cote | OutilFamille::Egalite => {
