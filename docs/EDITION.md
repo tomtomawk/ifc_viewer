@@ -208,7 +208,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   sommets déplacés. Pour les lignes d'escalier et de garde-corps, le nombre de sommets
   est conservé pendant cette modification.
 - **Ouverture** place une porte, une fenêtre ou une ouverture libre par clic sur un mur ou par
-  abscisse depuis son départ. Une ouverture d'assemblage perce toutes ses couches. Une
+  abscisse depuis son départ. Au survol du mur, la baie s’affiche à ses dimensions de
+  pose. Le tracé est rouge si elle dépasse une extrémité du mur. Une ouverture
+  d’assemblage perce toutes ses couches. Une
   menuiserie importée conserve son maillage et suit son hôte ; ses dimensions sont
   verrouillées tant qu'elle n'est pas remplacée explicitement par un cadre natif.
 - **Sélection** : sélectionner un élément (sans outil en cours) ouvre l'onglet

@@ -7,6 +7,7 @@ use commandes::Execution;
 use config::options::Dimensions;
 
 mod identique;
+mod ouverture_vue;
 mod palettes;
 mod placement;
 mod poteau;
@@ -130,27 +131,6 @@ impl Application {
             } else {
                 0.0
             },
-        }
-    }
-    pub(crate) fn placer_ouverture(&mut self, id: Id, point: [f64; 2]) {
-        let resultat = (|| {
-            let mut id = self.cle_native(id).ok_or("Sélectionnez un mur.")?;
-            let p = &self.natif.as_ref().ok_or("Aucun projet ouvert.")?.0;
-            if let Some(a) = p
-                .murs
-                .iter()
-                .find(|m| m.id == id)
-                .and_then(|m| m.assemblage.clone())
-            {
-                id = a;
-            }
-            let (axe, _, _) = modele::volumes::solides::hote(p, &id)?;
-            self.verifier_type_ouverture()?;
-            self.executer_bim(self.commande_ouverture(id, axe.abscisse(point)))?;
-            Ok(())
-        })();
-        if let Err(e) = resultat {
-            self.error = Some(e);
         }
     }
     /// Place le végétal de l'outil Arbre au point `position`, au niveau de la vue ; un type

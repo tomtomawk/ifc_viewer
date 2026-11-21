@@ -29,6 +29,9 @@ impl Application {
             self.bim.murs_a_attacher.clear();
         }
         self.bim.attache_toiture_active = mode_attache;
+        let mode_ouverture = self.onglet_ruban == OngletRuban::Modeliser
+            && self.natif.is_some() && self.loading.is_none()
+            && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Ouverture);
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
         // dalle (ou sol) : contour cliqué sur le plan de son dessus
         let dalle = if matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
@@ -151,6 +154,7 @@ impl Application {
                 || (i.pointer.any_down() && i.pointer.press_origin().is_some_and(|p| zone.contains(p)))
         });
         let mut saisir_alignement = false;
+        let mut ouverture_visee = None;
         if self.scene.is_some() && !sur_repere_plan {
             let pick = |app: &Self, p: egui::Pos2| -> Option<(u32, Vec3)> {
                 if !app.point_dans_cadrage(rect, p) { return None; }
@@ -160,8 +164,8 @@ impl Application {
                 s.pick(o, d, &app.visible, app.plan_coupe(), app.boite_appliquee()).map(|(obj, t)| (obj, o + d * t))
             };
 
-            if mode_trace { self.fenetre_selection = None; }
-            if !mode_trace && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary)
+            if mode_trace || mode_ouverture { self.fenetre_selection = None; }
+            if !mode_trace && !mode_ouverture && self.fenetre_selection.is_none() && resp.drag_started_by(PointerButton::Primary)
                 && let Some(debut) = ui.input(|i| i.pointer.press_origin())
                     && pick(self, debut).is_none() {
                         self.fenetre_selection = Some(FenetreSelection { debut, fin: debut, ajouter: ui.input(|i| i.modifiers.ctrl || i.modifiers.command) });
@@ -170,7 +174,7 @@ impl Application {
             // présélection au survol (cycle Tab) : recalculée quand la souris bouge
             let appui = ui.input(|i| i.pointer.any_down());
             // pas de présélection dans le style Réaliste (vue de rendu)
-            match resp.hover_pos().filter(|_| !mode_trace && !rectangle_actif && !self.vol.actif && !appui && self.style != StyleVisuel::Realiste) {
+            match resp.hover_pos().filter(|_| !mode_trace && !mode_ouverture && !rectangle_actif && !self.vol.actif && !appui && self.style != StyleVisuel::Realiste) {
                 Some(q) => {
                     let (contexte, mut cycle) = (self.contexte_cycle(rect), self.cycle.take());
                     crate::saisie::cycle::actualiser(&mut cycle, q, contexte, || self.candidats_selection(rect, q));
@@ -217,6 +221,8 @@ impl Application {
                 if annuler { self.fenetre_selection = None; }
                 else if resp.drag_stopped_by(PointerButton::Primary)
                     && let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
+            } else if mode_ouverture {
+                ouverture_visee = self.interaction_ouverture(&resp, pick);
             } else if mode_attache {
                 // clic droit : retire le dernier mur choisi, sinon quitte l'outil (comme Échap)
                 if resp.clicked_by(PointerButton::Secondary) && !self.reculer_attache_toiture() { self.ruban_edition.annuler(); }
@@ -409,7 +415,6 @@ impl Application {
                 self.select(None, false);
                 self.bim.origine = true;
             } else if let Some(c) = resp.clicked().then(|| resp.interact_pointer_pos()).flatten()
-                .filter(|_| self.ruban_edition.outil() != Some(crate::zones::ruban::Outil::Ouverture))
                 .and_then(|q| crate::saisie::cycle::au_clic(&self.cycle, q).or_else(|| self.candidats_selection(rect, q).into_iter().next()))
             {
                 // candidat présélectionné (Tab), sinon le premier sous le curseur : objet à
@@ -418,7 +423,7 @@ impl Application {
             } else if resp.clicked() {
                 // Plan : une arête en pointillés de la plage haute (au-dessus de la coupe)
                 // est prioritaire sur l'élément coupé ou vu dessous.
-                let haut = (self.ruban_edition.outil()!=Some(crate::zones::ruban::Outil::Ouverture)).then(|| resp.interact_pointer_pos().and_then(|q| self.objet_plage_haute(rect, q))).flatten();
+                let haut = resp.interact_pointer_pos().and_then(|q| self.objet_plage_haute(rect, q));
                 let hit = match haut {
                     Some(obj) => Some((obj, self.scene.as_ref().map_or(Vec3::ZERO, |s| s.objects[obj as usize].min))),
                     None => resp.interact_pointer_pos().and_then(|p| pick(self, p))
@@ -428,9 +433,7 @@ impl Application {
                 };
                 let id = hit.and_then(|(obj, _)| self.scene.as_ref()?.objects.get(obj as usize).map(|o| self.cible_clic(o.id)));
                 self.point_clique = hit.and_then(|(_, p)| self.scene.as_ref().map(|s| p.as_dvec3() + s.origin));
-                if self.natif.is_some() && self.ruban_edition.outil()==Some(crate::zones::ruban::Outil::Ouverture) {
-                    if let (Some(id),Some(p))=(id,self.point_clique) { self.placer_ouverture(id,[p.x*1000.0,p.y*1000.0]); }
-                } else if id.is_none() {
+                if id.is_none() {
                     // Un clic bref désélectionne seulement. Le rectangle est réservé
                     // au glissement avec le bouton gauche maintenu depuis le vide.
                     if !ui.input(|i| i.modifiers.ctrl || i.modifiers.command) {
@@ -539,10 +542,12 @@ impl Application {
         if etiquette_annotation { self.apercu_etiquette_vue(ui, rect, resp.hover_pos()); }
         if quadrillage { self.apercu_quadrillage(ui, rect, resp.hover_pos()); }
         if niveau_vue { self.outil_niveau_vue(ui, rect, &resp); }
-        // Ouverture : un clic sur un mur la place (branche du clic plus haut) ; consigne et
-        // clic droit comme les autres placements
-        if self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Ouverture) {
-            if resp.clicked_by(PointerButton::Secondary) { self.ruban_edition.annuler(); }
+        if mode_ouverture {
+            if resp.clicked_by(PointerButton::Secondary) {
+                self.ruban_edition.annuler();
+            } else if let Some(pose) = &ouverture_visee {
+                self.apercu_ouverture(ui, rect, pose);
+            }
             if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, "Ouverture : cliquer sur un mur pour la placer · Échap ou clic droit : quitter"); }
         }
         if let Some(composant) = placement {
