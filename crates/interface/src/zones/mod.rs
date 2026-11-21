@@ -12,6 +12,7 @@ pub(crate) mod navigateur;
 pub(crate) mod proprietes;
 pub(crate) mod donnees_importees;
 pub(crate) mod communes;
+mod proprietes_multiples;
 pub(crate) mod menu_vue;
 pub(crate) mod vue_native;
 pub(crate) mod vue_revit;

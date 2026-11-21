@@ -156,32 +156,6 @@ fn changer_type(p: &Projet, g: &Groupe, t: Option<&str>) -> Result<Projet, Strin
     Ok(q)
 }
 
-/// Sorte d'un élément pour le report d'une modification : sa collection ; un mur seul
-/// et une couche de mur composé diffèrent, comme deux formes d'annotation.
-fn sorte(p: &Projet, id: &str) -> Option<String> {
-    if let Some(m) = p.murs.iter().find(|m| m.id == id) {
-        return Some(format!("mur:{}", m.assemblage.is_some()));
-    }
-    if let Some(a) = p.annotations.iter().find(|a| a.id == id) {
-        return Some(format!("annotation:{:?}", std::mem::discriminant(&a.forme)));
-    }
-    // niveaux : chacun a son altitude, rien à reporter de l'un à l'autre
-    let genre = crate::socle::document_bim::elements_natifs(p).find(|(_, c)| c.as_str() == id).map(|(g, _)| g).filter(|g| *g != "niveau")
-        .or_else(|| p.pieces.iter().any(|x| x.id == id).then_some("piece"))
-        .or_else(|| p.quadrillages.iter().any(|x| x.id == id).then_some("quadrillage"))
-        .or_else(|| p.vues.iter().any(|x| x.id == id).then_some("vue"))?;
-    Some(genre.to_string())
-}
-
-/// Élément principal (le premier) et éléments sélectionnés de même sorte, principal
-/// compris ; None sans pareil (sélection d'un seul élément de sa sorte).
-pub(crate) fn pareils(p: &Projet, ids: &[String]) -> Option<(String, Vec<String>)> {
-    let principal = ids.first()?;
-    let s = sorte(p, principal)?;
-    let memes: Vec<String> = ids.iter().filter(|id| sorte(p, id).as_ref() == Some(&s)).cloned().collect();
-    (memes.len() > 1).then(|| (principal.clone(), memes))
-}
-
 impl Application {
     /// Sélecteurs de type de plusieurs éléments : un par sorte d'élément sélectionnée.
     /// Projet modifié si un type est choisi.
@@ -257,21 +231,6 @@ mod tests {
         assert_eq!((nombre("Murs"), nombre("Éléments horizontaux")), (2, 1));
         // ouverture de l'exemple sans type dans le projet : pas de sélecteur vide
         assert_eq!(nombre("Portes et fenêtres") + nombre("Ouvertures libres"), usize::from(!p.types_ouvertures.is_empty()));
-    }
-
-    #[test]
-    fn pareils_de_meme_sorte() {
-        let p = projet();
-        let murs: Vec<String> = p.murs.iter().filter(|m| m.assemblage.is_none()).take(2).map(|m| m.id.clone()).collect();
-        let mut ids = murs.clone();
-        ids.push(p.dalles[0].id.clone());
-        assert_eq!(pareils(&p, &ids), Some((murs[0].clone(), murs.clone())));
-        // un seul élément de sa sorte : rien à reporter
-        assert_eq!(pareils(&p, &[p.dalles[0].id.clone(), murs[0].clone()]), None);
-        // couche d'un mur composé : autre sorte qu'un mur seul
-        if let Some(couche) = p.murs.iter().find(|m| m.assemblage.is_some()) {
-            assert_eq!(pareils(&p, &[murs[0].clone(), couche.id.clone()]), None);
-        }
     }
 
     #[test]

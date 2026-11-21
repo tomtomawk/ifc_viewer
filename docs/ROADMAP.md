@@ -15,7 +15,6 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| SEL1 | Sélection multiple : afficher « Varié » pour les autres propriétés et catégories lorsque les valeurs diffèrent ; vérifier et compléter le report des modifications pour chaque champ, y compris les sélections mixtes et la saisie de la valeur déjà portée par le premier élément | P0 | `crates/interface/src/zones/volet_proprietes.rs`, `crates/interface/src/zones/proprietes.rs`, `crates/interface/src/saisie/selection_multiple.rs` |
 | T1 | Tests de fichiers malformés, reste : balayage aléatoire des RVT (aucun fichier RVT d'exemple dans le dépôt) ; `feuilles::visible_dans_vue` cherche la catégorie de chaque élément coté dans toutes les collections (coût quadratique sur un gros modèle) ; formule de nomenclature à champs partagés sans cycle (arbre de 16 champs au plus, chacun cité plusieurs fois) : coût exponentiel possible | P3 | `crates/formats/src/rvt/` |
 | G1 | Reste du gabarit pendant l'édition : les textures livrées (`gabarit:textures/…`, `maillage::textures_gabarit`) restent embarquées et désignées par les matériaux ; à copier dans le dossier du projet (ou une bibliothèque) avant de cesser d'embarquer le gabarit | P3 | `crates/maillage/src/textures_gabarit.rs` |
 

@@ -126,12 +126,9 @@ impl Application {
             let epaisseur = projet.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur());
             let materiau = projet.type_mur(&m.type_mur).and_then(|t| (t.couches.len() == 1).then(|| t.couches[0].materiau.clone()).flatten());
             let assemblage = m.assemblage.as_ref().and_then(|a| projet.assemblage(a));
-            let noms_varies = self.report_selection.as_ref().is_some_and(|(_, ids)|
-                projet.murs.iter().filter(|x| ids.contains(&x.id)).any(|x| x.nom != mur.nom));
             ui.label(RichText::new(match (assemblage, &materiau) {
                 (Some(a), Some(x)) => format!("Couche · {x} · de {}", a.nom),
                 (Some(a), None) => format!("Couche de {}", a.nom),
-                (None, _) if noms_varies => "Varié".into(),
                 (None, _) => m.nom.clone(),
             }).strong());
             let mut change = false;
@@ -176,7 +173,7 @@ impl Application {
                     }
                 });
                 ui.end_row();
-                ui.label("Nom");ui.label(if noms_varies { "Varié" } else { &m.nom });ui.end_row();
+                ui.label("Nom");ui.label(&m.nom);ui.end_row();
                 let longueur=projet.trajectoire_justification(m.assemblage.as_deref().unwrap_or(&m.id)).map_or_else(||m.axe.longueur(),|(axe,_)|axe.longueur());
                 for (nom, valeur) in [
                     ("Longueur", modele::unite::unite().afficher(longueur)),

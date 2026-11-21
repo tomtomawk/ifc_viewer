@@ -2,16 +2,8 @@
 use crate::*;
 
 impl Application {
-    /// Propriétés de l'élément sélectionné (comme dans Revit ; emplacement au choix de
-    /// l'utilisateur). Plusieurs éléments de même sorte : le premier est affiché, et ce qui
-    /// y change vaut pour tous (`commandes::report`, comme dans l'éditeur de familles).
+    /// Propriétés des objets sélectionnés ou de la vue active.
     pub(crate) fn volet_proprietes(&mut self, ui: &mut egui::Ui) {
-        self.report_selection = self.natif.as_ref().and_then(|(p, _)| crate::saisie::selection_multiple::pareils(p, &self.selection_bim()));
-        self.volet_proprietes_contenu(ui);
-        self.report_selection = None;
-    }
-
-    fn volet_proprietes_contenu(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_ciel(ui.ctx());
         self.fenetre_position_plan(ui.ctx());
@@ -27,6 +19,18 @@ impl Application {
         if self.natif.is_some() && self.bim.origine {
             ui.label(RichText::new("Origine du projet").strong());
             self.editeur_coordonnees(ui);
+            return;
+        }
+        if self.natif.is_none() && self.selection_multiple.len() > 1
+            && let Some(scene) = &self.scene
+        {
+            let model = &scene.model;
+            let (nom, varie) = crate::zones::communes::melange(
+                self.selection_multiple.iter().map(|id| model.name(*id)),
+            );
+            ui.label(format!("{} éléments sélectionnés", self.selection_multiple.len()));
+            ui.label(format!("Nom · {}", if varie { "Varié" } else { nom.as_deref().unwrap_or("—") }));
+            ui.label(RichText::new("Lecture seule").weak());
             return;
         }
         if self.natif.is_none() && let (Some(scene), Some(id)) = (&self.scene, self.selected) {
@@ -75,10 +79,15 @@ impl Application {
             if !selecteur_creation && self.jeu_actif().is_none() && (!ids.is_empty() || !self.ruban_edition.mur_actif())
                 && let Some(projet)=self.selecteur_type_selection(ui)
                     && let Err(e)=self.appliquer_projet(projet) {self.error=Some(e);}
-            if let Some(projet) = self.proprietes_formes_2d(ui, &ids).or_else(|| self.proprietes_terrains(ui, &ids))
+            let formes = self.proprietes_formes_2d(ui, &ids);
+            let terrains = self.proprietes_terrains(ui, &ids);
+            if let Some(projet) = formes.or(terrains)
                 && let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
-            if let Some((_, memes)) = &self.report_selection {
-                ui.label(RichText::new(format!("{} éléments de même sorte sélectionnés : une modification de l'élément affiché s'applique à tous.", memes.len())).small().weak());
+            if ids.len() > 1 {
+                if let Err(e) = self.proprietes_multiples(ui, &ids) {
+                    self.error = Some(e);
+                }
+                return;
             }
         }
         if let Some((projet, _)) = self.natif.as_ref() {
@@ -125,7 +134,7 @@ impl Application {
             self.proprietes_boite(ui);
             ui.separator();
         }
-        // sélection native (une ou plusieurs) : le premier élément
+        // sélection individuelle (y compris un élément importé)
         let selection = self.bim.selection.first().and_then(|id| {
             crate::socle::document_bim::elements_natifs(&self.natif.as_ref()?.0).find(|(_, c)| *c == id).map(|(g, c)| modele::identifiants::id_natif(g, c))
         }).or(self.selected);

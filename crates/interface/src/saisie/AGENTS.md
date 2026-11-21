@@ -13,7 +13,7 @@ Rôle : interaction commune aux outils de la vue et aux éditeurs.
 | `candidats.rs` | candidats du projet (objets à 6 px par rayons, traits 2D, repères, limites ; dalles après les murs en plan) et application du clic |
 | `visee.rs` | visée des éléments 2D d'une vue native (annotations, pièces, niveaux, limites) au trait, à `TOLERANCE` px ; prise par la fenêtre de sélection sur les traits |
 | `selection.rs` | clic, rectangle, cadrage, sélecteur de type d'un élément seul |
-| `selection_multiple.rs` | sélecteur de type de plusieurs éléments : un par sorte d'élément sélectionnée ; `pareils` : élément principal et éléments de même sorte pour le report |
+| `selection_multiple.rs` | sélecteur de type de plusieurs éléments : un par sorte d'élément sélectionnée |
 | `poignees_annotation.rs` | poignées des annotations du projet |
 
 Dépendances typiques : `outils/dessiner/dessin_plan/` (tracé 2D), `zones/ruban/` (`Outil`), `outils/modeliser/bim/`, `socle/document_bim.rs`.

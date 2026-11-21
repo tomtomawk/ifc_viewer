@@ -635,9 +635,6 @@ pub struct Application {
     /// les modifications du projet attendent sa validation (Entrée, autre clic, fin du
     /// glisser) pour être appliquées, en une seule étape d'historique.
     saisie_active: bool,
-    /// Sélection multiple pendant le tracé de Propriétés : élément principal et autres
-    /// éléments de même sorte, qui reçoivent ce qui change sur le principal.
-    report_selection: Option<(String, Vec<String>)>,
     /// Candidats à la sélection sous le curseur (présélection, Tab).
     cycle: Option<crate::saisie::cycle::Cycle<crate::saisie::candidats::Candidat>>,
     /// Projet tel qu'avant la saisie en cours, si elle a modifié le projet.
@@ -839,7 +836,6 @@ impl Application {
             editeur_hachure: None,
             editeur_plumes: None,
             saisie_active: false,
-            report_selection: None,
             cycle: None,
             avant_saisie: None,
             saisie_annulee: false,

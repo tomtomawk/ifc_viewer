@@ -1,7 +1,5 @@
 //! Propriétés portant sur toute une sélection : terrains (type, cotes, surface),
-//! dessins 2D (périmètre, surface, remplissage), valeur commune (« Varié »). Les autres
-//! paramètres d'une sélection multiple passent par le report commun
-//! (`commandes::report`, branché dans `appliquer_projet`).
+//! dessins 2D (périmètre, surface, remplissage), valeur commune (« Varié »).
 use crate::*;
 use crate::zones::palette_creation::titre_parametres;
 use crate::zones::ruban::selecteur;
@@ -87,8 +85,6 @@ impl Application {
         if terrains.is_empty() {
             return None;
         }
-        let (type_actuel, mixte) = melange(terrains.iter().map(|t| projet.type_terrain(t)));
-        let type_actuel = type_actuel?;
         let mut p = projet.clone();
         // le type par défaut devient un type du projet dès qu'on le modifie
         let enregistrer_types = |p: &mut Projet| p.fixer_types_terrains();
@@ -104,28 +100,32 @@ impl Application {
                 }
                 ui.end_row();
             }
-            if !mixte {
-                ui.label("Profondeur nominale").on_hover_text("Profondeur du type : du point le plus bas du terrain naturel au fond plat, pour tous les terrains de ce type");
-                let mut e = type_actuel.epaisseur;
-                if ui.add(egui::DragValue::new(&mut e).speed(10.0).range(1.0..=1e6).dimensions()).changed() {
-                    enregistrer_types(&mut p);
-                    if let Some(t) = p.types_terrains.iter_mut().find(|t| t.id == type_actuel.id) { t.epaisseur = e; }
-                    modifie = true;
-                }
-                ui.end_row();
-                ui.label("Matériau");
-                let texte = type_actuel.materiau.clone().unwrap_or_else(|| "Par défaut".into());
-                egui::ComboBox::from_id_salt("materiau_type_terrain").width(110.0).truncate().selected_text(texte).show_ui(ui, |ui| {
-                    for m in std::iter::once(None).chain(projet.materiaux.iter().map(|m| Some(m.nom.clone()))) {
-                        if ui.selectable_label(m == type_actuel.materiau, m.clone().unwrap_or_else(|| "Par défaut".into())).clicked() {
-                            enregistrer_types(&mut p);
-                            if let Some(t) = p.types_terrains.iter_mut().find(|t| t.id == type_actuel.id) { t.materiau = m.clone(); }
-                            modifie = true;
-                        }
-                    }
-                });
-                ui.end_row();
+            let types: std::collections::BTreeSet<_> = terrains.iter()
+                .map(|t| projet.type_terrain(t).id).collect();
+            ui.label("Profondeur nominale").on_hover_text("Modifie les types des terrains sélectionnés et toutes leurs occurrences");
+            let profondeurs: Vec<_> = terrains.iter().map(|t| serde_json::json!(projet.type_terrain(t).epaisseur)).collect();
+            if let Some(e) = ui.push_id("profondeur_terrains", |ui| {
+                crate::zones::proprietes_multiples::saisie(ui, &profondeurs, true, true)
+            }).inner.and_then(|v| v.as_f64()).filter(|e| (1.0..=1e6).contains(e)) {
+                enregistrer_types(&mut p);
+                for t in p.types_terrains.iter_mut().filter(|t| types.contains(&t.id)) { t.epaisseur = e; }
+                modifie = true;
             }
+            ui.end_row();
+            ui.label("Matériau").on_hover_text("Modifie les types des terrains sélectionnés et toutes leurs occurrences");
+            let (materiau, varie) = melange(terrains.iter().map(|t| projet.type_terrain(t).materiau));
+            let materiau = materiau.flatten();
+            let texte = if varie { "Varié" } else { materiau.as_deref().unwrap_or("Par défaut") };
+            egui::ComboBox::from_id_salt("materiau_type_terrain").width(110.0).truncate().selected_text(texte).show_ui(ui, |ui| {
+                for m in std::iter::once(None).chain(projet.materiaux.iter().map(|m| Some(m.nom.clone()))) {
+                    if ui.selectable_label(!varie && m == materiau, m.as_deref().unwrap_or("Par défaut")).clicked() {
+                        enregistrer_types(&mut p);
+                        for t in p.types_terrains.iter_mut().filter(|t| types.contains(&t.id)) { t.materiau = m.clone(); }
+                        modifie = true;
+                    }
+                }
+            });
+            ui.end_row();
             let cotes = terrains.iter().flat_map(|t| t.contour.iter().chain(&t.points)).map(|p| p[2]);
             let (bas, haut) = cotes.fold((f64::MAX, f64::MIN), |(a, b), z| (a.min(z), b.max(z)));
             ui.label("Cotes NGF");
