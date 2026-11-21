@@ -12,12 +12,14 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene` (`maillage` en de
 | `ciel.rs` | ciel physique (passes de tables, `couleur_soleil`) |
 | `camera.rs` | `Camera` |
 | `profondeur.rs` | matrices des passes pour wgpu : profondeur inversée de la vue (1 proche, 0 loin), directe des cartes d'ombres |
+| `profondeur_faces.rs` | copie de la profondeur des faces opaques (multiéchantillonnée) dans une texture lue par les traits et les reflets du verre |
+| `apparences.rs` | images des apparences envoyées au GPU (`couches_images`) |
 | `fond.rs` | couleur de fond des vues (seule source : projet, familles, captures) |
 | `orientation_plan.rs` | repère d'orientation des plans (egui) |
 | `selection_rectangle.rs` | sélection par rectangle (egui) |
 | `scene.wgsl`, `commun.wgsl`, `ao.wgsl` | shaders, lus par `include_str!` ; `scene.wgsl` et `commun.wgsl` sont concaténés |
 
-Profondeur de la vue inversée : effacer à `LOIN_INVERSE`, comparer avec `COMPARAISON_INVERSEE`, décalages de pente négatifs, aucun décalage constant sur les faces (traits et annotations avancés par `avancer` dans le shader).
+Profondeur de la vue inversée : effacer à `LOIN_INVERSE`, comparer avec `COMPARAISON_INVERSEE`. Aucun décalage de profondeur sur les faces. Chaque dessin (vue, fenêtre de vue) a deux passes : faces opaques, copie de leur profondeur (`profondeur_faces`), puis traits et transparents. Les traits ne passent pas par le test du matériel : `trait_cache` (`scene.wgsl`) compare leur profondeur, avancée par `avancer`, à celle des faces lue au centre du trait et prolongée par leur pente. Les annotations sont avancées par `avancer` et testées par le matériel.
 
 `MAX_APPARENCES` est dans `noyau::constantes` et en dur dans `scene.wgsl` : les deux valeurs doivent rester égales. Les tests `shader_*_valide` valident les shaders (naga) sans GPU. Le rendu lui-même ne se teste pas sans affichage. `gpu.rs` dépasse 600 lignes (`Renderer` à un seul `impl`) : ne pas l'agrandir.
 

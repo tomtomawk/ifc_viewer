@@ -6,13 +6,14 @@ use eframe::egui;
 use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};
 use crate::profondeur::{self, COMPARAISON_INVERSEE, LOIN_INVERSE};
+use crate::apparences::{self, COTE_TEXTURE};
+use crate::profondeur_faces::{self, CopieProfondeur};
 use glam::{Mat4, Vec3, Vec4};
 use noyau::constantes::MAX_APPARENCES;
 use std::sync::Arc;
 
-/// Couches d'images des apparences et leur côté (pixels, mipmaps jusqu'à 1).
+/// Couches d'images des apparences (nombre maximal).
 const MAX_COUCHES: usize = 64;
-const COTE_TEXTURE: u32 = 1024;
 
 /// Uniformes communes aux shaders (même disposition que `Globales` côté Rust).
 const COMMUN: &str = include_str!("commun.wgsl");
@@ -79,6 +80,7 @@ struct Globales {
     selection: [u32; 4],
     inv_vp: [f32; 16],
     ciel: [[f32; 4]; 3],
+    echantillon: [f32; 4],
 }
 
 #[repr(C)]
@@ -119,6 +121,9 @@ struct Cibles {
     hauteur: u32,
     couleur_ms: Option<wgpu::TextureView>,
     profondeur: wgpu::TextureView,
+    /// Profondeur des faces opaques, lue par les traits et les reflets ; liaison de sa copie.
+    profondeur_faces: wgpu::TextureView,
+    groupe_copie: wgpu::BindGroup,
     resultat: wgpu::Texture,
     vue_resultat: wgpu::TextureView,
     /// Profondeur de l'occultation : tampon de profondeur et sa copie en couleur, lue.
@@ -138,6 +143,7 @@ pub struct Renderer {
     queue: wgpu::Queue,
     egui: Arc<egui::mutex::RwLock<egui_wgpu::Renderer>>,
     echantillons: u32,
+    copie_profondeur: CopieProfondeur,
     opaque: wgpu::RenderPipeline,
     transparent: wgpu::RenderPipeline,
     traits: wgpu::RenderPipeline,
@@ -437,9 +443,9 @@ impl Renderer {
         ];
         let tampons_profondeur = [Some(wgpu::VertexBufferLayout { array_stride: pas_sommet, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_position })];
 
-        // pipeline de la scène : (constante, pente) du décalage de profondeur des faces,
-        // fusion des transparents
-        let scene = |label, vs, tampons: &[Option<wgpu::VertexBufferLayout>], fs, decalage: Option<(i32, f32)>, transparent: bool| {
+        // pipeline de la scène : test de profondeur par le matériel (sinon par le shader :
+        // traits), fusion des transparents
+        let scene = |label, vs, tampons: &[Option<wgpu::VertexBufferLayout>], fs, teste: bool, transparent: bool| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout_scene),
@@ -447,10 +453,10 @@ impl Renderer {
                 primitive: Default::default(),
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: PROFONDEUR,
-                    depth_write_enabled: Some(!transparent),
-                    depth_compare: Some(COMPARAISON_INVERSEE),
+                    depth_write_enabled: Some(teste && !transparent),
+                    depth_compare: Some(if teste { COMPARAISON_INVERSEE } else { wgpu::CompareFunction::Always }),
                     stencil: Default::default(),
-                    bias: decalage.map_or_else(Default::default, |(constant, slope_scale)| wgpu::DepthBiasState { constant, slope_scale, clamp: 0.0 }),
+                    bias: Default::default(),
                 }),
                 multisample: wgpu::MultisampleState { count: echantillons, ..Default::default() },
                 fragment: Some(wgpu::FragmentState {
@@ -477,16 +483,15 @@ impl Renderer {
             6 => Float32x3, 7 => Snorm8x4, 8 => Unorm8x4, 9 => Uint32
         ];
         let tampons_segment = [Some(wgpu::VertexBufferLayout { array_stride: 2 * pas_sommet, step_mode: wgpu::VertexStepMode::Instance, attributes: &attributs_segment })];
-        // faces repoussées d'un pixel de leur pente (bande des traits sur une face fuyante) ;
-        // pas de constante (en profondeur inversée, elle vaudrait au loin d'un triangle
-        // proche) : les traits sont avancés dans `vs_trait`
-        let opaque = scene("opaques", "vs_main", &tampons_scene, "fs_main", Some((0, -1.0)), false);
-        let transparent = scene("transparents", "vs_main", &tampons_scene, "fs_main", Some((0, -1.0)), true);
-        let traits = scene("traits", "vs_trait", &tampons_segment, "fs_plat", None, false);
-        let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_coupe", Some((0, -1.0)), false);
+        // faces sans décalage de profondeur : les traits testent eux-mêmes s'ils sont cachés
+        // (`trait_cache`), contre la copie de la profondeur des faces
+        let opaque = scene("opaques", "vs_main", &tampons_scene, "fs_main", true, false);
+        let transparent = scene("transparents", "vs_main", &tampons_scene, "fs_main", true, true);
+        let traits = scene("traits", "vs_trait", &tampons_segment, "fs_plat", false, false);
+        let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_coupe", true, false);
         // fond de ciel : sans tampon de sommets ni écriture de profondeur
-        let pipeline_ciel = scene("ciel", "vs_ciel", &[], "fs_ciel", None, true);
-        let pipeline_herbe = scene("herbe", "vs_herbe", &tampons_scene, "fs_herbe", None, false);
+        let pipeline_ciel = scene("ciel", "vs_ciel", &[], "fs_ciel", true, true);
+        let pipeline_herbe = scene("herbe", "vs_herbe", &tampons_scene, "fs_herbe", true, false);
         let pipeline_ombres_decoupe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("carte d'ombres découpée"),
             layout: Some(&layout_scene),
@@ -608,7 +613,7 @@ impl Renderer {
             ..Default::default()
         });
         let uniformes_apparences = Self::tampon(&device, "apparences", &vec![0u8; MAX_APPARENCES * 22 * 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
-        let vue_apparences = Self::couches_images(&device, &rs.queue, &[]);
+        let vue_apparences = apparences::couches_images(&device, &rs.queue, &[]);
         let ciel = crate::ciel::Ciel::nouveau(&device);
         let echantillonneur_ciel = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("ciel"),
@@ -682,6 +687,7 @@ impl Renderer {
             globales,
             uniformes_passes,
             groupe_0,
+            copie_profondeur: CopieProfondeur::new(&device, echantillons),
             echantillons,
             egui: rs.renderer.clone(),
             queue: rs.queue.clone(),
@@ -757,13 +763,16 @@ impl Renderer {
         let groupe_ao = groupe(&ao_lisse);
         let groupe_flou = groupe(&ao_brut);
         let copie = Self::texture(d, "copie des surfaces opaques", largeur, hauteur, 1, COULEUR, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+        let profondeur = vue(Self::texture(d, "profondeur", largeur, hauteur, self.echantillons, PROFONDEUR, lue));
         Cibles {
             vue_copie: copie.create_view(&Default::default()),
             copie,
             largeur,
             hauteur,
             couleur_ms,
-            profondeur: vue(Self::texture(d, "profondeur", largeur, hauteur, self.echantillons, PROFONDEUR, attache)),
+            groupe_copie: self.copie_profondeur.groupe(d, &profondeur),
+            profondeur,
+            profondeur_faces: vue(Self::texture(d, "profondeur des faces", largeur, hauteur, 1, profondeur_faces::FORMAT, lue)),
             vue_resultat: resultat.create_view(&Default::default()),
             resultat,
             ao_tampon,
@@ -773,37 +782,6 @@ impl Renderer {
             groupe_ao,
             groupe_flou,
         }
-    }
-
-    /// Tableau de textures des apparences : une couche par image (mipmaps), une couche
-    /// blanche s'il n'y en a aucune.
-    fn couches_images(device: &wgpu::Device, queue: &wgpu::Queue, images: &[Arc<Vec<Vec<u8>>>]) -> wgpu::TextureView {
-        let niveaux = COTE_TEXTURE.ilog2() + 1;
-        let n = images.len().max(1) as u32;
-        let t = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("apparences"),
-            size: wgpu::Extent3d { width: COTE_TEXTURE, height: COTE_TEXTURE, depth_or_array_layers: n },
-            mip_level_count: niveaux,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let blanc: Vec<Vec<u8>> = (0..niveaux).map(|m| vec![255u8; ((COTE_TEXTURE >> m).pow(2) * 4) as usize]).collect();
-        for z in 0..n {
-            let mips = images.get(z as usize).map_or(&blanc, |i| i.as_ref());
-            for (m, donnees) in mips.iter().enumerate() {
-                let cote = COTE_TEXTURE >> m;
-                queue.write_texture(
-                    wgpu::TexelCopyTextureInfo { texture: &t, mip_level: m as u32, origin: wgpu::Origin3d { x: 0, y: 0, z }, aspect: wgpu::TextureAspect::All },
-                    donnees,
-                    wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(4 * cote), rows_per_image: Some(cote) },
-                    wgpu::Extent3d { width: cote, height: cote, depth_or_array_layers: 1 },
-                );
-            }
-        }
-        t.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() })
     }
 
     /// Image d'une texture ramenée au carré de COTE_TEXTURE, avec ses mipmaps ; gardée
@@ -863,7 +841,7 @@ impl Renderer {
         self.decoupe_rangs = apparences.iter().take(MAX_APPARENCES).map(|a| a.textures.contains_key(&CarteTexture::Decoupe)).collect();
         self.refaire_herbe();
         if couches != self.couches_apparences {
-            self.vue_apparences = Self::couches_images(&self.device, &self.queue, &images);
+            self.vue_apparences = apparences::couches_images(&self.device, &self.queue, &images);
             self.couches_apparences = couches;
         }
     }
@@ -1044,6 +1022,8 @@ impl Renderer {
             g.contour[k / 2][2 * (k % 2)..2 * (k % 2) + 2].copy_from_slice(&[q.x, q.y]);
         }
         g.selection[0] = p.selected.len() as u32;
+        let [ex, ey] = profondeur_faces::position_echantillon(self.echantillons);
+        g.echantillon = [ex, ey, 0.0, 0.0];
         g.inv_vp = p.mvp.inverse().to_cols_array();
         g.ciel[1] = [1.0, 0.0, 1.0, 0.0];
         if let Some(c) = p.ciel {
@@ -1105,18 +1085,20 @@ impl Renderer {
         passe.set_vertex_buffer(2, self.motifs.slice(..));
     }
 
-    /// Triangles opaques, traits (segments, et arêtes vives si `aretes`) puis triangles
-    /// transparents des tampons donnés.
-    fn dessiner(&self, passe: &mut wgpu::RenderPass<'_>, ebo: [&wgpu::Buffer; 3], n: [u32; 3], aretes: bool) {
+    /// Triangles opaques, puis (passe suivante, après la copie de leur profondeur) traits
+    /// (segments, et arêtes vives si `aretes`) et triangles transparents des tampons donnés.
+    fn dessiner(&self, passe: &mut wgpu::RenderPass<'_>, ebo: [&wgpu::Buffer; 3], n: [u32; 3], faces: bool, aretes: bool) {
         let index = |passe: &mut wgpu::RenderPass<'_>, b: &wgpu::Buffer, n: u32| {
             passe.set_index_buffer(b.slice(..), wgpu::IndexFormat::Uint32);
             passe.draw_indexed(0..n, 0, 0..1);
         };
-        if n[0] > 0 {
-            passe.set_pipeline(&self.opaque);
-            index(passe, ebo[0], n[0]);
+        if faces {
+            if n[0] > 0 {
+                passe.set_pipeline(&self.opaque);
+                index(passe, ebo[0], n[0]);
+            }
+            return;
         }
-        // traits sans ombrage, avancés vers l'œil (`vs_trait`)
         passe.set_pipeline(&self.traits);
         let segments = |passe: &mut wgpu::RenderPass<'_>, b: &wgpu::Buffer, n: u32| {
             passe.set_vertex_buffer(0, b.slice(..));
@@ -1184,20 +1166,9 @@ impl Renderer {
                 }
             }
         }
-        // occultation ambiante : profondeur (triangles opaques), occultation brute puis lissée ;
-        // la profondeur sert aussi aux reflets du verre
+        // occultation ambiante : profondeur (triangles opaques), occultation brute puis lissée
         let ao = self.ao_actif(p);
         let ssr = p.ciel.is_some() && p.passes.is_empty() && self.n_transp > 0;
-        if ssr && !ao {
-            let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur), LOIN_INVERSE);
-            if self.n_opaque > 0 {
-                passe.set_pipeline(&self.pipeline_ao_profondeur);
-                passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_AO));
-                passe.set_vertex_buffer(0, self.sommets.slice(..));
-                passe.set_index_buffer(ebo_prof.slice(..), wgpu::IndexFormat::Uint32);
-                passe.draw_indexed(0..n_prof, 0, 0..1);
-            }
-        }
         if ao {
             {
                 let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur), LOIN_INVERSE);
@@ -1229,14 +1200,18 @@ impl Renderer {
                 passe.draw(0..3, 0..1);
             }
         }
-        let groupe_1 = self.groupe_scene(&self.vue_ombres, if ao { &c.ao_lisse } else { &self.ao_vide }, if ssr { &c.vue_copie } else { &self.copie_vide }, if ssr { &c.ao_profondeur } else { &self.ao_vide });
+        let groupe_1 = self.groupe_scene(&self.vue_ombres, if ao { &c.ao_lisse } else { &self.ao_vide }, if ssr { &c.vue_copie } else { &self.copie_vide }, &c.profondeur_faces);
 
         // fenêtres de vue d'une feuille : chacune dans son rectangle, profondeur effacée,
         // découpée par ses plans ; la feuille (cartouche, titres) par-dessus. Chaque dessin
-        // a sa passe : la première efface la couleur, la dernière résout l'anticrénelage.
+        // a deux passes, faces opaques puis (après la copie de leur profondeur, `effacer`
+        // faux) traits et transparents : la première efface la couleur, la dernière résout
+        // l'anticrénelage.
         let [r, v, b] = p.background.map(f64::from);
         let mut premiere = true;
-        let mut passe_couleur = |enc: &mut wgpu::CommandEncoder, derniere: bool| {
+        let copier = |enc: &mut wgpu::CommandEncoder| self.copie_profondeur.copier(enc, &c.groupe_copie, &c.profondeur_faces);
+        let mut passe_couleur = |enc: &mut wgpu::CommandEncoder, derniere: bool, effacer: bool| {
+            let profondeur = if effacer { wgpu::LoadOp::Clear(LOIN_INVERSE) } else { wgpu::LoadOp::Load };
             let load = if std::mem::take(&mut premiere) { wgpu::LoadOp::Clear(wgpu::Color { r, g: v, b, a: 1.0 }) } else { wgpu::LoadOp::Load };
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
@@ -1248,7 +1223,7 @@ impl Renderer {
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &c.profondeur,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(LOIN_INVERSE), store: wgpu::StoreOp::Store }),
+                    depth_ops: Some(wgpu::Operations { load: profondeur, store: wgpu::StoreOp::Store }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: None,
@@ -1273,15 +1248,20 @@ impl Renderer {
                 }
                 None => [0, 0, c.largeur, c.hauteur],
             };
-            let mut passe = passe_couleur(&mut enc, false);
-            passe.set_scissor_rect(rect[0], rect[1], rect[2], rect[3]);
-            passe.set_bind_group(0, &self.groupe_0, &decalage(PREMIERE_FENETRE + k as u32));
-            passe.set_bind_group(1, &groupe_1, &[]);
-            self.sommets_scene(&mut passe);
-            self.dessiner(&mut passe, [&ps.ebo[0], &ps.ebo[1], &ps.ebo[2]], ps.n, false);
+            for faces in [true, false] {
+                if !faces {
+                    copier(&mut enc);
+                }
+                let mut passe = passe_couleur(&mut enc, false, faces);
+                passe.set_scissor_rect(rect[0], rect[1], rect[2], rect[3]);
+                passe.set_bind_group(0, &self.groupe_0, &decalage(PREMIERE_FENETRE + k as u32));
+                passe.set_bind_group(1, &groupe_1, &[]);
+                self.sommets_scene(&mut passe);
+                self.dessiner(&mut passe, [&ps.ebo[0], &ps.ebo[1], &ps.ebo[2]], ps.n, faces, false);
+            }
         }
         {
-            let mut passe = passe_couleur(&mut enc, true);
+            let mut passe = passe_couleur(&mut enc, false, true);
             passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_MODELE));
             passe.set_bind_group(1, &groupe_1, &[]);
             if p.ciel.is_some() && p.passes.is_empty() {
@@ -1295,10 +1275,17 @@ impl Renderer {
                 passe.set_index_buffer(self.ebo_herbe.slice(..), wgpu::IndexFormat::Uint32);
                 passe.draw_indexed(0..self.n_herbe, 0, 0..20);
             }
-            let graphique = p.style == StyleVisuel::Graphique;
-            // reflets du verre : surfaces opaques d'abord, vitrages dans une seconde passe
+            let ebo = [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits];
+            self.dessiner(&mut passe, ebo, [self.n_opaque, 0, 0], true, false);
+            drop(passe);
+            copier(&mut enc);
+            let mut passe = passe_couleur(&mut enc, true, false);
+            passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_MODELE));
+            passe.set_bind_group(1, &groupe_1, &[]);
+            self.sommets_scene(&mut passe);
+            // reflets du verre : vitrages dans une passe après la copie de l'image
             let n_transp = if ssr { 0 } else { self.n_transp };
-            self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [self.n_opaque, n_transp, self.n_lines], graphique);
+            self.dessiner(&mut passe, ebo, [0, n_transp, self.n_lines], false, p.style == StyleVisuel::Graphique);
             if ssr {
                 drop(passe);
                 enc.copy_texture_to_texture(c.resultat.as_image_copy(), c.copie.as_image_copy(), c.resultat.size());
@@ -1324,7 +1311,7 @@ impl Renderer {
                 passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_MODELE));
                 passe.set_bind_group(1, &groupe_1, &[]);
                 self.sommets_scene(&mut passe);
-                self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [0, self.n_transp, 0], false);
+                self.dessiner(&mut passe, ebo, [0, self.n_transp, 0], false, false);
             }
             // tracé de la coupe (poché, contours, hachures) : non découpé par le plan de coupe
             if (p.coupe.is_some() || p.boite.is_some() || p.trace_seul) && self.n_coupe[0] + self.n_coupe[1] > 0 {

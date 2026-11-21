@@ -32,6 +32,8 @@ struct Globales {
     // ciel physique : [0] couleur du soleil (rgb), exposition fixe (w, 0 : auto) ;
     // [1] intensité du ciel, nuages, taille du soleil, actif ; [2] albédo du sol
     ciel: array<vec4f, 3>,
+    // xy : position du premier échantillon dans le pixel (copie de la profondeur des faces)
+    echantillon: vec4f,
 }
 
 // Uniformes d'un dessin : matrice, direction de vue, plan de coupe du mode dessin,

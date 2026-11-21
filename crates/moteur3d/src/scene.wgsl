@@ -37,6 +37,8 @@ struct Varie {
     @location(4) @interpolate(flat) motif: vec4f,
     @location(5) @interpolate(flat) selection: u32,
     @location(6) @interpolate(flat) annot: u32,
+    // trait : point du segment (centre de la bande) au même endroit, repère de découpe
+    @location(7) centre: vec4f,
 }
 
 struct Segment {
@@ -53,9 +55,8 @@ struct Segment {
 // Épaisseur des traits (pixels de l'image).
 const LARGEUR_TRAIT: f32 = 1.0;
 // avance vers l'œil des traits et des annotations, en fraction de leur distance (voir
-// `avancer`) : 1 cm à 50 m pour un trait. Au-dessus de l'erreur d'interpolation de la
-// profondeur d'un grand triangle ; un trait caché derrière une face plus proche que cela
-// la traverse.
+// `avancer`) : 1 cm à 50 m pour un trait. C'est la tolérance du test des traits cachés
+// (`trait_cache`) : un trait derrière une face plus proche que cela la traverse.
 const AVANCE_TRAIT: f32 = 2e-4;
 const AVANCE_ANNOTATION: f32 = 1e-3;
 
@@ -184,6 +185,7 @@ fn vs_trait(s: Segment, @builtin(vertex_index) i: u32) -> Varie {
     let decalage = (nrm * cotes[i] + d * select(-1.0, 1.0, en_b)) * (0.5 * LARGEUR_TRAIT);
     let p = select(a, b, en_b);
     o.clip = vec4f(p.xy + decalage / demi_taille * p.w, p.zw);
+    o.centre = p;
     o.pos = select(pa, pb, en_b);
     o.c = select(s.couleur_a, s.couleur_b, en_b);
     if s.normale_a.w < -0.5 {
@@ -1069,9 +1071,39 @@ fn fs_coupe(e: Varie) -> @location(0) vec4f {
 }
 
 // Traits et contours de la coupe : sans ombrage.
+// Profondeur de la face vue au pixel i (copie des faces opaques ; 0 : fond).
+fn profondeur_face(i: vec2i) -> f32 {
+    let maxi = vec2i(textureDimensions(t_profondeur_lue)) - 1;
+    return textureLoad(t_profondeur_lue, clamp(i, vec2i(0), maxi), 0).r;
+}
+
+// Trait caché par une face : la profondeur de la face est lue au pixel du centre du trait
+// puis prolongée par sa pente jusqu'au point exact du trait. Le trait d'une arête est
+// ainsi à la profondeur de ses faces des deux côtés (aucune ne le recouvre, même de
+// biais), et un trait derrière une couche mince est caché dès qu'il en est plus loin que
+// son avance (`AVANCE_TRAIT`). La pente du pixel lu est prise à gauche et à droite, en
+// haut et en bas (une face étroite, de loin, n'a pas deux pixels) : caché seulement si
+// toutes les prolongations le cachent.
+fn trait_cache(centre: vec4f) -> bool {
+    let ndc = centre.xyz / centre.w;
+    let px = vec2f(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * vec2f(textureDimensions(t_profondeur_lue));
+    let i = vec2i(floor(px));
+    let z = profondeur_face(i);
+    if z <= 0.0 {
+        return false;
+    }
+    let d = px - (vec2f(i) + g.echantillon.xy);
+    // différences vers les quatre voisins (fond : pas de pente de ce côté)
+    let v = vec4f(profondeur_face(i - vec2i(1, 0)), profondeur_face(i + vec2i(1, 0)), profondeur_face(i - vec2i(0, 1)), profondeur_face(i + vec2i(0, 1)));
+    let pentes = select(vec4f(z - v.x, v.y - z, z - v.z, v.w - z), vec4f(0.0), v <= vec4f(0.0));
+    let ex = min(pentes.x * d.x, pentes.y * d.x);
+    let ey = min(pentes.z * d.y, pentes.w * d.y);
+    return ndc.z < z + ex + ey;
+}
+
 @fragment
 fn fs_plat(e: Varie) -> @location(0) vec4f {
-    if retire(e) {
+    if retire(e) || trait_cache(e.centre) {
         discard;
     }
     if e.selection == 2u {
