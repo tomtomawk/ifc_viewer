@@ -20,8 +20,9 @@ pub(crate) struct EditeurHachure {
     /// Motif réédité (nom d'origine), sinon nouveau motif.
     pub origine: Option<String>,
     pub nom: String,
-    /// Côté du carré répété (mm du papier).
+    /// Côté du carré répété (mm du papier, mm réels pour un motif de modèle).
     pub cote: f64,
+    pub genre: modele::GenreMotif,
     /// Vue de dessin du motif (retirée par Terminer ou Annuler).
     pub vue: String,
 }
@@ -86,6 +87,7 @@ impl Application {
         };
         let tuile = d.and_then(|d| d.tuile.clone()).unwrap_or(TuileMotif { cote: 4.0, divisions: DIVISIONS_VUE, segments: Vec::new() });
         let origine = d.map(|d| d.nom.clone());
+        let genre = d.map_or(modele::GenreMotif::Dessin, |d| d.genre);
         let mut q = p.clone();
         let vue = match q.ajouter_vue_dessin(ECHELLE_VUE) {
             Ok(v) => v,
@@ -101,7 +103,7 @@ impl Application {
             self.error = Some(e);
             return;
         }
-        self.editeur_hachure = Some(EditeurHachure { origine, nom: nom.clone(), cote: tuile.cote, vue: vue.clone() });
+        self.editeur_hachure = Some(EditeurHachure { origine, nom: nom.clone(), cote: tuile.cote, genre, vue: vue.clone() });
         self.ouvrir_vue_native(&vue);
         // carré sur un peu moins de la moitié de la hauteur de la vue
         self.camera.dist = (TAILLE_VUE as f32 * 0.001 / 0.9) / (self.camera.fov_y * 0.5).tan();
@@ -171,11 +173,15 @@ impl Application {
         let (tuile, corriges) = TuileMotif::depuis_traits(ed.cote, &traits)?;
         if tuile.segments.is_empty() { return Err("Dessiner au moins un trait dans le carré.".into()); }
         let mut q = self.projet_sans_vue_motif()?;
+        if ed.genre == modele::GenreMotif::Modele && let Some(o) = &ed.origine
+            && q.materiaux.iter().any(|m| [Some(&m.motif), m.coupe_fond_motif.as_ref()].into_iter().flatten().any(|x| x.nom_hachures() == Some(o.as_str()))) {
+            return Err(format!("« {o} » sert de motif de coupe : seul un motif de dessin y est admis."));
+        }
         if Some(&nom) != ed.origine.as_ref() && q.noms_motifs().contains(&nom) {
             return Err(format!("Un motif s'appelle déjà « {nom} »."));
         }
         let id = ed.origine.as_ref().and_then(|o| q.motifs.iter().find(|m| &m.nom == o)).map_or_else(noyau::uuid::uuid, |m| m.id.clone());
-        let d = modele::DefinitionMotif { id, nom: nom.clone(), lignes: tuile.lignes(), tuile: Some(tuile) };
+        let d = modele::DefinitionMotif { id, nom: nom.clone(), genre: ed.genre, lignes: tuile.lignes(), tuile: Some(tuile) };
         if let Some(o) = &ed.origine {
             q.motifs.retain(|m| &m.nom != o);
             if *o != nom {
@@ -209,8 +215,22 @@ impl Application {
             ui.label("Nom");
             ui.add(egui::TextEdit::singleline(&mut ed.nom).desired_width(140.0));
             ui.end_row();
+            ui.label("Genre");
+            let avant = ed.genre;
+            egui::ComboBox::from_id_salt("genre_motif_vue").selected_text(libelle_genre(ed.genre)).show_ui(ui, |ui| {
+                for g in [modele::GenreMotif::Dessin, modele::GenreMotif::Modele] {
+                    ui.selectable_value(&mut ed.genre, g, libelle_genre(g));
+                }
+            }).response.on_hover_text("Dessin : mm du papier, même densité à toute échelle (seul admis en coupe) ; modèle : mm réels");
+            // changement de genre : même aspect au 1:100
+            if ed.genre != avant {
+                let k = crate::zones::motifs::ECHELLE_GENRE;
+                ed.cote = if ed.genre == modele::GenreMotif::Modele { ed.cote * k } else { ed.cote / k };
+            }
+            ui.end_row();
             ui.label("Côté");
-            ui.add(egui::DragValue::new(&mut ed.cote).speed(0.1).range(0.5..=100.0).max_decimals(2).suffix(" mm")).on_hover_text("Côté du carré répété, en mm du papier");
+            let (pas, max, unite) = if ed.genre == modele::GenreMotif::Modele { (5.0, 10_000.0, "Côté du carré répété, en mm réels") } else { (0.1, 100.0, "Côté du carré répété, en mm du papier") };
+            ui.add(egui::DragValue::new(&mut ed.cote).speed(pas).range(0.5..=max).max_decimals(2).suffix(" mm")).on_hover_text(unite);
             ui.end_row();
         });
         ui.label(egui::RichText::new("Tracer dans le carré (Documenter › Ligne de dessin, Polyligne) ; modifier par le ruban Modifier.").weak());
@@ -260,5 +280,13 @@ impl Application {
         // cadre en tirets : un trait posé sur un bord reste visible
         let coins = [carre.left_bottom(), carre.right_bottom(), carre.right_top(), carre.left_top(), carre.left_bottom()];
         peintre.extend(egui::Shape::dashed_line(&coins, egui::Stroke::new(1.0, Color32::from_rgb(0, 120, 215)), 6.0, 4.0));
+    }
+}
+
+/// Libellé d'un genre de motif.
+pub(crate) fn libelle_genre(g: modele::GenreMotif) -> &'static str {
+    match g {
+        modele::GenreMotif::Dessin => "Dessin",
+        modele::GenreMotif::Modele => "Modèle",
     }
 }

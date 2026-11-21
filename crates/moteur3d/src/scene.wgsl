@@ -374,14 +374,14 @@ fn retire(e: Varie) -> bool {
 // de la face (anticrénelé avec les dérivées dx, dy calculées hors des branches). Famille :
 // angle, pas (nul : aucune), glissement d'un trait au suivant, origine, tirets (deux paires
 // trait / blanc au plus ; période nulle : trait continu), comme en plan (mm du papier).
-fn famille(uv: vec2f, dx: vec2f, dy: vec2f, k: i32) -> f32 {
+// famille de traits k ; mm : unités de la scène par mm du motif (papier ou réel)
+fn famille(uv: vec2f, dx: vec2f, dy: vec2f, k: i32, mm: f32) -> f32 {
     let a = g.familles_motifs[3 * k];
     let b = g.familles_motifs[3 * k + 1];
     let t = g.familles_motifs[3 * k + 2];
     if a.y <= 0.0 {
         return 0.0;
     }
-    let mm = g.divers.x;
     let pas = a.y * mm;
     let dir = vec2f(cos(a.x), sin(a.x));
     let nrm = vec2f(-dir.y, dir.x);
@@ -417,9 +417,11 @@ fn traits_motif(code: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> f32 {
     let t = g.table_motifs[code - 1];
     let debut = i32(t.x + 0.5);
     let n = i32(t.y + 0.5);
+    // motif de modèle : mm réels (scène en mètres) ; de dessin : mm du papier
+    let mm = select(g.divers.x, 0.001, t.z > 0.5);
     var c = 0.0;
     for (var k = 0; k < n; k++) {
-        c = max(c, famille(uv, dx, dy, debut + k));
+        c = max(c, famille(uv, dx, dy, debut + k, mm));
     }
     return c;
 }

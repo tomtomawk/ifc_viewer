@@ -13,12 +13,15 @@ impl Application {
         let Some(mut m) = projet.materiau(&nom).cloned() else { self.materiau_edite = None; return };
         let avant = m.clone();
         let hachures: Vec<MotifCoupe> = projet.noms_motifs().iter().map(|n| MotifCoupe::hachures(n)).collect();
+        // en coupe, motifs de dessin seulement (comme Revit)
+        let de_dessin: Vec<MotifCoupe> = hachures.iter().filter(|x| projet.definition_motif(x).is_some_and(|d| d.genre == modele::GenreMotif::Dessin)).cloned().collect();
         let mut ouvert = true;
         let mut onglet_apparence = self.materiau_apparence;
         egui::Window::new(format!("Matériau · {nom}")).id(egui::Id::unique("fenetre_materiau")).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
             let choix = |ui: &mut egui::Ui, id: &str, x: &mut MotifCoupe, speciaux: &[MotifCoupe]| {
+                let liste = if id.starts_with("coupe") { &de_dessin } else { &hachures };
                 egui::ComboBox::from_id_salt(id).width(130.0).selected_text(x.libelle().to_string()).show_ui(ui, |ui| {
-                    for t in speciaux.iter().chain(hachures.iter()) {
+                    for t in speciaux.iter().chain(liste.iter()) {
                         let l = t.libelle().to_string();
                         ui.selectable_value(x, t.clone(), l);
                     }

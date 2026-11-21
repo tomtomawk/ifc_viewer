@@ -42,9 +42,9 @@ pub(crate) fn rendu_materiau(m: &modele::Materiau, couleur: [f32; 4], table: &mu
 /// Familles de traits d'un motif de surface au plus (rendu 3D).
 pub const FAMILLES_PAR_MOTIF: usize = 16;
 
-/// Motifs de surface de la scène en construction : nom et familles encodées
-/// (`familles_gpu`), dans l'ordre des codes (rang + 1).
-pub(crate) type TableMotifs = Vec<(String, Vec<[f32; 4]>)>;
+/// Motifs de surface de la scène en construction : nom, familles encodées
+/// (`familles_gpu`) et motif de modèle (mm réels), dans l'ordre des codes (rang + 1).
+pub(crate) type TableMotifs = Vec<(String, Vec<[f32; 4]>, bool)>;
 
 /// Familles d'un motif pour le shader, trois `vec4` chacune : (angle en radians, pas,
 /// glissement, 0), (origine x, origine y, période des tirets, 0), (trait, blanc, trait,
@@ -63,15 +63,15 @@ pub(crate) fn familles_gpu(d: &modele::DefinitionMotif) -> Vec<[f32; 4]> {
 }
 
 /// Table des motifs pour le GPU : en-têtes (indice de la première famille, nombre de
-/// familles) dans l'ordre des codes, et familles mises bout à bout (au plus
-/// `noyau::constantes::FAMILLES_MOTIFS_MAX` en tout).
+/// familles, 1 pour un motif de modèle) dans l'ordre des codes, et familles mises bout à
+/// bout (au plus `noyau::constantes::FAMILLES_MOTIFS_MAX` en tout).
 pub(crate) fn table_gpu(table: TableMotifs) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
     let (mut entetes, mut familles) = (Vec::new(), Vec::new());
-    for (_, f) in table {
+    for (_, f, modele) in table {
         let debut = familles.len() / 3;
         let n = (f.len() / 3).min(noyau::constantes::FAMILLES_MOTIFS_MAX.saturating_sub(debut));
         familles.extend_from_slice(&f[..n * 3]);
-        entetes.push([debut as f32, n as f32, 0.0, 0.0]);
+        entetes.push([debut as f32, n as f32, if modele { 1.0 } else { 0.0 }, 0.0]);
     }
     (entetes, familles)
 }
@@ -89,7 +89,7 @@ pub(crate) fn motif_surface(projet: &Projet, m: &modele::Materiau, table: &mut T
         if table.len() >= 14 {
             return 1;
         }
-        table.push((d.nom.clone(), familles_gpu(&d)));
+        table.push((d.nom.clone(), familles_gpu(&d), d.genre == modele::GenreMotif::Modele));
         table.len() as u8
     };
     let premier = match &m.surface_motif {

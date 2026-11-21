@@ -451,6 +451,17 @@ fn origine_nulle_3d(o: &[f64; 3]) -> bool {
 /// Phase des éléments du site (terrains, limites de propriété), créée par défaut.
 pub const PHASE_EXISTANT: &str = "Existant";
 
+/// Genre d'un motif de hachures, comme dans Revit : de dessin (mesures en mm du papier,
+/// même densité à toute échelle ; seul admis en coupe) ou de modèle (mesures en mm réels :
+/// carrelage, bardage, suit la taille de l'élément).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GenreMotif {
+    #[default]
+    Dessin,
+    Modele,
+}
+
 /// Motif de hachures nommé : familles de traits ; un motif dessiné garde aussi sa tuile
 /// (dessin d'origine, réédité dans l'éditeur de hachures), dont `lignes` est déduit.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -458,6 +469,9 @@ pub struct DefinitionMotif {
     #[serde(default)]
     pub id: String,
     pub nom: String,
+    /// Absent : de dessin.
+    #[serde(default)]
+    pub genre: GenreMotif,
     pub lignes: Vec<LigneMotif>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tuile: Option<motif_tuile::TuileMotif>,
@@ -468,8 +482,8 @@ impl DefinitionMotif {
     pub fn base() -> Vec<DefinitionMotif> {
         let l = |angle: f64, pas: f64| LigneMotif { angle, pas, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() };
         vec![
-            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Diagonales".into(), lignes: vec![l(45.0, 2.0)], tuile: None },
-            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Croisées".into(), lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)], tuile: None },
+            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Diagonales".into(), genre: GenreMotif::Dessin, lignes: vec![l(45.0, 2.0)], tuile: None },
+            DefinitionMotif { id: noyau::uuid::uuid(), nom: "Croisées".into(), genre: GenreMotif::Dessin, lignes: vec![l(45.0, 1.5), l(-45.0, 1.5)], tuile: None },
         ]
     }
 }

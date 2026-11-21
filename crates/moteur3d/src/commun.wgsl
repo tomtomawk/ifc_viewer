@@ -17,7 +17,8 @@ struct Globales {
     // zw : taille de l'image (pixels)
     divers: vec4f,
     cadrage: array<vec4f, 4>,
-    // motifs de surface : x première famille, y nombre de familles
+    // motifs de surface : x première famille, y nombre de familles, z 1 : motif de
+    // modèle (mm réels), sinon de dessin (mm du papier)
     table_motifs: array<vec4f, 14>,
     // familles des motifs, trois vec4 chacune : (angle, pas, glissement, -),
     // (origine x, origine y, période des tirets, -), (trait, blanc, trait, blanc) ; mm

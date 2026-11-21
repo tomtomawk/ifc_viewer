@@ -167,3 +167,27 @@ fn mur_creation_enregistrement_relecture() {
     }).sum::<f64>()).sum();
     assert!((volume - 6.72).abs() < 1e-5, "Volume du maillage : {volume}");
 }
+
+/// Genre d'un motif : relu du JSON (absent : de dessin) ; un motif de surface de modèle
+/// est marqué dans la table du rendu (mm réels).
+#[test]
+fn motif_de_modele_marque_pour_le_rendu() {
+    let g = modele::gabarit::Gabarit::defaut();
+    let mut p = Projet::depuis_gabarit("Motifs", &g);
+    let t = g.surfaces(SorteDalle::Dalle)[0];
+    let type_dalle = TypeCompose { sorte: None, id: String::new(), nom: t.nom.clone(), couches: t.couches.clone(), categorie: None, couches_detaillees: true, origine: None };
+    let o = ParametresDalle { sorte: SorteDalle::Dalle, type_dalle, pente: None, niveau: None, decalage: 0.0, phase: None, sous_projet: None, variante: None };
+    p.ajouter_dalle(&[[0., 0.], [3000., 0.], [3000., 3000.], [0., 3000.]], &o).unwrap();
+    let ligne = LigneMotif { angle: 0.0, pas: 300.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() };
+    p.motifs.push(DefinitionMotif { id: "carrelage".into(), nom: "Carrelage".into(), genre: GenreMotif::Modele, lignes: vec![ligne], tuile: None });
+    assert!(!p.materiaux.is_empty());
+    for m in &mut p.materiaux {
+        m.surface_motif = Some(MotifCoupe::hachures("Carrelage"));
+    }
+    let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+    assert_eq!(relu.motifs.iter().find(|d| d.nom == "Carrelage").unwrap().genre, GenreMotif::Modele);
+    let sans_genre: DefinitionMotif = serde_json::from_str(r#"{"nom": "Ancien", "lignes": []}"#).unwrap();
+    assert_eq!(sans_genre.genre, GenreMotif::Dessin);
+    let scene = maillage::depuis_natif(&relu, std::path::Path::new("test.json")).unwrap();
+    assert!(scene.table_motifs.iter().any(|t| t[2] == 1.0), "{:?}", scene.table_motifs);
+}

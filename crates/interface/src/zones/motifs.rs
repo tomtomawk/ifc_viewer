@@ -6,7 +6,32 @@
 //! projet.
 use crate::*;
 use crate::socle::aides::apercu_motif;
-use modele::{DefinitionMotif, LigneMotif, MotifCoupe};
+use crate::documenter::editeur_hachure::libelle_genre;
+use modele::{DefinitionMotif, GenreMotif, LigneMotif, MotifCoupe};
+
+/// Rapport des mesures d'un motif de modèle (mm réels) à celles du même motif de dessin
+/// (mm du papier) : l'aspect au 1:100 est gardé quand le genre change.
+pub(crate) const ECHELLE_GENRE: f64 = 100.0;
+
+/// Change le genre d'un motif en gardant son aspect au 1:100 (mesures × ou ÷ 100).
+fn changer_genre(d: &mut DefinitionMotif, genre: GenreMotif) {
+    let k = if genre == GenreMotif::Modele { ECHELLE_GENRE } else { 1.0 / ECHELLE_GENRE };
+    for l in &mut d.lignes {
+        l.pas *= k;
+        l.glissement *= k;
+        l.origine = l.origine.map(|x| x * k);
+        l.tirets.iter_mut().for_each(|t| *t *= k);
+    }
+    if let Some(t) = &mut d.tuile {
+        t.cote *= k;
+    }
+    d.genre = genre;
+}
+
+/// Le motif `nom` sert-il de motif de coupe (premier plan ou arrière-plan) ?
+fn en_coupe(p: &modele::Projet, nom: &str) -> bool {
+    p.materiaux.iter().any(|m| [Some(&m.motif), m.coupe_fond_motif.as_ref()].into_iter().flatten().any(|x| x.nom_hachures() == Some(nom)))
+}
 
 /// Action demandée sur un motif (arborescence ou propriétés).
 enum ActionMotif {
@@ -42,8 +67,12 @@ impl Application {
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(egui::vec2(22.0, 14.0), Sense::hover());
                 ui.painter().rect_filled(r, 0.0, Color32::WHITE);
-                apercu_motif(ui.painter(), r, &d, 2.5);
-                let texte = if d.tuile.is_some() { format!("{n} (dessiné)") } else { n.clone() };
+                apercu_motif(ui.painter(), r, &d, if d.genre == GenreMotif::Modele { 0.025 } else { 2.5 });
+                let texte = match (d.genre, d.tuile.is_some()) {
+                    (GenreMotif::Modele, _) => format!("{n} (modèle)"),
+                    (_, true) => format!("{n} (dessiné)"),
+                    _ => n.clone(),
+                };
                 let resp = ui.selectable_label(self.motif_selectionne.as_deref() == Some(n.as_str()), texte)
                     .on_hover_text("Clic : propriétés ; double-clic : redessiner");
                 if resp.double_clicked() {
@@ -82,7 +111,7 @@ impl Application {
             ActionMotif::Dessiner => { self.ouvrir_editeur_hachure(None); return; }
             ActionMotif::Nouveau => {
                 let n = nom_libre(&p, "Motif");
-                p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }], tuile: None });
+                p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), genre: modele::GenreMotif::Dessin, lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }], tuile: None });
                 self.select(None, false);
                 self.motif_selectionne = Some(n);
             }
@@ -123,6 +152,23 @@ impl Application {
                 let r = ui.add(egui::TextEdit::singleline(&mut self.nom_motif_saisi).desired_width(180.0));
                 renommer = r.lost_focus() && self.nom_motif_saisi.trim() != choisi && !self.nom_motif_saisi.trim().is_empty();
             });
+            ui.horizontal(|ui| {
+                ui.label("Genre");
+                let mut g = d.genre;
+                egui::ComboBox::from_id_salt("genre_motif").selected_text(libelle_genre(g)).show_ui(ui, |ui| {
+                    for x in [GenreMotif::Dessin, GenreMotif::Modele] {
+                        ui.selectable_value(&mut g, x, libelle_genre(x));
+                    }
+                }).response.on_hover_text("Dessin : mm du papier, même densité à toute échelle (seul admis en coupe) ; modèle : mm réels (carrelage, bardage)");
+                if g != d.genre {
+                    if g == GenreMotif::Modele && en_coupe(projet, &choisi) {
+                        self.error = Some(format!("« {choisi} » sert de motif de coupe : seul un motif de dessin y est admis."));
+                    } else {
+                        changer_genre(&mut d, g);
+                        self.tirets_saisis.0.clear();
+                    }
+                }
+            });
             if d.tuile.is_some() {
                 ui.label(RichText::new("Motif dessiné : modifier ses familles à la main abandonne son dessin.").small().weak());
             }
@@ -140,7 +186,7 @@ impl Application {
                     ui.add(egui::DragValue::new(&mut l.angle).speed(1.0).range(-180.0..=180.0).suffix(" °"));
                     ui.end_row();
                     ui.label("Pas");
-                    ui.add(egui::DragValue::new(&mut l.pas).speed(0.05).range(0.01..=100.0).max_decimals(3).suffix(" mm"));
+                    ui.add(egui::DragValue::new(&mut l.pas).speed(0.05).range(0.01..=100_000.0).max_decimals(3).suffix(" mm"));
                     ui.end_row();
                     ui.label("Glissement");
                     ui.add(egui::DragValue::new(&mut l.glissement).speed(0.05).max_decimals(3).suffix(" mm"));
@@ -169,10 +215,11 @@ impl Application {
                 self.tirets_saisis.1.push(String::new());
             }
             ui.add_space(6.0);
-            ui.label(RichText::new("Aperçu (3 × 3 cm du papier)").small().weak());
+            let modele = d.genre == GenreMotif::Modele;
+            ui.label(RichText::new(if modele { "Aperçu (3 × 3 m réels)" } else { "Aperçu (3 × 3 cm du papier)" }).small().weak());
             let (r, _) = ui.allocate_exact_size(egui::vec2(150.0, 150.0), Sense::hover());
             ui.painter().rect_filled(r, 0.0, Color32::WHITE);
-            apercu_motif(ui.painter(), r, &d, 5.0);
+            apercu_motif(ui.painter(), r, &d, if modele { 0.05 } else { 5.0 });
             ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
             ui.add_space(6.0);
             ui.horizontal(|ui| {
