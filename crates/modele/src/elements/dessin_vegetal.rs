@@ -17,26 +17,33 @@ pub fn reference(essence: Essence, partie: &str) -> String {
     format!("{PREFIXE}{e}:{partie}")
 }
 
-/// Géométrie (boîte du type) d'une référence `arbre:<essence>:<partie>`, calculée une
-/// fois puis gardée en mémoire. None : référence inconnue.
-pub fn generer(reference: &str) -> Option<Arc<GeometrieMaillage>> {
+/// Formes générées gardées en mémoire au plus (une par référence et par occurrence).
+const MEMOIRE_MAX: usize = 4096;
+
+/// Géométrie (boîte du type) d'une référence `arbre:<essence>:<partie>`, tirée de
+/// `graine` (identifiant de l'occurrence : chaque arbre a sa forme ; None : forme type
+/// de la famille), calculée une fois puis gardée en mémoire. None : référence inconnue.
+pub fn generer(reference: &str, graine: Option<&str>) -> Option<Arc<GeometrieMaillage>> {
     static MEMOIRE: OnceLock<Mutex<std::collections::HashMap<String, Arc<GeometrieMaillage>>>> = OnceLock::new();
     let memoire = MEMOIRE.get_or_init(Default::default);
-    if let Some(g) = memoire.lock().unwrap_or_else(|e| e.into_inner()).get(reference) {
+    let cle = format!("{reference}#{}", graine.unwrap_or(""));
+    if let Some(g) = memoire.lock().unwrap_or_else(|e| e.into_inner()).get(&cle) {
         return Some(g.clone());
     }
     let (essence, partie) = reference.strip_prefix(PREFIXE)?.split_once(':')?;
     let essence = match essence { "feuillu" => Essence::Feuillu, "conifere" => Essence::Conifere, "fastigie" => Essence::Fastigie, _ => return None };
     let g = match partie {
         "houppier" | "tronc" => {
-            let (t, h) = maillage_boite(essence);
+            let (t, h) = maillage_boite(essence, graine);
             indexer(if partie == "tronc" { &t } else { &h })
         }
         "symbole" => GeometrieMaillage { traits_plan: symbole_plan(essence), ..Default::default() },
         _ => return None,
     };
     let g = Arc::new(g);
-    memoire.lock().unwrap_or_else(|e| e.into_inner()).insert(reference.to_string(), g.clone());
+    let mut m = memoire.lock().unwrap_or_else(|e| e.into_inner());
+    if m.len() >= MEMOIRE_MAX { m.clear(); }
+    m.insert(cle, g.clone());
     Some(g)
 }
 
@@ -150,9 +157,10 @@ fn solides(essence: Essence, graine: &str) -> (Vec<[DVec3; 3]>, Vec<[DVec3; 3]>)
 }
 
 /// Tronc et houppier ramenés à la boîte du type : x, y de −0,5 à 0,5 (encombrement du
-/// houppier), z de 0 à 1 (hauteur totale).
-pub fn maillage_boite(essence: Essence) -> (Vec<[DVec3; 3]>, Vec<[DVec3; 3]>) {
-    let (corps, houppier) = solides(essence, &format!("famille:{essence:?}"));
+/// houppier), z de 0 à 1 (hauteur totale) ; forme tirée de `graine` (None : forme type).
+pub fn maillage_boite(essence: Essence, graine: Option<&str>) -> (Vec<[DVec3; 3]>, Vec<[DVec3; 3]>) {
+    let graine = graine.map_or_else(|| format!("famille:{essence:?}"), str::to_string);
+    let (corps, houppier) = solides(essence, &graine);
     let (min, max) = corps.iter().chain(&houppier).flatten().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), p| (a.min(*p), b.max(*p)));
     // centre horizontal sur l'axe du tronc (origine), échelle par le plus grand côté
     let rayon = min.x.abs().max(max.x).max(min.y.abs()).max(max.y).max(1.0);

@@ -54,7 +54,7 @@ impl MaillageFamille {
     /// type), indices existants.
     pub fn valider(&self) -> Result<(), String> {
         if let Some(g) = &self.generateur {
-            return if crate::elements::dessin_vegetal::generer(g).is_some() { Ok(()) } else { Err(format!("Maillage « {} » : générateur inconnu « {g} ».", self.nom)) };
+            return if crate::elements::dessin_vegetal::generer(g, None).is_some() { Ok(()) } else { Err(format!("Maillage « {} » : générateur inconnu « {g} ».", self.nom)) };
         }
         let dans = |v: f32| v.is_finite() && v.abs() <= 10.0;
         if !self.sommets.iter().flatten().all(|v| dans(*v)) || !self.traits_plan.iter().flatten().flatten().all(|v| dans(*v)) {
@@ -67,9 +67,10 @@ impl MaillageFamille {
         Ok(())
     }
 
-    /// Géométrie effective : celle du générateur désigné, sinon celle enregistrée.
-    pub fn geometrie(&self) -> Arc<GeometrieMaillage> {
-        if let Some(g) = self.generateur.as_deref().and_then(crate::elements::dessin_vegetal::generer) {
+    /// Géométrie effective : celle du générateur désigné (tirée de `graine`, identifiant
+    /// de l'occurrence ; None : forme type), sinon celle enregistrée.
+    pub fn geometrie(&self, graine: Option<&str>) -> Arc<GeometrieMaillage> {
+        if let Some(g) = self.generateur.as_deref().and_then(|r| crate::elements::dessin_vegetal::generer(r, graine)) {
             return g;
         }
         Arc::new(GeometrieMaillage { sommets: self.sommets.clone(), triangles: self.triangles.clone(), traits_plan: self.traits_plan.clone() })
@@ -88,7 +89,7 @@ impl FamilleModelee {
         let k = MaillageFamille::echelle(r);
         self.maillages
             .iter()
-            .map(|m| (m, m.geometrie()))
+            .map(|m| (m, m.geometrie(r.graine.as_deref())))
             .filter(|(_, g)| !g.triangles.is_empty())
             .map(|(m, g)| {
                 let p = |i: u32| g.sommets.get(i as usize).map_or(DVec3::ZERO, |s| DVec3::new(s[0] as f64, s[1] as f64, s[2] as f64) * k);
@@ -112,7 +113,7 @@ impl FamilleModelee {
             .iter()
             .filter(|m| m.visibilite.montre(a) && self.visible(r, &m.visible))
             .flat_map(|m| {
-                let g = m.geometrie();
+                let g = m.geometrie(r.graine.as_deref());
                 g.traits_plan.iter().filter(|l| l.len() >= 2).map(|l| l.iter().map(|p| (p[0] as f64 * k.x, p[1] as f64 * k.y)).collect()).collect::<Vec<_>>()
             })
             .collect()

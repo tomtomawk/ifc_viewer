@@ -447,6 +447,9 @@ pub struct Resolution {
     pub erreurs: Vec<String>,
     /// Repères des plans tournés.
     pub reperes: BTreeMap<String, orientation::Repere>,
+    /// Graine des maillages générés : identifiant de l'occurrence (chaque arbre a sa
+    /// forme) ; None : forme type de la famille (éditeur).
+    pub graine: Option<String>,
 }
 
 /// Boîte d'un volume résolu, dans le repère de la famille.

@@ -141,7 +141,9 @@ impl Composant {
     pub fn solides(&self, p: &Projet) -> Result<Vec<SolideComposant>, String> {
         let t = self.type_(p)?;
         let (o, u, n) = self.repere(p).ok_or_else(|| format!("{} : niveau introuvable.", self.nom))?;
-        let r = t.modele.resoudre_occurrence(t.largeur, t.hauteur, t.profondeur, &p.parametres_partages, &Default::default());
+        let mut r = t.modele.resoudre_occurrence(t.largeur, t.hauteur, t.profondeur, &p.parametres_partages, &Default::default());
+        // maillages générés (arbres) : forme propre à chaque occurrence
+        r.graine = Some(self.id.clone());
         if let Some(e) = r.erreurs.first() {
             return Err(format!("{} : {e}", t.nom));
         }

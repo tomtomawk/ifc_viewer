@@ -122,4 +122,24 @@ mod tests {
         f.parametres[0].portee = Portee::Occurrence;
         assert!(f.valider(7000.0, 10000.0, 7000.0).is_err(), "texte d’occurrence refusé");
     }
+
+    /// Chaque arbre a sa forme (graine : identifiant de l'occurrence), la même à chaque
+    /// calcul ; elle reste dans la boîte du type.
+    #[test]
+    fn forme_propre_a_chaque_arbre() {
+        use crate::elements::composant::Composant;
+        let mut p = crate::Projet::nouveau("V");
+        p.niveaux.push(crate::Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+        let t = type_vegetal(Essence::Feuillu);
+        for id in ["a", "b"] {
+            p.composants.push(Composant { id: id.into(), nom: id.into(), type_composant: t.id.clone(), niveau: "n".into(), ..Default::default() });
+        }
+        p.types_composants.push(t.clone());
+        let houppier = |k: usize| p.composants[k].solides(&p).unwrap().into_iter().find(|s| s.0.as_deref() == Some(MATERIAU_FEUILLAGE)).unwrap().2;
+        let (a, b) = (houppier(0), houppier(1));
+        assert_ne!(a, b, "deux arbres du même type ont la même forme");
+        assert_eq!(a, houppier(0));
+        let (min, max) = b.iter().flatten().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(x, y), p| (x.min(*p), y.max(*p)));
+        assert!(max.x - min.x <= t.largeur + 1.0 && max.z <= t.hauteur + 1.0);
+    }
 }
