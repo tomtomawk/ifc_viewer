@@ -131,8 +131,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   croquis. Placez le poteau d’un clic dans la vue ou utilisez « Placement par
   coordonnées ». La palette de la poutre montre sa section, l’arase et la
   justification par rapport au tracé. Cliquez le départ puis l’arrivée de la
-  poutre avec les accrochages. Maj contraint le tracé aux axes du plan, Échap ou
-  clic droit annule un départ. Les poteaux sont
+  poutre avec les accrochages. Maj contraint le tracé aux axes du plan ; Échap,
+  comme Entrée, termine (un départ seul ne crée rien). Les poteaux sont
   verticaux et orientables ; les poutres sont horizontales et définies par leur axe.
   Le tracé d’une poutre peut s’accrocher à la ligne d’implantation d’une poutre du
   même niveau. Lorsque leurs hauteurs se recouvrent, deux abouts en angle se rejoignent
@@ -179,8 +179,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   type ; absent, il suit le nombre de couches (une : mur, plusieurs : mur composé). Les
   types du gabarit non encore dans le projet figurent dans leur onglet.
 - **Quitter une commande** : une barre en haut à droite de la vue porte les boutons
-  Valider (✔, Entrée) et Annuler (✖, Échap). Valider termine le tracé en cours et ferme
-  l'outil ; Annuler abandonne tout et le ferme.
+  Valider (✔, Entrée ou Échap) et Annuler (✖, à la souris seulement). Valider termine
+  le tracé en cours et ferme l'outil ; Annuler abandonne tout et le ferme. Échap ne fait
+  rien perdre : il efface d'abord une valeur en cours de frappe, sinon il a l'effet
+  d'Entrée (polyligne, ligne, contour de dalle ou de zone, mur, éditeur de familles). Un
+  contour de dalle non fermé n'est pas validé (message) : le refermer, ou ✖ pour
+  l'abandonner.
 - **Murs** : créés par défaut sur la face extérieure, en chaîne (le mur suivant part de
   la fin du précédent). Espace inverse le sens du mur en cours de tracé (extérieur et
   intérieur échangés).
@@ -193,7 +197,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   murs (couches du dessus vers le dessous, fonction, matériau, épaisseur, plume,
   ossature). Les éléments du type suivent ses couches.
   Pour les éléments horizontaux et les limites de propriété, **Sélectionner** dans le
-  bandeau, l'onglet **Modifier** ou Échap interrompt le tracé et permet de choisir un
+  bandeau ou l'onglet **Modifier** interrompt le tracé et permet de choisir un
   sommet ou un segment. **Déplacer** utilise un point de départ et un point d'arrivée ;
   **Décaler** déplace le segment sélectionné perpendiculairement, jusqu'au clic, en
   gardant ses extrémités reliées aux segments voisins. Un contour ouvert se reprend en
@@ -449,7 +453,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Le premier clic est l'origine de la section ; les clics suivants, accrochés comme
   ailleurs, donnent H et V dans le plan de la vue (D = 0) ; A : le prochain clic est
   un passage d'arc ; clic sur le premier point : fermer ; Entrée ou clic droit :
-  terminer ; Retour arrière : retirer le dernier point ; Échap : abandonner. Le chemin
+  terminer ; Retour arrière : retirer le dernier point ; Échap : terminer, comme Entrée. Le chemin
   tracé remplace celui de la forme (une annulation) s'il est valide, sinon le tracé
   reste et l'erreur s'affiche. Aux changements de direction, les sections sont en
   onglet exact (plan bissecteur) ; un virage de plus de 150° ou un profil trop grand
@@ -540,8 +544,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   suit ses sommets, se scinde en deux arcs du même cercle, s'inverse par symétrie,
   et Propriétés donne son rayon et permet de le rendre droit.
   Clic : point suivant ; clic droit, Entrée ou Espace : terminer ; F puis Entrée :
-  fermer la polyligne ou la spline ; Échap : effacer la saisie, puis abandonner le
-  tracé en cours, puis quitter l'outil. La ligne enchaîne les segments ; le cercle
+  fermer la polyligne ou la spline ; Échap : effacer la saisie, sinon terminer comme
+  Entrée et quitter l'outil. La ligne enchaîne les segments ; le cercle
   se donne par centre et rayon ; la spline
   passe par ses points (Catmull-Rom centripète). Accrochages : extrémité, milieu,
   centre, quadrant, intersection, perpendiculaire et point proche, sur les dessins

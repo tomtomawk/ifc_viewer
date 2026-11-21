@@ -145,8 +145,6 @@ pub(crate) struct EtatDessin2D {
     terrain_glisse: Option<GlisseTerrain>,
     dernier_usage: Option<Usage>,
     pub edition_contour: Option<EditionContour>,
-    /// Heure du premier Échap sur un tracé modifié : un second, dans les 4 s, l'abandonne.
-    echap_abandon: Option<f64>,
     /// Type de trait des polylignes créées (id ; vide : continu fin).
     pub trait_creation: String,
     /// Cotation par arêtes : références déjà cliquées (élément, arête, abscisse relative),
@@ -180,9 +178,6 @@ pub(crate) struct EditionContour {
     raccord: Option<(usize, bool)>,
     /// Élément dont le tracé est repris, autre qu'une dalle ou une polyligne.
     element: Option<ElementTrace>,
-    /// Contours à l'ouverture du tracé (vide en création) : Échap ne l'abandonne sans
-    /// confirmation que s'ils n'ont pas changé.
-    initial: Vec<Vec<[f64; 2]>>,
 }
 
 /// Élément à tracé unique repris par Modifier.
@@ -682,14 +677,13 @@ impl Application {
         let ouvert = element == Some(ElementTrace::GardeCorps);
         self.dessin2d.dernier_usage = Some(if annotation.is_some() || ouvert { Usage::Annotation } else { Usage::Surface });
         let fermees = vec![!ouvert && annotation.as_ref().is_none_or(|a| matches!(&a.forme, AnnotationForme::Polyligne { fermee: true, .. })); contours.len()];
-        let initial = contours.clone();
         self.dessin2d.courbures = match annotation.as_ref().map(|a| &a.forme) {
             Some(AnnotationForme::Polyligne { courbures, .. }) => vec![courbures.clone()],
             _ => Vec::new(),
         };
         self.dessin2d.dalle = contours;
         self.dessin2d.geoms = None;
-        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, point_topo: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element, initial });
+        self.dessin2d.edition_contour = Some(EditionContour { id: ids[0].clone(), creation: None, altitude, dessin: false, selection: None, segment: None, sommet: None, point_topo: None, commande: None, depart: None, repere: None, glisse: None, annotation, fermees, raccord: None, element });
         self.dessin2d.trace = Some(Trace::new(OutilDessin::Polyligne));
         self.ruban_edition.forme_dalle = OutilDessin::Polyligne;
         self.ruban_edition.annuler();

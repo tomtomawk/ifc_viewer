@@ -125,9 +125,9 @@ pub(super) fn canevas_chemin(ui: &mut egui::Ui, ed: &mut EditeurFamille, painter
         painter.circle_stroke(cadre.ecran(p.0, p.1), rayon, egui::Stroke::new(1.5, orange));
     }
     if fermeture && let Some(p) = premier { painter.circle_stroke(p, 7.0, egui::Stroke::new(2.0, Color32::from_rgb(30, 140, 60))); }
-    let invite = if trace.arc { "Arc : cliquer le point de passage" } else if trace.arc_ouvert() { "Arc : cliquer le point d'arrivée" } else { "Chemin : cliquer les points · A : arc · premier point : fermer · Entrée : terminer · Échap : abandonner" };
+    let invite = if trace.arc { "Arc : cliquer le point de passage" } else if trace.arc_ouvert() { "Arc : cliquer le point d'arrivée" } else { "Chemin : cliquer les points · A : arc · premier point : fermer · Entrée ou Échap : terminer" };
     ed.message = Some(invite.into());
-    let terminer = resp.clicked_by(egui::PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
+    let terminer = std::mem::take(&mut ed.echap_valide) || resp.clicked_by(egui::PointerButton::Secondary) || (clavier && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
     let fermer = resp.clicked() && resp.interact_pointer_pos().is_some_and(pres_premier);
     if fermer || terminer {
         if let Err(e) = ed.appliquer_trace_chemin(k, fermer) { ed.erreur = Some(e); return; }

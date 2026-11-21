@@ -327,59 +327,14 @@ impl Application {
             effacer_caractere_saisie(&mut self.dessin2d.saisie, self.dessin2d.champ_angle);
         }
         if echap {
+            // Échap ne fait rien perdre : il efface la valeur en cours de frappe, sinon il
+            // a l'effet d'Entrée (le tracé est validé et l'outil quitté)
             { self.dessin2d.message = None; self.dessin2d.information = None; };
-            if let Some(e) = self.dessin2d.edition_contour.as_mut().filter(|e| e.commande.is_some()) {
-                e.commande = None; e.depart = None; e.repere = None;
-            } else if !self.dessin2d.saisie.is_empty() {
+            if !self.dessin2d.saisie.is_empty() {
                 self.dessin2d.saisie.clear();
                 self.dessin2d.champ_angle = false;
-            } else if self.dessin2d.trace.as_ref().is_some_and(|t| !t.points.is_empty()) {
-                // Un raccord reste dans le contour commencé, même après un nouvel Échap.
-                self.terminer_raccord_ouvert();
-                // Échap interrompt le tracé en cours ; ce qui est déjà dessiné reste
-                if usage != Usage::Mur && self.dessin2d.edition_contour.is_none() && !matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) {
-                    self.interrompre_trace(usage);
-                } else if self.dessin2d.edition_contour.is_none() && matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation)
-                    && outil == OutilDessin::Polyligne && let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.points.len() >= 2).map(|t| (t.points.clone(), t.courbures())) {
-                    self.dessin2d.pousser_ouvert(points, k);
-                } else if self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.creation.is_some() && e.raccord.is_none())
-                    && let Some((points, k)) = self.dessin2d.trace.as_ref().filter(|t| t.outil == OutilDessin::Polyligne && t.points.len() >= 2).map(|t| (t.points.iter().map(|p| p.to_array()).collect(), t.courbures())) {
-                    self.dessin2d.pousser_contour(points, k);
-                    if let Some(e) = self.dessin2d.edition_contour.as_mut() { e.fermees.push(false); }
-                }
-                if let Some(t) = self.dessin2d.trace.as_mut() { t.points.clear(); }
-                // dessin 2D : ce qui est tracé reste et l'outil se ferme, la sélection
-                // est de nouveau possible
-                if usage == Usage::Annotation && outil != OutilDessin::Polyligne && self.dessin2d.edition_contour.is_none() {
-                    self.ruban_edition.annuler();
-                    self.dessin2d.trace = None;
-                }
-                if let Some(e) = &mut self.dessin2d.edition_contour { e.raccord = None; e.dessin = false; }
-                if self.dessin2d.edition_contour.is_none() && (matches!(usage, Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage) || (matches!(usage, Usage::Escalier | Usage::GardeCorps | Usage::Annotation) && outil == OutilDessin::Polyligne && self.outil_cotation().is_none())) {
-                    self.editer_contours_en_creation(usage);
-                }
-            } else if let Some(e) = self.dessin2d.edition_contour.as_mut()
-                && (e.point_topo.is_some() || e.segment.is_some() || e.sommet.is_some() || e.selection.is_some() || e.dessin)
-            {
-                // premier Échap : retour à la sélection des segments et des sommets
-                e.point_topo = None;
-                (e.segment, e.sommet, e.selection, e.dessin) = (None, None, None, false);
-            } else if let Some(e) = self.dessin2d.edition_contour.as_ref() {
-                // tracé modifié : un premier Échap prévient, un second (dans les 4 s) abandonne
-                let temps = ctx.input(|i| i.time);
-                let modifie = e.initial != self.dessin2d.dalle;
-                if !modifie || self.dessin2d.echap_abandon.is_some_and(|t| temps - t <= 4.0) {
-                    self.dessin2d.echap_abandon = None;
-                    self.quitter_commande(false);
-                } else {
-                    self.dessin2d.echap_abandon = Some(temps);
-                    self.dessin2d.message = Some("Tracé modifié : Entrée pour valider, Échap à nouveau pour l'abandonner.".into());
-                }
-            } else if matches!(usage, Usage::Surface | Usage::LimitePropriete | Usage::Terrain | Usage::Cadrage) && !(self.dessin2d.dalle.is_empty() && self.dessin2d.ouverts.is_empty()) {
-                self.editer_contours_en_creation(usage);
             } else {
-                self.ruban_edition.annuler();
-                self.dessin2d.trace = None;
+                valider = true;
             }
         }
         if usage == Usage::Poutre { self.raccourci_poutre(justifier, inverser); }
@@ -418,7 +373,7 @@ impl Application {
             let ngf = self.natif.as_ref().map_or(0.0, |(p, _)| p.ngf()) + altitude;
             self.dessin2d.terrain_cotes.resize(contour.len(), ngf);
         }
-        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, point_topo: None, commande: None, depart: None, repere: None, glisse: None, annotation: None, fermees, raccord: None, element: None, initial: Vec::new() });
+        self.dessin2d.edition_contour = Some(EditionContour { id: String::new(), creation: Some(usage), altitude, dessin: false, selection: None, segment: None, sommet: None, point_topo: None, commande: None, depart: None, repere: None, glisse: None, annotation: None, fermees, raccord: None, element: None });
     }
 
     pub(crate) fn selectionner_trace_en_creation(&mut self) {
