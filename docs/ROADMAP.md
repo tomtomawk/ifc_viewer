@@ -17,6 +17,7 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 |---|---|---|---|
 | T1 | Tests de fichiers malformés, reste : balayage aléatoire des RVT (aucun fichier RVT d'exemple dans le dépôt) ; `feuilles::visible_dans_vue` cherche la catégorie de chaque élément coté dans toutes les collections (coût quadratique sur un gros modèle) ; formule de nomenclature à champs partagés sans cycle (arbre de 16 champs au plus, chacun cité plusieurs fois) : coût exponentiel possible | P3 | `crates/formats/src/rvt/` |
 | G1 | Reste du gabarit pendant l'édition : les textures livrées (`gabarit:textures/…`, `maillage::textures_gabarit`) restent embarquées et désignées par les matériaux ; à copier dans le dossier du projet (ou une bibliothèque) avant de cesser d'embarquer le gabarit | P3 | `crates/maillage/src/textures_gabarit.rs` |
+| V3D1 | Traits à travers les couches minces en vue 3D, reste après la profondeur inversée : signalé aussi en orthogonale de loin, non reproduit sur `immeuble_essai_murs` ni sur une maison à couches de 10 mm. Marge restante : le décalage de pente des faces (1 px, demi-largeur du trait et arêtes rentrantes) ; sur une face vue de biais de loin, il dépasse 1 cm. Si le défaut persiste : tester la visibilité de chaque trait dans son shader contre la profondeur des faces lue au centre du trait (option C : passe de lecture de la profondeur, sans décalage de pente) ; demande un fichier et un point de vue qui le montrent | P2 | `crates/moteur3d/src/gpu.rs`, `scene.wgsl` |
 
 ## 2. Réactivité
 
