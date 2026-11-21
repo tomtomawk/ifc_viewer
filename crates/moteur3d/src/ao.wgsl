@@ -26,7 +26,7 @@ fn profondeur(uv: vec2f) -> f32 {
 
 // point de la vue (repère de la caméra) en uv
 fn position(uv: vec2f) -> vec3f {
-    let s = g.proj_inv * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, profondeur(uv) * 2.0 - 1.0, 1.0);
+    let s = g.proj_inv * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 1.0 - 2.0 * profondeur(uv), 1.0);
     return s.xyz / s.w;
 }
 
@@ -42,7 +42,7 @@ fn fs_ao(e: Plein) -> @location(0) vec4f {
     // motif 4 × 4 (ordre de Bayer) : 16 rotations
     var bayer = array<f32, 16>(0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
     let rayon = g.divers.y;
-    if profondeur(e.uv) >= 1.0 {
+    if profondeur(e.uv) <= 0.0 {
         return vec4f(1.0);
     }
     let px = 1.0 / vec2f(textureDimensions(t_profondeur));
@@ -87,7 +87,7 @@ fn fs_ao(e: Plein) -> @location(0) vec4f {
 }
 
 fn z_vue(uv: vec2f) -> f32 {
-    let s = g.proj_inv * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, profondeur(uv) * 2.0 - 1.0, 1.0);
+    let s = g.proj_inv * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 1.0 - 2.0 * profondeur(uv), 1.0);
     return s.z / s.w;
 }
 

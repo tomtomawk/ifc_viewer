@@ -5,6 +5,7 @@ use scene::Vertex;
 use eframe::egui;
 use eframe::egui_wgpu;
 use eframe::wgpu::{self, util::DeviceExt};
+use crate::profondeur::{self, COMPARAISON_INVERSEE, LOIN_INVERSE};
 use glam::{Mat4, Vec3, Vec4};
 use noyau::constantes::MAX_APPARENCES;
 use std::sync::Arc;
@@ -138,7 +139,6 @@ pub struct Renderer {
     egui: Arc<egui::mutex::RwLock<egui_wgpu::Renderer>>,
     echantillons: u32,
     opaque: wgpu::RenderPipeline,
-    opaque_aretes: wgpu::RenderPipeline,
     transparent: wgpu::RenderPipeline,
     traits: wgpu::RenderPipeline,
     coupe: wgpu::RenderPipeline,
@@ -448,7 +448,7 @@ impl Renderer {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: PROFONDEUR,
                     depth_write_enabled: Some(!transparent),
-                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                    depth_compare: Some(COMPARAISON_INVERSEE),
                     stencil: Default::default(),
                     bias: decalage.map_or_else(Default::default, |(constant, slope_scale)| wgpu::DepthBiasState { constant, slope_scale, clamp: 0.0 }),
                 }),
@@ -477,12 +477,13 @@ impl Renderer {
             6 => Float32x3, 7 => Snorm8x4, 8 => Unorm8x4, 9 => Uint32
         ];
         let tampons_segment = [Some(wgpu::VertexBufferLayout { array_stride: 2 * pas_sommet, step_mode: wgpu::VertexStepMode::Instance, attributes: &attributs_segment })];
-        let opaque = scene("opaques", "vs_main", &tampons_scene, "fs_main", Some((1, 1.0)), false);
-        // arêtes à leur profondeur exacte : faces repoussées nettement
-        let opaque_aretes = scene("opaques sous arêtes", "vs_main", &tampons_scene, "fs_main", Some((64, 1.0)), false);
-        let transparent = scene("transparents", "vs_main", &tampons_scene, "fs_main", Some((1, 1.0)), true);
+        // faces repoussées d'un pixel de leur pente (bande des traits sur une face fuyante) ;
+        // pas de constante (en profondeur inversée, elle vaudrait au loin d'un triangle
+        // proche) : les traits sont avancés dans `vs_trait`
+        let opaque = scene("opaques", "vs_main", &tampons_scene, "fs_main", Some((0, -1.0)), false);
+        let transparent = scene("transparents", "vs_main", &tampons_scene, "fs_main", Some((0, -1.0)), true);
         let traits = scene("traits", "vs_trait", &tampons_segment, "fs_plat", None, false);
-        let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_coupe", Some((1, 1.0)), false);
+        let coupe = scene("coupe", "vs_main", &tampons_scene, "fs_coupe", Some((0, -1.0)), false);
         // fond de ciel : sans tampon de sommets ni écriture de profondeur
         let pipeline_ciel = scene("ciel", "vs_ciel", &[], "fs_ciel", None, true);
         let pipeline_herbe = scene("herbe", "vs_herbe", &tampons_scene, "fs_herbe", None, false);
@@ -518,7 +519,7 @@ impl Renderer {
             .create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
 
         // couleur : profondeur aussi écrite dans une texture de ce format
-        let profondeur = |label, couleur: Option<wgpu::TextureFormat>, decalage: wgpu::DepthBiasState| {
+        let profondeur = |label, couleur: Option<wgpu::TextureFormat>, decalage: wgpu::DepthBiasState, comparaison| {
             let cibles = [couleur.map(wgpu::ColorTargetState::from)];
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
@@ -528,7 +529,7 @@ impl Renderer {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: PROFONDEUR,
                     depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                    depth_compare: Some(comparaison),
                     stencil: Default::default(),
                     bias: decalage,
                 }),
@@ -543,8 +544,8 @@ impl Renderer {
                 cache: None,
             })
         };
-        let pipeline_ombres = profondeur("carte d'ombres", None, wgpu::DepthBiasState { constant: 4, slope_scale: 2.0, clamp: 0.0 });
-        let pipeline_ao_profondeur = profondeur("profondeur de l'occultation", Some(PROFONDEUR_LUE), Default::default());
+        let pipeline_ombres = profondeur("carte d'ombres", None, wgpu::DepthBiasState { constant: 4, slope_scale: 2.0, clamp: 0.0 }, wgpu::CompareFunction::LessEqual);
+        let pipeline_ao_profondeur = profondeur("profondeur de l'occultation", Some(PROFONDEUR_LUE), Default::default(), COMPARAISON_INVERSEE);
         let plein = |label, fs| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
@@ -668,7 +669,6 @@ impl Renderer {
             cibles: None,
             texture_egui: None,
             opaque,
-            opaque_aretes,
             transparent,
             traits,
             coupe,
@@ -1061,7 +1061,7 @@ impl Renderer {
         let graphique = p.style == StyleVisuel::Graphique;
         let ao = self.ao_actif(p);
         let modele = UniformesPasse {
-            mvp: p.mvp.to_cols_array(),
+            mvp: profondeur::inversee(p.mvp).to_cols_array(),
             view_dir: v4(p.view_dir, 0.0),
             coupe: p.coupe.map_or(NEUTRE, |c| c.to_array()),
             plans: [[0.0; 4]; 2],
@@ -1071,15 +1071,15 @@ impl Renderer {
         let mut uniformes = vec![modele, UniformesPasse { coupe: NEUTRE, drapeaux: [0; 4], ..modele }];
         for k in 0..NB_CASCADES {
             let m = p.soleil.as_ref().and_then(|o| o.cascades.get(k)).map_or(Mat4::IDENTITY, |c| c.matrice);
-            uniformes.push(UniformesPasse { mvp: m.to_cols_array(), ..Default::default() });
+            uniformes.push(UniformesPasse { mvp: profondeur::directe(m).to_cols_array(), ..Default::default() });
         }
-        uniformes.push(UniformesPasse { mvp: p.mvp.to_cols_array(), ..Default::default() });
+        uniformes.push(UniformesPasse { mvp: modele.mvp, ..Default::default() });
         for pp in &p.passes {
             let mut plans = [[0.0; 4]; 2];
             for (k, pl) in pp.plans.iter().take(2).enumerate() {
                 plans[k] = pl.to_array();
             }
-            uniformes.push(UniformesPasse { mvp: pp.mvp.to_cols_array(), view_dir: v4(pp.view_dir, 0.0), coupe: NEUTRE, plans, ..Default::default() });
+            uniformes.push(UniformesPasse { mvp: profondeur::inversee(pp.mvp).to_cols_array(), view_dir: v4(pp.view_dir, 0.0), coupe: NEUTRE, plans, ..Default::default() });
         }
         let places = uniformes.len() as u64;
         if self.uniformes_passes.size() < places * PAS_PASSE {
@@ -1113,10 +1113,10 @@ impl Renderer {
             passe.draw_indexed(0..n, 0, 0..1);
         };
         if n[0] > 0 {
-            passe.set_pipeline(if aretes { &self.opaque_aretes } else { &self.opaque });
+            passe.set_pipeline(&self.opaque);
             index(passe, ebo[0], n[0]);
         }
-        // traits sans ombrage ; les faces sont repoussées par le décalage de profondeur
+        // traits sans ombrage, avancés vers l'œil (`vs_trait`)
         passe.set_pipeline(&self.traits);
         let segments = |passe: &mut wgpu::RenderPass<'_>, b: &wgpu::Buffer, n: u32| {
             passe.set_vertex_buffer(0, b.slice(..));
@@ -1139,20 +1139,20 @@ impl Renderer {
     fn rendre(&self, c: &Cibles, p: &FrameParams) {
         let mut enc = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("vue 3D") });
         let decalage = |place: u32| [place * PAS_PASSE as u32];
-        // profondeur, aussi écrite dans `couleur` (effacée au plus loin)
-        let profondeur_seule = |enc: &mut wgpu::CommandEncoder, vue: &wgpu::TextureView, couleur: Option<&wgpu::TextureView>| {
+        // profondeur effacée à `loin`, aussi écrite dans `couleur` (effacée au plus loin)
+        let profondeur_seule = |enc: &mut wgpu::CommandEncoder, vue: &wgpu::TextureView, couleur: Option<&wgpu::TextureView>, loin: f32| {
             let attache = couleur.map(|view| wgpu::RenderPassColorAttachment {
                 view,
                 depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::WHITE), store: wgpu::StoreOp::Store },
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r: loin.into(), g: 0.0, b: 0.0, a: 1.0 }), store: wgpu::StoreOp::Store },
             });
             enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: if attache.is_some() { std::slice::from_ref(&attache) } else { &[] },
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: vue,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(loin), store: wgpu::StoreOp::Store }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: None,
@@ -1168,7 +1168,7 @@ impl Renderer {
         let groupe_ombres = (realiste && self.n_decoupe > 0).then(|| self.groupe_scene(&self.ombres_vides, &self.ao_vide, &self.copie_vide, &self.ao_vide));
         if p.soleil.is_some() && self.n_opaque > 0 {
             for (k, vue) in self.vues_cascades.iter().enumerate() {
-                let mut passe = profondeur_seule(&mut enc, vue, None);
+                let mut passe = profondeur_seule(&mut enc, vue, None, 1.0);
                 passe.set_pipeline(&self.pipeline_ombres);
                 passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_OMBRES + k as u32));
                 passe.set_vertex_buffer(0, self.sommets.slice(..));
@@ -1189,7 +1189,7 @@ impl Renderer {
         let ao = self.ao_actif(p);
         let ssr = p.ciel.is_some() && p.passes.is_empty() && self.n_transp > 0;
         if ssr && !ao {
-            let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur));
+            let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur), LOIN_INVERSE);
             if self.n_opaque > 0 {
                 passe.set_pipeline(&self.pipeline_ao_profondeur);
                 passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_AO));
@@ -1200,7 +1200,7 @@ impl Renderer {
         }
         if ao {
             {
-                let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur));
+                let mut passe = profondeur_seule(&mut enc, &c.ao_tampon, Some(&c.ao_profondeur), LOIN_INVERSE);
                 if self.n_opaque > 0 {
                     passe.set_pipeline(&self.pipeline_ao_profondeur);
                     passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_AO));
@@ -1248,7 +1248,7 @@ impl Renderer {
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &c.profondeur,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(LOIN_INVERSE), store: wgpu::StoreOp::Store }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: None,

@@ -52,6 +52,12 @@ struct Segment {
 
 // Épaisseur des traits (pixels de l'image).
 const LARGEUR_TRAIT: f32 = 1.0;
+// avance vers l'œil des traits et des annotations, en fraction de leur distance (voir
+// `avancer`) : 1 cm à 50 m pour un trait. Au-dessus de l'erreur d'interpolation de la
+// profondeur d'un grand triangle ; un trait caché derrière une face plus proche que cela
+// la traverse.
+const AVANCE_TRAIT: f32 = 2e-4;
+const AVANCE_ANNOTATION: f32 = 1e-3;
 
 // chaque objet est repéré par un octet dans la texture de sélection
 // 1 : sélectionné (octet 255) ; 2 : masqué montré par « Afficher les éléments masqués » (128) ;
@@ -90,11 +96,10 @@ fn vs_main(s: Sommet) -> Varie {
     o.c = s.couleur;
     o.selection = selectionne(s.obj);
     var p = passe.mvp * vec4f(s.pos, 1.0);
-    // annotations (cotes, textes, tracé de la coupe) un peu avancées en profondeur, en
-    // proportion de la précision du tampon : elles ne se battent plus avec les faces
-    // coplanaires quand on s'éloigne
+    // annotations (cotes, textes, tracé de la coupe) un peu avancées : elles ne se battent
+    // pas avec les faces coplanaires
     if o.annot == 1u {
-        p.z -= 4e-5 * p.w;
+        p = avancer(p, AVANCE_ANNOTATION);
     }
     // arête douce (4ᵉ composante de la normale négative) : normales des deux facettes
     // dans la normale et la couleur ; tracée en noir sur la silhouette seulement, sinon
@@ -114,7 +119,7 @@ fn vs_main(s: Sommet) -> Varie {
             p = vec4f(2.0, 2.0, 2.0, 1.0);
         }
     }
-    o.clip = vers_wgpu(p);
+    o.clip = p;
     return o;
 }
 
@@ -142,16 +147,11 @@ fn vs_trait(s: Segment, @builtin(vertex_index) i: u32) -> Varie {
     }
     var a = passe.mvp * vec4f(s.pos_a, 1.0);
     var b = passe.mvp * vec4f(s.pos_b, 1.0);
-    // annotations un peu avancées en profondeur (voir vs_main)
-    if annot {
-        a.z -= 4e-5 * a.w;
-        b.z -= 4e-5 * b.w;
-    }
-    // segment coupé par le plan proche (z ≥ -w) avant la projection
+    // segment coupé par le plan proche (profondeur inversée : z ≤ w) avant la projection
     var pa = s.pos_a;
     var pb = s.pos_b;
-    let da = a.z + a.w;
-    let db = b.z + b.w;
+    let da = a.w - a.z;
+    let db = b.w - b.z;
     if da < 0.0 && db < 0.0 {
         o.clip = ecarte;
         return o;
@@ -165,6 +165,10 @@ fn vs_trait(s: Segment, @builtin(vertex_index) i: u32) -> Varie {
         b = mix(b, a, t);
         pb = mix(pb, pa, t);
     }
+    // traits avancés vers l'œil (devant leurs faces), annotations plus encore (vs_main)
+    let avance = select(AVANCE_TRAIT, AVANCE_ANNOTATION, annot);
+    a = avancer(a, avance);
+    b = avancer(b, avance);
     // direction et normale du segment à l'écran (pixels)
     let demi_taille = 0.5 * g.divers.zw;
     let ea = a.xy / a.w * demi_taille;
@@ -179,7 +183,7 @@ fn vs_trait(s: Segment, @builtin(vertex_index) i: u32) -> Varie {
     let en_b = bouts[i] == 1u;
     let decalage = (nrm * cotes[i] + d * select(-1.0, 1.0, en_b)) * (0.5 * LARGEUR_TRAIT);
     let p = select(a, b, en_b);
-    o.clip = vers_wgpu(vec4f(p.xy + decalage / demi_taille * p.w, p.zw));
+    o.clip = vec4f(p.xy + decalage / demi_taille * p.w, p.zw);
     o.pos = select(pa, pb, en_b);
     o.c = select(s.couleur_a, s.couleur_b, en_b);
     if s.normale_a.w < -0.5 {
@@ -219,7 +223,7 @@ fn vs_herbe(s: Sommet, @builtin(instance_index) i: u32) -> VarieHerbe {
     o.n = n;
     o.fraction = f;
     o.couleur = s.rendu.rgb;
-    o.clip = vers_wgpu(passe.mvp * vec4f(p, 1.0));
+    o.clip = passe.mvp * vec4f(p, 1.0);
     if h <= 0.0 {
         o.clip = vec4f(2.0, 2.0, 2.0, 1.0);
     }
@@ -289,7 +293,7 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
 // Profondeur seule (carte d'ombres, occultation ambiante).
 @vertex
 fn vs_profondeur(@location(0) pos: vec3f) -> @builtin(position) vec4f {
-    return vers_wgpu(passe.mvp * vec4f(pos, 1.0));
+    return passe.mvp * vec4f(pos, 1.0);
 }
 
 // Carte d'ombres des surfaces découpées (feuillage) : pixels retirés par la carte de
@@ -300,7 +304,7 @@ fn vs_ombre_decoupe(s: Sommet) -> Varie {
     o.pos = s.pos;
     o.n = s.normale.xyz;
     o.rendu = s.rendu;
-    o.clip = vers_wgpu(passe.mvp * vec4f(s.pos, 1.0));
+    o.clip = passe.mvp * vec4f(s.pos, 1.0);
     return o;
 }
 
@@ -612,7 +616,7 @@ struct VarieCiel {
 fn vs_ciel(@builtin(vertex_index) i: u32) -> VarieCiel {
     var o: VarieCiel;
     let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u)) * 2.0 - 1.0;
-    o.clip = vec4f(p, 1.0, 1.0);
+    o.clip = vec4f(p, 0.0, 1.0);
     o.ndc = p;
     return o;
 }
@@ -667,11 +671,11 @@ fn reflet_ecran(p: vec3f, r: vec3f) -> vec4f {
         }
         let uv = vec2f(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
         let zs = textureLoad(t_profondeur_lue, clamp(vec2i(uv * taille), vec2i(0), vec2i(taille) - 1), 0).r;
-        if zs >= 0.99999 {
+        if zs <= 0.0 {
             continue;
         }
         // surface vue à cet endroit, distance à l'œil comparée à celle du rayon
-        let s = point_ecran(ndc.xy, zs * 2.0 - 1.0);
+        let s = point_ecran(ndc.xy, 1.0 - 2.0 * zs);
         let dq = length(q - g.eye.xyz);
         let ds = length(s - g.eye.xyz);
         if dq > ds && dq - ds < max(pas * 2.5, 0.25) {
@@ -684,7 +688,7 @@ fn reflet_ecran(p: vec3f, r: vec3f) -> vec4f {
                 let nm = cm.xyz / cm.w;
                 let um = vec2f(nm.x * 0.5 + 0.5, 0.5 - nm.y * 0.5);
                 let zm = textureLoad(t_profondeur_lue, clamp(vec2i(um * taille), vec2i(0), vec2i(taille) - 1), 0).r;
-                let sm = point_ecran(nm.xy, zm * 2.0 - 1.0);
+                let sm = point_ecran(nm.xy, 1.0 - 2.0 * zm);
                 if length(m - g.eye.xyz) > length(sm - g.eye.xyz) { b = m; } else { a = m; }
             }
             let cb = passe.mvp * vec4f(b, 1.0);

@@ -50,7 +50,14 @@ struct Passe {
 @group(0) @binding(0) var<uniform> g: Globales;
 @group(0) @binding(1) var<uniform> passe: Passe;
 
-// Profondeur [-1, 1] d'OpenGL (matrices de glam) vers [0, 1].
-fn vers_wgpu(p: vec4f) -> vec4f {
-    return vec4f(p.xy, 0.5 * (p.z + p.w), p.w);
+// Les matrices des passes donnent déjà la profondeur de wgpu (`profondeur.rs`) : inversée
+// pour la vue (1 au plan proche, 0 au loin), directe pour les cartes d'ombres.
+
+// Point `p` (repère de découpe de la vue) avancé vers l'œil : d'une fraction `r` de sa
+// distance en perspective (profondeur inversée ≈ proche / distance), de `r` / 100 de la
+// profondeur de la vue en orthographique (profondeur linéaire). Traits et annotations
+// passent ainsi devant les faces où ils sont posés, sans traverser celles qui les cachent.
+fn avancer(p: vec4f, r: f32) -> vec4f {
+    let dz = select(r * p.z, 0.01 * r * p.w, g.eye.w > 0.5);
+    return vec4f(p.xy, p.z + dz, p.w);
 }
