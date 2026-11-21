@@ -288,6 +288,8 @@ pub struct FrameParams {
     pub familles_motifs: Vec<[f32; 4]>,
     /// Plan de coupe du mode dessin (n, d ; n·p + d ≥ 0 gardé) et tracé de la coupe.
     pub coupe: Option<Vec4>,
+    /// Tracé 2D montré sans coupe ni boîte (vue de dessin : ses annotations).
+    pub trace_seul: bool,
     /// Ombres portées : direction du soleil (vers lui), matrice
     /// de la carte d'ombres et décalage des points le long de la normale contre l'acné
     /// d'ombre (unités de la scène).
@@ -1325,7 +1327,7 @@ impl Renderer {
                 self.dessiner(&mut passe, [&self.ebo_opaque, &self.ebo_transp, &self.segments_traits], [0, self.n_transp, 0], false);
             }
             // tracé de la coupe (poché, contours, hachures) : non découpé par le plan de coupe
-            if (p.coupe.is_some() || p.boite.is_some()) && self.n_coupe[0] + self.n_coupe[1] > 0 {
+            if (p.coupe.is_some() || p.boite.is_some() || p.trace_seul) && self.n_coupe[0] + self.n_coupe[1] > 0 {
                 passe.set_bind_group(0, &self.groupe_0, &decalage(PASSE_COUPE));
                 passe.set_vertex_buffer(0, self.sommets_coupe.slice(..));
                 passe.set_vertex_buffer(1, self.nul_coupe.slice(..));

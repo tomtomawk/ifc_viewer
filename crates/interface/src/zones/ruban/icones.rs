@@ -93,6 +93,7 @@ pub(super) fn bouton_outil(
         Outil::Deverrouiller => "Déverrouiller la sélection (DC) ; ou clic sur un cadenas dans la vue",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
         Outil::Nomenclatures => "Nomenclatures : quantités par catégorie et par type, export CSV",
+        Outil::VueDessin => "Vue de dessin : nouvelle vue 2D sans le modèle (détails, légendes), avec les outils de dessin et de modification",
         Outil::LienIfc => "Lien IFC : maquette d'un autre intervenant (structure, fluides, existant), affichée en lecture seule en 3D, en plan et en coupe. Réglages dans l'arborescence > Liens. Glisser un fichier IFC dans la fenêtre fait de même",
         _ => outil.nom(),
     })
@@ -767,6 +768,13 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             seg((0.5, 0.15), (0.5, 0.55));
             seg((0.1, 0.55), (0.35, 0.55));
             seg((0.65, 0.55), (0.9, 0.55));
+        }
+        VueDessin => {
+            // feuille de dessin : cadre, détail en traits
+            cadre(0.12, 0.12, 0.76, 0.76);
+            seg((0.25, 0.7), (0.5, 0.35));
+            seg((0.5, 0.35), (0.75, 0.7));
+            seg((0.25, 0.7), (0.75, 0.7));
         }
         VueCoupe => {
             // repère de coupe : trait, têtes rondes et flèches de visée

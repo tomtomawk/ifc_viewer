@@ -265,3 +265,18 @@ fn dwg_feuille_relue() {
     assert!(a.len() > 1, "{a:?}");
     assert_eq!(a, b);
 }
+
+#[test]
+fn vue_de_dessin_ne_montre_que_ses_annotations() {
+    use modele::creation::ParametresMur;
+    let mut p = Projet::nouveau("Vue de dessin");
+    p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &ParametresMur::default()).unwrap();
+    let id = p.ajouter_vue_dessin(20.0).unwrap();
+    p.annotations.push(Annotation { id: "trait".into(), vue: id.clone(), hauteur: 2.5, forme: AnnotationForme::Ligne { debut: [0.0, 0.0], fin: [1000.0, 0.0] } });
+    let dessin = moteur2d::dessin_vue(&p, &id).unwrap();
+    let trait_ = modele::identifiants::id_natif("annotation", "trait");
+    assert!(!dessin.primitives.is_empty());
+    assert!(dessin.primitives.iter().all(|pr| pr.element == Some(trait_)));
+    assert_eq!(dessin.echelle, 20.0);
+    assert!(p.retourner_vue(&id).is_err());
+}

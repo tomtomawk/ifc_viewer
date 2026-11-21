@@ -130,7 +130,7 @@ impl Application {
         if let Some(id) = self.limite_propriete_proche(rect, q) {
             liste.push(natif(self, 1.0, id, Vec::new()));
         }
-        if self.vue_en_plan() && let Some(id) = self.repere_coupe_proche(rect, q, self.altitude_vue_native()) {
+        if self.vue_en_plan() && !self.vue_de_dessin() && let Some(id) = self.repere_coupe_proche(rect, q, self.altitude_vue_native()) {
             liste.push(natif(self, 1.0, id, Vec::new()));
         }
         liste.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));

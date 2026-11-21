@@ -88,6 +88,8 @@ pub(crate) enum Outil {
     Symbole,
     Legende,
     VuePlan,
+    /// Vue de dessin : dessin 2D sans le modèle (détails, légendes, motifs).
+    VueDessin,
     VueCoupe,
     Feuilles,
     Nomenclatures,
@@ -161,6 +163,7 @@ impl Outil {
         Self::Legende,
         Self::VuePlan,
         Self::VueCoupe,
+        Self::VueDessin,
         Self::Feuilles,
         Self::Nomenclatures,
         Self::LienIfc,
@@ -234,6 +237,7 @@ impl Outil {
             Self::Symbole => "Symbole",
             Self::Legende => "Légende",
             Self::VuePlan => "Vue en plan",
+            Self::VueDessin => "Vue de dessin",
             Self::VueCoupe => "Coupe / élévation",
             Self::Feuilles => "Feuilles",
             Self::Nomenclatures => "Nomenclatures",
@@ -449,7 +453,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             ("Verrou et visibilité", &[Inverser, Verrouiller, Isoler, Masquer, MasquerVue, Afficher]),
         ],
         Menu::Annoter => &[
-            ("Vues", &[VuePlan, VueCoupe]),
+            ("Vues", &[VuePlan, VueCoupe, VueDessin]),
             ("Cotes et textes", &[Cote, CoteAngulaire, CoteDiametre, Altimetrie, Texte, Etiquette]),
             // les régions remplies sont des polylignes fermées (Remplissage dans Propriétés)
             DESSIN_2D,
@@ -654,7 +658,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures | LienIfc => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures | LienIfc | VueDessin => vec![],
         Quadrillage => vec![Saisie("Repère", "A")],
         Mur => vec![
             Choix(

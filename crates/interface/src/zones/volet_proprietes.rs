@@ -309,6 +309,8 @@ impl Application {
         let i = self.vue_active?;
         let s = self.scene.as_ref()?;
         let v = s.navigateur.as_ref()?.vues.get(i)?;
+        // vue de dessin : aucun objet du modèle, ses annotations seulement
+        if matches!(v.genre.as_str(), "Vue de dessin" | "Légende") { return Some(HashSet::new()); }
         if self.natif.is_none() || v.genre != "Plan d'étage" { return None; }
         let objets: HashSet<u32> = s.objects.iter().enumerate().filter(|(_, o)| o.storey == v.etage || &*o.class == "IFCGEOGRAPHICELEMENT").map(|(i, _)| i as u32).collect();
         (!objets.is_empty()).then_some(objets)

@@ -432,6 +432,12 @@ impl Application {
                     }
                 }
             }
+            // vue de dessin : dessin au trait, sans coupe
+            "Vue de dessin" | "Légende" => {
+                self.style = StyleVisuel::Graphique;
+                self.faces_blanches = true;
+                self.coupe = false;
+            }
             // vue 3D : le style en cours, faces colorées en sortant d'un dessin
             "Vue 3D" | "Feuille" => self.faces_blanches = false,
             _ => {}
@@ -460,7 +466,13 @@ impl Application {
         self.hidden_storeys.clear();
         // visibilité propre à chaque vue : celle par défaut, puis les objets isolés
         self.hidden_classes = HIDDEN_BY_DEFAULT.iter().map(|s| s.to_string()).collect();
-        if objs.is_empty() {
+        let dessin = matches!(genre.as_str(), "Vue de dessin" | "Légende");
+        if objs.is_empty() && dessin {
+            // vue de dessin : aucun objet du modèle (ses annotations seulement)
+            self.isolated = Some(HashSet::new());
+            self.isolement_utilisateur = false;
+            self.visibility_dirty = true;
+        } else if objs.is_empty() {
             self.isolated = None;
             self.isolement_utilisateur = false;
             self.visibility_dirty = true;
@@ -488,6 +500,10 @@ impl Application {
         }
         if !cadre.is_empty() {
             self.frame_objects(&cadre);
+        } else if dessin && let Some(s) = &self.scene {
+            // vue de dessin vide : son origine au centre, une dizaine de mètres visibles
+            self.camera.target = (-s.origin).as_vec3();
+            self.camera.dist = 8.0;
         }
         if genre_feuille {
             self.cadrer_rectangle(&cadre);

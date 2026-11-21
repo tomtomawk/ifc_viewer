@@ -132,6 +132,7 @@ impl Application {
             GenreVue::Coupe { elevation: true, .. } => "Élévation",
             GenreVue::Coupe { .. } => "Coupe",
             GenreVue::Camera { .. } => "Vue caméra",
+            GenreVue::Dessin {} => "Vue de dessin",
         };
         egui::CollapsingHeader::new(RichText::new(format!("Vue · {sorte}")).strong()).id_salt("vue_native").default_open(true).show(ui, |ui| {
             egui::Grid::new("grille_vue_native").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
@@ -195,6 +196,7 @@ impl Application {
                         ui.add(egui::DragValue::new(champ).speed(0.5).range(15.0..=110.0).suffix(" °"));
                         ui.end_row();
                     }
+                    GenreVue::Dessin {} => {}
                 }
             });
             ui.horizontal(|ui| {

@@ -54,6 +54,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M7 | Ajuster plusieurs éléments | P2 | §2 |
 | M8 | Menu du clic droit pendant une commande (Valider / Annuler) | P2 | §1 |
 | S3 | Quadrillages et repères des autres coupes non dessinés ni sélectionnables en coupe et élévation ; repère de coupe sélectionnable seulement en plan | P2 | `modele::documentation::niveaux_et_limites_en_coupe` |
+| S5 | Un clic au centre exact de la vue ne sélectionne pas l'annotation qui y passe (constaté en vue de dessin et en vue en plan, polyligne passant par la cible de la caméra) ; 30 px à côté, la sélection marche | P2 | `crates/interface/src/socle/viewport.rs` |
 | S4 | Types de niveau (tête, trait) absents du modèle : le sélecteur d'un niveau reste « Générique » | P3 | `docs/MODELE.md` |
 | M10 | Décaler et Scinder des lignes d'annotation à la souris | P2 | §2 |
 | M11 | Compléments de fonctions faites : trait de démolition dans les plans imprimés ; Joindre par clic sur la cible ; Coller aligné sur plusieurs niveaux d'un coup ; aperçu glissant de Changer d'hôte ; propriétés grisées d'un élément verrouillé | P2 | §3, §5 |
@@ -79,7 +80,7 @@ Objectif : une famille a un document, un éditeur et un format communs quelle qu
 | F10 | Outils communs projet / familles, reste à relever (état non vérifié le 20/11/2026) : texte et libellés (placement, poignées, contenu, hauteur, champs dynamiques et aperçu ; ouvrir au projet les fonctions propres aux familles) ; inventaire des lignes, cercles, splines, rectangles et cotations avant de retirer les variantes, sans confondre gestes graphiques et règles métier | P2 | `crates/interface/src/familles/editeur_famille/`, `crates/interface/src/outils/` |
 | F6 | Formes guidées, reste : chemin tracé hors du plan de la vue (D), raccordement sur chemin fermé, outil « Tracer le chemin » non essayé à l'écran | P3 | `docs/EDITION.md`, `docs/MODELE.md` |
 | F11 | Maillages de famille : import d'un maillage (OBJ, IFC) dans l'éditeur de familles ; écriture compacte des maillages enregistrés | P3 | `crates/modele/src/famille/modelee/maillage.rs` |
-| F12 | Éditeur de hachures dessinées par l'éditeur de familles : catégorie « Motif » (vue en plan seule, carré de la tuile, répétitions grisées), traits dessinés avec les outils communs et modifiés par le ruban Modifier (supprimer, déplacer, copier, décaler, ajuster…) au lieu de l'onglet propre ; conversion des traits en familles de traits au chargement dans le projet | P2 | `crates/interface/src/documenter/editeur_hachure.rs`, `crates/interface/src/familles/` |
+| F12 | Éditeur de hachures dessinées, étape 2 : le refaire comme une vue de dessin en mode motif (carré de la tuile, répétitions grisées, traits tracés avec les outils communs et modifiés par le ruban Modifier) au lieu de l'onglet propre ; conversion des traits en familles de traits. Ne pas commencer avant la décision « Hachures » (§9) | P2 | `crates/interface/src/documenter/editeur_hachure.rs`, `crates/interface/src/socle/vues.rs` |
 | F8 | Escaliers et garde-corps paramétriques par famille | P3 | `docs/EDITION.md` |
 
 ## 6. Structure du code
@@ -122,6 +123,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
 | U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
 | Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
+| Hachures | Après la vue de dessin (livrée le 21/11/2026) : étape 2, éditeur de hachures = vue de dessin en mode motif (F12) ; étape 3, motifs « modèle » tracés comme dans Revit (traits réels, sélectionnables, motif déplaçable) en plus des motifs de dessin rendus. Choix de l'utilisateur non arrêté (écarts avec Revit encore à lever) |
 | Commits | `AGENTS.md` demande de pousser sur `master` ; la session cloud était configurée pour une branche de travail. Les commits du 20/11/2026 ont été poussés sur `master` selon `AGENTS.md` : à confirmer pour les sessions autonomes suivantes |
 
 ## 10. Études des évolutions

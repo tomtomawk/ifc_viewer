@@ -100,7 +100,12 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
                 && points.iter().any(|q| q.dot(n) <= *profondeur);
         }
     }
-    let actif = v.coupe_active.unwrap_or(true);
+    // vue de dessin : ses annotations seulement, aucun objet du modèle
+    let dessin = matches!(v.genre, GenreVue::Dessin {});
+    if dessin {
+        visible.fill(false);
+    }
+    let actif = v.coupe_active.unwrap_or(true) && !dessin;
     let poche = if p.rendus_vues.get(id).is_some_and(|r| r.style.as_deref() == Some("realiste")) {
         Poche::Materiau
     } else { match v.poche_vue.as_deref() {

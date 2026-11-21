@@ -61,6 +61,13 @@ pub(crate) fn navigateur(projet: &Projet) -> Navigateur {
                 let plan = |n: glam::DVec2, p: glam::DVec2| n.extend(0.0).extend(-n.dot(p));
                 n.cadrage = vec![plan(-gauche, a + gauche * (profondeur / 1000.0)), plan(u, a), plan(-u, b)];
             }
+            // vue de dessin : vue de dessus de son plan, sans le modèle
+            GenreVue::Dessin {} => {
+                n.genre = "Vue de dessin".into();
+                n.direction = DVec3::Z;
+                let (sin, cos) = v.orientation_plan.sin_cos();
+                n.haut = DVec3::new(-sin, cos, 0.0);
+            }
             // vue caméra : vue 3D (point de vue appliqué à l'ouverture)
             GenreVue::Camera { oeil, cible, .. } => {
                 n.genre = "Vue 3D".into();

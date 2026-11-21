@@ -273,6 +273,18 @@ impl Projet {
         Ok(id)
     }
 
+    /// Ajoute une vue de dessin vide « Dessin n » (premier numéro libre) à l'échelle
+    /// 1:`echelle`.
+    pub fn ajouter_vue_dessin(&mut self, echelle: f64) -> Result<String, String> {
+        if !(echelle >= 1.0 && echelle.is_finite()) {
+            return Err("L’échelle doit être au moins 1:1.".into());
+        }
+        let (id, _) = self.nouvelle_vue("dessin");
+        let nom = (1..).map(|k| format!("Dessin {k}")).find(|n| self.vues.iter().all(|v| &v.nom != n)).unwrap_or_default();
+        self.vues.push(Vue { id: id.clone(), nom, type_vue: String::new(), echelle, orientation_plan: 0.0, coupe_active: None, poche_vue: None, elements_masques: Vec::new(), contour_cadrage: Vec::new(), fond_plan: None, limite_haute_niveau: None, limite_haute_decalage: 2800.0, niveau_detail: Default::default(), genre: GenreVue::Dessin {} });
+        Ok(id)
+    }
+
     /// Ajoute une coupe (ou une élévation) le long de `debut` → `fin` (mm), regardant
     /// vers la gauche, de type `type_vue` à l'échelle 1:`echelle`.
     pub fn ajouter_vue_coupe(&mut self, debut: [f64; 2], fin: [f64; 2], profondeur: f64, elevation: bool, type_vue: &str, echelle: f64) -> Result<String, String> {
@@ -340,6 +352,7 @@ impl Projet {
             }
             GenreVue::Plan { .. } => Err("Un plan ne se retourne pas.".into()),
             GenreVue::Camera { .. } => Err("Une vue caméra ne se retourne pas.".into()),
+            GenreVue::Dessin {} => Err("Une vue de dessin ne se retourne pas.".into()),
         }
     }
 

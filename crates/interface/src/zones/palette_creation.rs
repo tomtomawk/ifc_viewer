@@ -87,7 +87,7 @@ pub(crate) fn definition(outil: Outil) -> Definition {
         Symbole => palette(ANNOTER, selecteur_symbole, None, Champs, true),
         Legende => palette(ANNOTER, selecteur_legende, None, Champs, true),
         Deplacer | Copier | Tourner | Ajuster => Definition::Parametres,
-        Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser | Aligner | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Rectangle | Feuilles | Nomenclatures | LienIfc => Definition::Aucune,
+        Symetrie | Reseau | Echelle | Decaler | Scinder | Demolir | Reproduire | ChangerHote | Inverser | Aligner | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Rectangle | Feuilles | Nomenclatures | LienIfc | VueDessin => Definition::Aucune,
     }
 }
 

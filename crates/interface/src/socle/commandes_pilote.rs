@@ -88,6 +88,7 @@ impl Application {
             // occultation : rayon de l'ordre du mètre, réduit de près, élargi de loin
             ao: self.ombre_ambiante.then(|| (self.camera.proj(aspect), (self.camera.dist * 0.04).clamp(0.15, 1.5))),
             coupe: self.plan_coupe(),
+            trace_seul: self.vue_de_dessin(),
             boite: self.boite_appliquee(),
             cadrage: self.cadrage_vue(),
             contour_vue: self.contour_cadrage_vue(),
@@ -319,6 +320,12 @@ impl Application {
                 let (nom, h) = argument.rsplit_once(' ').and_then(|(n, h)| Some((n, h.parse::<f64>().ok()?))).unwrap_or((argument, 1200.0));
                 let Some(niveau) = self.natif.as_ref().and_then(|(p, _)| p.niveaux.iter().find(|n| n.nom == nom.trim() || n.id == nom.trim())).map(|n| n.id.clone()) else { return erreur("niveau introuvable") };
                 self.creer_vue(|p| p.ajouter_vue_plan(&niveau, h), true);
+                match &self.error { Some(e) => erreur(e), None => self.etat() }
+            }
+            "vue_dessin" => {
+                // vue_dessin [échelle] : nouvelle vue de dessin, ouverte
+                let echelle = argument.trim().parse::<f64>().unwrap_or(50.0);
+                self.creer_vue(|p| p.ajouter_vue_dessin(echelle), true);
                 match &self.error { Some(e) => erreur(e), None => self.etat() }
             }
             "coupe_vue" => {

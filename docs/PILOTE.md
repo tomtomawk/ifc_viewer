@@ -231,7 +231,7 @@ Raccourcis existants :
   `poche hachure|plein|vide` ; `echelle denominateur` ; `niveau_detail [faible|moyen|eleve]`
   (lit ou règle le niveau de détail de la vue ouverte, enregistré dans la vue native ;
   réponse `niveau_detail`, `type_vue`).
-- `capture vue|fenetre [LxH] <chemin.png>` ; `taille largeur hauteur` ; `position x y` (coin de la fenêtre, pixels de l'écran : essais à plusieurs instances) ; `motifs_hachures [nom]` ouvre la fenêtre des motifs de hachures ; `editeur_hachure [nom]` ouvre l'éditeur de hachures dessinées (onglet) sur un nouveau motif ou le motif nommé ; `reduire` ; `restaurer`.
+- `capture vue|fenetre [LxH] <chemin.png>` ; `taille largeur hauteur` ; `position x y` (coin de la fenêtre, pixels de l'écran : essais à plusieurs instances) ; `vue_dessin [échelle]` crée et ouvre une vue de dessin (2D sans le modèle) ; `motifs_hachures [nom]` ouvre la fenêtre des motifs de hachures ; `editeur_hachure [nom]` ouvre l'éditeur de hachures dessinées (onglet) sur un nouveau motif ou le motif nommé ; `reduire` ; `restaurer`.
 - `quitter [abandonner]` : sortie sans dialogue ; refuse des documents modifiés
   sauf abandon explicite, et refuse les opérations en cours.
 

@@ -102,7 +102,7 @@ garde le RVT et ses vues ouverts, sans changer automatiquement de document (Déb
 | `dalles[]` | `id`, `nom`, `sorte`, `type_dalle`, `niveau`, `decalage`, `contours`, `pentes`, `phase`, `sous_projet`, `variante`, `origine` | `sorte` : `dalle` (défaut, omis), `sol`, `plafond`, `toiture`. `decalage` = dessus (dalle, sol) ou sous-face (plafond, toiture ; à l'égout si en pente) au-dessus du niveau ; `contours` en plan, pair-impair (trous) ; `pentes[c][k]` = pente en degrés de l'arête du sommet k au suivant du contour c, `null` sans pente (omis : élément plan) |
 | `positions_plan[]` | `nom`, `angle` (degrés, plan par rapport au nord du modèle) | Orientations enregistrées depuis le repère du plan (« Positions ») |
 | `orientation_nord` | angle en radians par rapport à l'axe Y du projet | Orientation des points cardinaux ; 0 par défaut pour les anciens projets |
-| `vues[]` | `id`, `nom`, `type_vue`, `echelle`, `niveau_detail` (`faible`, `moyen`, `eleve` ; absent : `moyen`), `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau) ou `coupe` (`debut`, `fin`, `profondeur` mm, `elevation`) | Arborescence du projet ; une coupe ou une élévation regarde vers la gauche de sa ligne |
+| `vues[]` | `id`, `nom`, `type_vue`, `echelle`, `niveau_detail` (`faible`, `moyen`, `eleve` ; absent : `moyen`), `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau), `coupe` (`debut`, `fin`, `profondeur` mm, `elevation`), `camera` (`oeil`, `cible`, `champ`) ou `dessin` (sans autre champ) | Arborescence du projet ; une coupe ou une élévation regarde vers la gauche de sa ligne ; une vue de dessin ne montre aucun élément du modèle, seulement ses annotations (mm dans le plan de la vue, origine au centre) |
 | `importes[]` | `id`, `nom`, `categorie`, `niveau`, `maillage`, `raison`, `origine` ; facultatifs : `proprietes`, `materiau`, `couleur` | `maillage` : `sommets` [x, y, z], `triangles` [i, j, k]. `proprietes[]` : jeux lus dans la source, `{nom, quantites, proprietes: [{nom, valeur, unite, logique}]}` (`quantites` vrai : jeu de quantités, omis sinon ; `valeur` en texte ; `unite` facultative, unités SI de base : m, m², m³, kg ; `logique` facultatif : `"booleen"` (IFC `IfcBoolean`, `valeur` « Vrai » ou « Faux ») ou `"logique"` (`IfcLogical`, « Vrai », « Faux » ou « Inconnu »), réécrit typé à l'export IFC, omis pour un texte ou un nombre). `materiau` : nom (plusieurs matériaux joints par « \| »). `couleur` : [r, g, b, a] de 0 à 255. Champs omis quand ils sont vides ; vérifiés par `Projet::verifier` : noms de jeux non vides et uniques, noms de propriétés non vides et uniques dans leur jeu, unité non vide si présente, valeur numérique finie, quantités numériques positives ou nulles, valeur admise par `logique` et pas de `logique` dans un jeu de quantités, matériau non vide |
 | `ignores` | catégorie → nombre | Éléments sans géométrie ou hors périmètre (pièces, quadrillages, espaces, ouvertures IFC vides, éléments 2D) |
 
@@ -244,7 +244,11 @@ ligne (poché par couche) ; une élévation montre le modèle depuis sa ligne, s
 poché. Le modèle est limité à la profondeur et à la longueur de la ligne. Repères
 dans les plans (coupe : trait mixte et têtes ; élévation : cercle et flèche).
 Propriétés d'une vue ouverte : nom, échelle, hauteur de coupe (plan) ou profondeur,
-Retourner, Supprimer la vue.
+Retourner, Supprimer la vue. **Vue de dessin** (groupe Vues) crée une vue 2D au
+1:50 (« Dessin n », branche « Vues de dessin » de l'arborescence) qui ne montre aucun
+élément du modèle : on y trace traits, textes, cotes, zones avec les outils
+d'annotation, et on les modifie par le ruban Modifier (déplacer, copier, supprimer…).
+Elle se place sur une feuille comme les autres vues ; elle ne se retourne pas.
 
 ## Jonctions
 

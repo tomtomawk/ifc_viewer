@@ -455,7 +455,9 @@ impl Application {
             }
 
             if (resp.hovered() || resp.has_focus()) && !self.vol.actif && ui.input(|i|i.key_pressed(egui::Key::Escape)) && !rectangle_actif {
-                if self.isolated.is_some() {self.isolated=None;self.visibility_dirty=true;}
+                // Échap retire l'isolement temporaire, pas celui de la vue (niveau du plan,
+                // vue de dessin vide)
+                if self.isolement_utilisateur {self.isolement_utilisateur=false;self.isolated=self.isolement_de_vue();self.visibility_dirty=true;}
                 else {self.select(None,false);}
             }
         }
@@ -480,7 +482,7 @@ impl Application {
         if let Some(f) = self.fenetre_selection {
             f.dessiner(&ui.painter().with_clip_rect(rect));
         }
-        if self.natif.is_some() && self.vue_en_plan() {
+        if self.natif.is_some() && self.vue_en_plan() && !self.vue_de_dessin() {
             self.reperes_coupes(ui, rect, altitude_coupe);
         }
         if self.natif.is_some() && self.jeu_actif().is_none() {

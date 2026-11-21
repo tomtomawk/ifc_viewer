@@ -87,6 +87,10 @@ impl Application {
 
     pub(crate) fn altitude_vue_native(&self) -> f64 {
         let Some((projet, _)) = &self.natif else { return 0.0 };
+        // vue de dessin : son plan est à l'altitude 0 (`documentation::repere`)
+        if self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Vue de dessin") {
+            return 0.0;
+        }
         let etage = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)?.etage);
         etage
             .and_then(|e| projet.niveaux.iter().find(|n| modele::identifiants::id_natif("niveau", &n.id) == e))

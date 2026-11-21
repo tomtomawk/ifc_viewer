@@ -498,6 +498,8 @@ pub fn repere(p: &Projet, v: &Vue) -> (DVec3, DVec3, DVec3) {
             let u = (DVec2::from_array(*fin) - a).normalize_or_zero();
             (a.extend(0.0), u.extend(0.0), DVec3::Z)
         }
+        // vue de dessin : son plan (x, y) à l'altitude 0
+        GenreVue::Dessin {} => (DVec3::ZERO, DVec3::X, DVec3::Y),
         // vue caméra : plan perpendiculaire au regard, à l'œil
         GenreVue::Camera { oeil, cible, .. } => {
             let o = DVec3::from_array(*oeil);

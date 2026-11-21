@@ -87,9 +87,15 @@ impl Application {
     /// Plans Revit et vues orthographiques du modèle regardées verticalement.
     pub(crate) fn vue_en_plan(&self) -> bool {
         if let Some(v) = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)) {
-            return matches!(v.genre.as_str(), "Plan d'étage" | "Plan de plafond" | "Plan de structure" | "Plan de site");
+            return matches!(v.genre.as_str(), "Plan d'étage" | "Plan de plafond" | "Plan de structure" | "Plan de site" | "Vue de dessin" | "Légende");
         }
         self.camera.ortho && self.camera.pitch.abs() > 1.56
+    }
+
+    /// Vue de dessin ou légende active : 2D sans le modèle (ni repères de coupe ni
+    /// éléments du modèle à désigner).
+    pub(crate) fn vue_de_dessin(&self) -> bool {
+        self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| matches!(v.genre.as_str(), "Vue de dessin" | "Légende"))
     }
 
     pub(crate) fn orientation_initiale_plan(&self) -> f32 {

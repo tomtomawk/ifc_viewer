@@ -1112,6 +1112,9 @@ pub enum GenreVue {
         #[serde(default = "champ_camera_defaut")]
         champ: f64,
     },
+    /// Vue de dessin (détails, légendes) : dessin 2D sans le modèle, dans son propre plan
+    /// (x, y en mm, comme un plan vu de dessus à l'altitude 0).
+    Dessin {},
 }
 
 /// Élément non reconnu : géométrie figée, déplaçable mais pas modifiable dans sa forme.
