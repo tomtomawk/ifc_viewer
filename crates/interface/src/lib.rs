@@ -627,7 +627,6 @@ pub struct Application {
     materiau_apparence: bool,
     /// Éditeur de hachures ouvert, motif choisi, nom et tirets en cours de saisie (motif,
     /// texte des tirets de chaque famille).
-    editeur_motifs: bool,
     /// Éditeur de hachures dessinées (onglet) et onglet actif.
     editeur_hachure: Option<crate::documenter::editeur_hachure::EditeurHachure>,
     /// Fenêtre « Épaisseurs de traits » ouverte : table des 12 plumes en cours d'édition.
@@ -650,7 +649,7 @@ pub struct Application {
     /// Rendu de la vue active à sa première image (`enregistrer_rendu_vue`) : une vue sans
     /// réglages propres ne les reçoit que si l'utilisateur les change.
     pub(crate) rendu_ouverture: Option<(String, modele::soleil::RenduVue)>,
-    motif_choisi: Option<String>,
+    motif_selectionne: Option<String>,
     nom_motif_saisi: String,
     tirets_saisis: (String, Vec<String>),
     /// Catégories de visibilité de la scène, et pour chaque objet sa catégorie et sa clé
@@ -837,7 +836,6 @@ impl Application {
             liste_materiaux: Vec::new(),
             materiau_edite: None,
             materiau_apparence: false,
-            editeur_motifs: false,
             editeur_hachure: None,
             editeur_plumes: None,
             saisie_active: false,
@@ -847,7 +845,7 @@ impl Application {
             saisie_annulee: false,
             echap_saisie: false,
             rendu_ouverture: None,
-            motif_choisi: None,
+            motif_selectionne: None,
             nom_motif_saisi: String::new(),
             tirets_saisis: (String::new(), Vec::new()),
             poignee_axe: None,

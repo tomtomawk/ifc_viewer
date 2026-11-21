@@ -1,4 +1,4 @@
-//! Zones d'écran : ruban, barre haute, panneaux ancrables, panneau droit, navigateur de projet, propriétés (sélection native et commune), menu contextuel de la vue, propriétés des vues natives, vues Revit, fenêtres matériau/plumes/motifs.
+//! Zones d'écran : ruban, barre haute, panneaux ancrables, panneau droit, navigateur de projet, propriétés (sélection native et commune), menu contextuel de la vue, propriétés des vues natives, vues Revit, fenêtres matériau et plumes, motifs de hachures (arborescence et propriétés).
 pub(crate) mod ruban;
 pub(crate) mod barre_haute;
 pub(crate) mod panneaux;
@@ -16,3 +16,4 @@ pub(crate) mod menu_vue;
 pub(crate) mod vue_native;
 pub(crate) mod vue_revit;
 pub(crate) mod graphismes;
+pub(crate) mod motifs;

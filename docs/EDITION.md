@@ -826,16 +826,22 @@ sans multiéchantillonnage, `BIMEDIT_MSAA=0` désactive l'anticrénelage de la v
 
 ## Éditeur de hachures dessinées
 
-Fenêtre « Motifs de hachures » (matériau › Motifs de hachures…) : « Dessiner un motif… »
-(nouveau) ou « Redessiner… » (motif du projet) ferme la fenêtre et ouvre la vue de dessin
-du motif (« Motif — nom », branche « Vues de dessin »). Le carré central de 400 mm (la
-tuile) se dessine ; le reste de la vue, grisé, en répète le dessin. Les traits se tracent
-avec les outils ordinaires (Documenter › Ligne de dessin, Polyligne : le bandeau de dessin
-n'apparaît qu'avec l'outil lancé) et se modifient par le ruban Modifier (déplacer, copier,
-supprimer…) ; tout point s'accroche au nœud le plus proche de la grille. Propriétés de la
-vue : nom, côté du carré (mm du papier), divisions de la grille, **Terminer** (traits
-ramenés aux nœuds, familles de traits déduites de la tuile, motif ajouté ou remplacé,
-matériaux suivis s'il est renommé, vue retirée) et **Annuler** (vue retirée sans rien
-enregistrer). Seuls les traits droits sont admis (pas d'arc ni de texte). Un seul motif à
-la fois : rappeler l'éditeur rouvre la vue du motif en cours. Défaire après Terminer remet
-la vue, qui n'est plus alors qu'une vue de dessin ordinaire.
+Les motifs de hachures sont rangés dans l'arborescence (« Motifs de hachures », comme les
+matériaux) ; leurs réglages sont dans Propriétés. « Dessiner un motif… » (bas de la
+branche), « Redessiner… » ou un double-clic sur un motif ouvre la vue de dessin du motif
+(« Motif — nom », branche « Vues de dessin »). Le carré central de 400 mm (la tuile, cadre
+en tirets) se dessine ; le reste de la vue, grisé, en répète le dessin. Les traits se
+tracent avec les outils ordinaires (Documenter › Ligne de dessin, Polyligne : le bandeau
+de dessin n'apparaît qu'avec l'outil lancé) et se modifient par le ruban Modifier
+(déplacer, copier, supprimer…). Les points s'accrochent au cadre (coins, milieux des
+bords, sur un bord), au centre du carré et aux traits déjà tracés ; pas de grille.
+Propriétés de la vue : nom, côté du carré (mm du papier), **Terminer** et **Annuler**.
+Terminer ramène les extrémités au 1/240 du carré, redresse un trait dont la direction
+serait trop fine pour être dessinée vers la direction exacte la plus proche (le message
+le dit), déduit les familles de traits, ajoute ou remplace le motif (matériaux suivis s'il
+est renommé) et retire la vue ; Annuler retire la vue sans rien enregistrer. Un trait posé
+sur un bord est partagé avec le carré voisin : le tracer aussi sur le bord opposé ne
+l'ajoute pas deux fois. Un trait peut déborder du carré : ses répétitions se recouvrent.
+Seuls les traits droits sont admis (pas d'arc ni de texte). Un seul motif à la fois :
+rappeler l'éditeur rouvre la vue du motif en cours. Défaire après Terminer remet la vue,
+qui n'est plus alors qu'une vue de dessin ordinaire.

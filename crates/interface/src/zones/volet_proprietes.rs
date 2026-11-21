@@ -14,12 +14,12 @@ impl Application {
     fn volet_proprietes_contenu(&mut self, ui: &mut egui::Ui) {
         self.fenetre_materiau(ui.ctx());
         self.fenetre_ciel(ui.ctx());
-        self.fenetre_motifs(ui.ctx());
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
         self.fenetre_types_traits(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if self.proprietes_famille_selectionnee(ui) { return; }
+        if self.proprietes_motif_selectionne(ui) { return; }
         if let Some(jeu) = self.jeu_actif() {
             egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));
             return;

@@ -14,7 +14,6 @@ impl Application {
         let avant = m.clone();
         let hachures: Vec<MotifCoupe> = projet.noms_motifs().iter().map(|n| MotifCoupe::hachures(n)).collect();
         let mut ouvert = true;
-        let mut editeur = false;
         let mut onglet_apparence = self.materiau_apparence;
         egui::Window::new(format!("Matériau · {nom}")).id(egui::Id::unique("fenetre_materiau")).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
             let choix = |ui: &mut egui::Ui, id: &str, x: &mut MotifCoupe, speciaux: &[MotifCoupe]| {
@@ -70,15 +69,9 @@ impl Application {
                 couleur(ui, &mut m.coupe_fond, teinte);
                 ui.end_row();
             });
-            ui.add_space(4.0);
-            if ui.button("Motifs de hachures…").on_hover_text("Créer et modifier les motifs").clicked() {
-                editeur = true;
-            }
+            ui.label(RichText::new("Motifs : arborescence du projet › Motifs de hachures.").small().weak());
         });
         self.materiau_apparence = onglet_apparence;
-        if editeur {
-            self.editeur_motifs = true;
-        }
         if !ouvert {
             self.materiau_edite = None;
         }
@@ -93,10 +86,6 @@ impl Application {
         }
     }
 
-    /// Éditeur de hachures : motifs du projet et de base ; nom, familles de
-    /// traits (angle, pas, glissement, origine, tirets en mm du papier) et aperçu. Un motif
-    /// de base modifié est copié dans le projet ; renommer un motif met à
-    /// jour les matériaux qui s'en servent.
     /// Fenêtre « Épaisseurs de traits » : épaisseur de chaque plume (mm du papier),
     /// aperçu, couches qui l'utilisent ; table du projet, ou celle du logiciel rétablie.
     pub(crate) fn fenetre_plumes(&mut self, ctx: &egui::Context) {
@@ -162,184 +151,6 @@ impl Application {
         }
         if ouvert && !fermer {
             self.editeur_plumes = Some(table);
-        }
-    }
-
-    pub(crate) fn fenetre_motifs(&mut self, ctx: &egui::Context) {
-        use modele::{DefinitionMotif, LigneMotif, MotifCoupe};
-        if !self.editeur_motifs {
-            return;
-        }
-        let Some((projet, _)) = &self.natif else { self.editeur_motifs = false; return };
-        let noms = projet.noms_motifs();
-        let choisi = self.motif_choisi.clone().filter(|n| noms.contains(n)).or_else(|| noms.first().cloned());
-        let Some(choisi) = choisi else { return };
-        let Some(mut d) = projet.definition_motif(&MotifCoupe::hachures(&choisi)) else { return };
-        let avant = d.clone();
-        let du_projet = projet.motifs.iter().any(|x| x.nom == choisi);
-        let de_base = DefinitionMotif::base().iter().any(|x| x.nom == choisi);
-        let utilise = projet.materiaux.iter().any(|m| [Some(&m.motif), m.surface_motif.as_ref(), m.surface_fond_motif.as_ref(), m.coupe_fond_motif.as_ref()].into_iter().flatten().any(|x| x.nom_hachures() == Some(choisi.as_str())));
-        if self.tirets_saisis.0 != choisi {
-            self.tirets_saisis = (choisi.clone(), d.lignes.iter().map(|l| l.tirets.iter().map(|t| noyau::nombres::format_real(*t)).collect::<Vec<_>>().join(" ")).collect());
-            self.nom_motif_saisi = choisi.clone();
-        }
-        let mut ouvert = true;
-        let mut action: Option<&str> = None;
-        let mut nouveau_choix: Option<String> = None;
-        egui::Window::new("Motifs de hachures").id(egui::Id::unique("fenetre_motifs")).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
-            ui.horizontal_top(|ui| {
-                // liste des motifs, avec un aperçu
-                ui.vertical(|ui| {
-                    ui.set_width(190.0);
-                    egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-                        for n in &noms {
-                            ui.horizontal(|ui| {
-                                let (r, _) = ui.allocate_exact_size(egui::vec2(22.0, 16.0), Sense::hover());
-                                if let Some(x) = projet.definition_motif(&MotifCoupe::hachures(n)) {
-                                    apercu_motif(ui.painter(), r, &x, 2.5);
-                                }
-                                if ui.selectable_label(*n == choisi, n).clicked() {
-                                    nouveau_choix = Some(n.clone());
-                                }
-                            });
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        if ui.button("Nouveau").clicked() { action = Some("nouveau"); }
-                        if ui.button("Dupliquer").clicked() { action = Some("dupliquer"); }
-                    });
-                    ui.horizontal(|ui| {
-                        if ui.button("Dessiner un motif…").on_hover_text("Nouveau motif dessiné sur un carré répété (onglet)").clicked() { action = Some("dessiner"); }
-                        if ui.add_enabled(du_projet, egui::Button::new("Redessiner…")).on_hover_text("Ouvrir ce motif dans l'éditeur de hachures (un motif à familles de traits repart d'un carré vide)").clicked() { action = Some("redessiner"); }
-                    });
-                    let libelle = if de_base && du_projet { "Rétablir" } else { "Supprimer" };
-                    let possible = du_projet && (de_base || !utilise);
-                    if ui.add_enabled(possible, egui::Button::new(libelle))
-                        .on_disabled_hover_text(if !du_projet { "Motif de base, inchangé" } else { "Motif utilisé par un matériau" })
-                        .clicked()
-                    {
-                        action = Some("supprimer");
-                    }
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Nom");
-                        let r = ui.add(egui::TextEdit::singleline(&mut self.nom_motif_saisi).desired_width(180.0));
-                        if r.lost_focus() && self.nom_motif_saisi.trim() != choisi && !self.nom_motif_saisi.trim().is_empty() {
-                            action = Some("renommer");
-                        }
-                    });
-                    ui.add_space(4.0);
-                    let mut retirer = None;
-                    egui::Grid::new("lignes_motif").num_columns(7).spacing([6.0, 4.0]).striped(true).show(ui, |ui| {
-                        for t in ["Angle", "Pas", "Glissement", "Origine x", "Origine y", "Tirets (trait, blanc… mm)", ""] {
-                            ui.label(RichText::new(t).small().weak());
-                        }
-                        ui.end_row();
-                        for (k, l) in d.lignes.iter_mut().enumerate() {
-                            ui.add(egui::DragValue::new(&mut l.angle).speed(1.0).range(-180.0..=180.0).suffix(" °"));
-                            ui.add(egui::DragValue::new(&mut l.pas).speed(0.05).range(0.1..=100.0).max_decimals(2).suffix(" mm"));
-                            ui.add(egui::DragValue::new(&mut l.glissement).speed(0.05).max_decimals(2));
-                            ui.add(egui::DragValue::new(&mut l.origine[0]).speed(0.05).max_decimals(2));
-                            ui.add(egui::DragValue::new(&mut l.origine[1]).speed(0.05).max_decimals(2));
-                            if let Some(texte) = self.tirets_saisis.1.get_mut(k)
-                                && ui.add(egui::TextEdit::singleline(texte).desired_width(110.0).hint_text("continu")).changed() {
-                                    let v: Option<Vec<f64>> = texte.replace(',', ".").split_whitespace().map(|x| x.parse::<f64>().ok().filter(|x| x.is_finite() && *x != 0.0)).collect();
-                                    if let Some(v) = v { l.tirets = v; }
-                                }
-                            if ui.add_enabled(k > 0, egui::Button::new("Retirer").small()).on_hover_text("Retirer la famille").clicked() {
-                                retirer = Some(k);
-                            }
-                            ui.end_row();
-                        }
-                    });
-                    if let Some(k) = retirer {
-                        d.lignes.remove(k);
-                        self.tirets_saisis.1.remove(k);
-                    }
-                    if ui.button("+ Famille de traits").clicked() {
-                        d.lignes.push(LigneMotif { angle: 0.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() });
-                        self.tirets_saisis.1.push(String::new());
-                    }
-                    ui.add_space(6.0);
-                    ui.label(RichText::new("Aperçu (3 × 3 cm du papier)").small().weak());
-                    let (r, _) = ui.allocate_exact_size(egui::vec2(150.0, 150.0), Sense::hover());
-                    ui.painter().rect_filled(r, 0.0, Color32::WHITE);
-                    apercu_motif(ui.painter(), r, &d, 5.0);
-                    ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
-                });
-            });
-        });
-        if !ouvert {
-            self.editeur_motifs = false;
-        }
-        if let Some(n) = nouveau_choix {
-            self.motif_choisi = Some(n);
-            return;
-        }
-        let mut p = projet.clone();
-        let mut change = false;
-        let libre = |p: &modele::Projet, base: &str| {
-            let mut k = 1;
-            loop {
-                let n = if k == 1 { base.to_string() } else { format!("{base} {k}") };
-                if !p.noms_motifs().contains(&n) { break n; }
-                k += 1;
-            }
-        };
-        match action {
-            // la vue du motif s'ouvre à la place de la fenêtre
-            Some("dessiner") => { self.editeur_motifs = false; self.ouvrir_editeur_hachure(None); return; }
-            Some("redessiner") => { self.editeur_motifs = false; self.ouvrir_editeur_hachure(Some(&choisi)); return; }
-            Some("nouveau") => {
-                let n = libre(&p, "Motif");
-                p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }], tuile: None });
-                self.motif_choisi = Some(n);
-                change = true;
-            }
-            Some("dupliquer") => {
-                let n = libre(&p, &format!("{} (copie)", d.nom));
-                p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), ..d.clone() });
-                self.motif_choisi = Some(n);
-                change = true;
-            }
-            Some("supprimer") => {
-                p.motifs.retain(|x| x.nom != choisi);
-                self.tirets_saisis.0.clear();
-                change = true;
-            }
-            Some("renommer") => {
-                let n = self.nom_motif_saisi.trim().to_string();
-                if p.noms_motifs().contains(&n) {
-                    self.error = Some(format!("Un motif s'appelle déjà « {n} »."));
-                } else {
-                    // copie renommée ; les matériaux qui se servaient de l'ancien suivent
-                    p.motifs.retain(|x| x.nom != choisi);
-                    p.motifs.push(DefinitionMotif { id: if d.id.is_empty() { noyau::uuid::uuid() } else { d.id.clone() }, nom: n.clone(), ..d.clone() });
-                    let (ancien, neuf) = (MotifCoupe::hachures(&choisi), MotifCoupe::hachures(&n));
-                    for m in &mut p.materiaux {
-                        for x in [&mut m.motif].into_iter().chain([&mut m.surface_motif, &mut m.surface_fond_motif, &mut m.coupe_fond_motif].into_iter().flatten()) {
-                            if *x == ancien { *x = neuf.clone(); }
-                        }
-                    }
-                    self.motif_choisi = Some(n);
-                    change = true;
-                }
-            }
-            _ if d != avant => {
-                // familles de traits modifiées à la main : le dessin d'origine ne vaut plus
-                if d.lignes != avant.lignes { d.tuile = None; }
-                match p.motifs.iter_mut().find(|x| x.nom == choisi) {
-                    Some(x) => *x = d,
-                    None => p.motifs.push(d),
-                }
-                change = true;
-            }
-            _ => {}
-        }
-        if change && let Err(e) = self.appliquer_projet(p) {
-            self.error = Some(e);
         }
     }
 

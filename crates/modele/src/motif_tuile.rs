@@ -7,7 +7,16 @@ use crate::LigneMotif;
 use serde::{Deserialize, Serialize};
 
 /// Nombre de divisions de la grille au plus.
-pub const DIVISIONS_MAX: u32 = 64;
+pub const DIVISIONS_MAX: u32 = 240;
+
+/// Divisions des motifs tracés dans leur vue : 240 (multiple de 2, 3, 4, 5, 6, 8, 10, 12,
+/// 15, 16 : coins, milieux, tiers et quarts exacts), invisibles à l'écran.
+pub const DIVISIONS_VUE: u32 = 240;
+
+/// Direction la plus fine gardée telle quelle (composantes entières réduites) ; au-delà,
+/// la famille de traits serait trop serrée pour être dessinée : la direction est
+/// remplacée par la plus proche dans cette limite.
+pub const DIRECTION_MAX: i64 = 24;
 
 /// Côté du carré de la tuile dans la vue de dessin du motif (mm de la vue), centré sur
 /// l'origine de la vue ; indépendant du côté papier du motif.
@@ -40,9 +49,11 @@ impl TuileMotif {
         if !(1..=DIVISIONS_MAX).contains(&self.divisions) {
             return Err(format!("Motif dessiné : de 1 à {DIVISIONS_MAX} divisions."));
         }
+        // un trait peut déborder du carré (ses répétitions se recouvrent), pas au-delà
+        // de dix carrés
         let n = self.divisions as i32;
-        if self.segments.iter().flatten().flatten().any(|c| !(0..=n).contains(c)) {
-            return Err("Motif dessiné : extrémité hors de la tuile.".into());
+        if self.segments.iter().flatten().flatten().any(|c| c.abs() > 11 * n) {
+            return Err("Motif dessiné : extrémité trop loin du carré.".into());
         }
         if self.segments.iter().any(|s| s[0] == s[1]) {
             return Err("Motif dessiné : segment de longueur nulle.".into());
@@ -50,40 +61,59 @@ impl TuileMotif {
         Ok(())
     }
 
-    /// Nœud de la grille le plus proche d'un point de la vue du motif (carré de
-    /// [`TAILLE_VUE`] centré sur l'origine), ramené dans le carré.
-    pub fn noeud_vue(divisions: u32, p: [f64; 2]) -> [f64; 2] {
-        let n = divisions.max(1) as f64;
-        let pas = TAILLE_VUE / n;
-        p.map(|c| ((c + TAILLE_VUE / 2.0) / pas).round().clamp(0.0, n) * pas - TAILLE_VUE / 2.0)
-    }
-
-    /// Traits de la tuile dans la vue du motif (voir [`TuileMotif::noeud_vue`]).
+    /// Traits de la tuile dans la vue du motif : carré de [`TAILLE_VUE`] centré sur
+    /// l'origine de la vue.
     pub fn traits_vue(&self) -> Vec<[[f64; 2]; 2]> {
         let pas = TAILLE_VUE / self.divisions.max(1) as f64;
         self.segments.iter().map(|s| s.map(|q| q.map(|c| c as f64 * pas - TAILLE_VUE / 2.0))).collect()
     }
 
-    /// Tuile tirée des traits de la vue du motif : extrémités au nœud le plus proche
-    /// (à une demi-maille près, sinon refus), traits devenus nuls ou en double retirés.
-    pub fn depuis_traits(cote: f64, divisions: u32, traits: &[[[f64; 2]; 2]]) -> Result<Self, String> {
-        let n = divisions.max(1) as f64;
-        let pas = TAILLE_VUE / n;
-        let noeud = |c: f64| -> Result<i32, String> {
-            let k = (c + TAILLE_VUE / 2.0) / pas;
-            if !k.is_finite() || k < -0.5 || k > n + 0.5 { return Err("Motif dessiné : trait hors du carré.".into()); }
-            Ok(k.round().clamp(0.0, n) as i32)
-        };
+    /// Tuile tirée des traits de la vue du motif, sur [`DIVISIONS_VUE`] divisions :
+    /// extrémités arrondies au 1/240 du carré, direction ramenée au besoin dans
+    /// [`DIRECTION_MAX`] ; un trait et ses répétitions (décalé d'un nombre entier de carrés,
+    /// ex. bord bas et bord haut) ne comptent qu'une fois. Rend aussi le nombre de traits
+    /// dont la direction a été corrigée.
+    pub fn depuis_traits(cote: f64, traits: &[[[f64; 2]; 2]]) -> Result<(Self, usize), String> {
+        let n = DIVISIONS_VUE as i64;
+        let pas = TAILLE_VUE / n as f64;
+        let noeud = |q: [f64; 2]| q.map(|c| ((c + TAILLE_VUE / 2.0) / pas).round() as i64);
         let mut segments: Vec<[[i32; 2]; 2]> = Vec::new();
+        let mut corriges = 0;
         for t in traits {
-            let s = [[noeud(t[0][0])?, noeud(t[0][1])?], [noeud(t[1][0])?, noeud(t[1][1])?]];
-            if s[0] != s[1] && !segments.iter().any(|x| *x == s || *x == [s[1], s[0]]) {
+            if t.iter().flatten().any(|c| !c.is_finite() || c.abs() > 10.0 * TAILLE_VUE) {
+                return Err("Motif dessiné : trait trop loin du carré.".into());
+            }
+            let (a, mut b) = (noeud(t[0]), noeud(t[1]));
+            let (vx, vy) = (b[0] - a[0], b[1] - a[1]);
+            if vx == 0 && vy == 0 { continue; }
+            let g = euclide(vx.abs(), vy.abs()).0;
+            if (vx / g).abs().max((vy / g).abs()) > DIRECTION_MAX {
+                // direction entière proche, même sens ; longueur conservée au mieux
+                let angle = (vy as f64).atan2(vx as f64);
+                let (p, q) = (-DIRECTION_MAX..=DIRECTION_MAX)
+                    .flat_map(|p| (-DIRECTION_MAX..=DIRECTION_MAX).map(move |q| (p, q)))
+                    .filter(|&(p, q)| (p, q) != (0, 0) && euclide(p.abs(), q.abs()).0 == 1)
+                    .min_by(|x, y| {
+                        let e = |(p, q): (i64, i64)| { let d = (q as f64).atan2(p as f64) - angle; d.sin().abs() + (1.0 - d.cos()) };
+                        e(*x).total_cmp(&e(*y))
+                    })
+                    .unwrap_or((1, 0));
+                let k = ((((vx * vx + vy * vy) as f64) / ((p * p + q * q) as f64)).sqrt()).round().max(1.0) as i64;
+                b = [a[0] + k * p, a[1] + k * q];
+                corriges += 1;
+            }
+            // extrémités ordonnées, première ramenée dans le carré : forme unique d'un
+            // trait et de ses répétitions
+            let (a, b) = if (a[0], a[1]) <= (b[0], b[1]) { (a, b) } else { (b, a) };
+            let d = [a[0].div_euclid(n) * n, a[1].div_euclid(n) * n];
+            let s = [[(a[0] - d[0]) as i32, (a[1] - d[1]) as i32], [(b[0] - d[0]) as i32, (b[1] - d[1]) as i32]];
+            if !segments.contains(&s) {
                 segments.push(s);
             }
         }
-        let tuile = TuileMotif { cote, divisions, segments };
+        let tuile = TuileMotif { cote, divisions: DIVISIONS_VUE, segments };
         tuile.valider()?;
-        Ok(tuile)
+        Ok((tuile, corriges))
     }
 
     /// Familles de traits équivalentes (mm du papier) : une par segment.
@@ -173,24 +203,29 @@ mod tests {
         }
     }
 
-    /// Aller-retour tuile → traits de la vue → tuile ; extrémités ramenées aux nœuds ;
-    /// trait hors du carré refusé.
+    /// Traits de la vue → tuile : extrémités au 1/240, trait du bord haut confondu avec
+    /// celui du bord bas, direction trop fine corrigée, aller-retour exact.
     #[test]
     fn traits_de_la_vue() {
-        let t = TuileMotif { cote: 3.0, divisions: 8, segments: vec![[[0, 0], [8, 8]], [[2, 1], [5, 1]]] };
-        assert_eq!(TuileMotif::depuis_traits(3.0, 8, &t.traits_vue()).unwrap(), t);
-        let pas = TAILLE_VUE / 8.0;
-        let h = -TAILLE_VUE / 2.0;
-        let approche = [[h + 2.0 * pas + 7.0, h + pas - 9.0], [h + 5.0 * pas, h + pas + 3.0]];
-        assert_eq!(TuileMotif::depuis_traits(3.0, 8, &[approche, approche]).unwrap().segments, vec![[[2, 1], [5, 1]]]);
-        assert!(TuileMotif::depuis_traits(3.0, 8, &[[[0.0, 0.0], [TAILLE_VUE, 0.0]]]).is_err());
-        assert_eq!(TuileMotif::noeud_vue(8, [1000.0, 7.0]), [TAILLE_VUE / 2.0, 0.0]);
+        let h = TAILLE_VUE / 2.0;
+        let (bas, haut, diagonale) = ([[-h, -h], [h, -h]], [[h, h], [-h, h]], [[-h, -h], [h, h]]);
+        let (t, corriges) = TuileMotif::depuis_traits(3.0, &[bas, haut, diagonale]).unwrap();
+        assert_eq!((t.segments.len(), corriges), (2, 0));
+        assert_eq!(t.segments[0], [[0, 0], [240, 0]]);
+        assert_eq!(TuileMotif::depuis_traits(3.0, &t.traits_vue()).unwrap().0, t);
+        // presque horizontal : direction (239, 1) ramenée à l'horizontale
+        let (t, corriges) = TuileMotif::depuis_traits(3.0, &[[[-h, 0.0], [h - 1.0, 1.6]]]).unwrap();
+        assert_eq!(corriges, 1);
+        assert_eq!(t.segments[0][1][1], t.segments[0][0][1]);
+        // un trait qui déborde est admis ; un trait à plus de dix carrés, non
+        assert!(TuileMotif::depuis_traits(3.0, &[[[0.0, 0.0], [TAILLE_VUE, 0.0]]]).is_ok());
+        assert!(TuileMotif::depuis_traits(3.0, &[[[0.0, 0.0], [20.0 * TAILLE_VUE, 0.0]]]).is_err());
     }
 
     #[test]
     fn tuile_non_valide() {
         let t = |segments| TuileMotif { cote: 4.0, divisions: 8, segments };
-        assert!(t(vec![[[0, 0], [9, 0]]]).valider().is_err());
+        assert!(t(vec![[[0, 0], [90, 0]]]).valider().is_err());
         assert!(t(vec![[[2, 2], [2, 2]]]).valider().is_err());
         assert!(TuileMotif { cote: 0.0, divisions: 8, segments: vec![] }.valider().is_err());
     }

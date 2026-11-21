@@ -5,6 +5,7 @@ use crate::*;
 impl Application {
     pub(crate) fn select(&mut self, id: Option<Id>, reveal: bool) {
         self.famille_selectionnee = None;
+        self.motif_selectionne = None;
         self.cote_axe = None;
         self.cote_arc = None;
         self.bim.selection.clear();

@@ -1,4 +1,4 @@
-"""Motif de hachures dessiné dans sa vue de dessin : nœuds de la grille, ruban Modifier,
+"""Motif de hachures dessiné dans sa vue de dessin : accrochage au cadre, trait de bord, ruban Modifier,
 Terminer et Annuler."""
 import argparse
 import json
@@ -60,32 +60,39 @@ def run(exe):
                 projet = commande("projet_natif")["projet"]
                 vue = [v["id"] for v in projet["vues"] if v["genre"] == "dessin"][-1]
                 assert commande("etat")["vue"]["nom"] == f"Motif — {nom}"
-                # polyligne : points ramenés aux nœuds de la grille (8 divisions, 50 mm)
-                commande("outil", "polyligne")
-                points = [commande("ecran", f"{x} {y}")["ecran"] for x, y in ((-195, -190), (8, 3), (190, -195))]
-                for q in points:
-                    clic(*q)
-                saisie([{"action": "touche", "touche": "Enter"}, {"action": "touche", "touche": "Escape"}, {"action": "touche", "touche": "Escape"}])
+                # polyligne accrochée au cadre (coins) et à l'origine (centre du carré)
+                def polyligne(*pts):
+                    commande("outil", "polyligne")
+                    for x, y in pts:
+                        clic(*commande("ecran", f"{x} {y}")["ecran"])
+                    saisie([{"action": "touche", "touche": "Enter"}, {"action": "touche", "touche": "Escape"}, {"action": "touche", "touche": "Escape"}])
+                polyligne((-195, -192), (6, 4), (193, -195))
                 trace = traits(vue)
                 assert trace[0]["points"] == [[-200.0, -200.0], [0.0, 0.0], [200.0, -200.0]], trace
-                # déplacer par le ruban Modifier : vecteur d'un nœud à l'autre
-                a = commande("ecran", "-100 -100")["ecran"]
-                clic(*a)
+                # déplacer par le ruban Modifier : de l'origine au milieu du bord haut
+                clic(*commande("ecran", "-100 -100")["ecran"])
                 assert commande("etat")["selection_native"] == [trace[0]["id"]]
                 commande("outil", "deplacer")
-                clic(*commande("ecran", "0 0")["ecran"])
-                clic(*commande("ecran", "2 52")["ecran"])
-                assert traits(vue)[0]["points"] == [[-200.0, -150.0], [0.0, 50.0], [200.0, -150.0]], traits(vue)
+                clic(*commande("ecran", "3 2")["ecran"])
+                clic(*commande("ecran", "4 195")["ecran"])
+                assert traits(vue)[0]["points"] == [[-200.0, 0.0], [0.0, 200.0], [200.0, 0.0]], traits(vue)
                 saisie([{"action": "touche", "touche": "Escape"}, {"action": "touche", "touche": "Escape"}])
+                # un trait sur le bord bas et un sur le bord haut : le même trait répété
+                polyligne((-196, -197), (197, -196))
+                polyligne((-196, 197), (197, 196))
+                assert len(traits(vue)) == 3
                 commande("terminer_motif")
                 projet = commande("projet_natif")["projet"]
                 assert not any(v["id"] == vue for v in projet["vues"])
                 motif = [m for m in projet["motifs"] if m["nom"] == nom][0]
-                assert sorted(map(sorted, motif["tuile"]["segments"])) == [[[0, 1], [4, 5]], [[4, 5], [8, 1]]], motif["tuile"]
-                assert len(motif["lignes"]) == 2
+                segments = sorted(map(sorted, motif["tuile"]["segments"]))
+                assert segments == [[[0, 0], [240, 0]], [[0, 120], [120, 240]], [[120, 0], [240, -120]]], motif["tuile"]
+                assert len(motif["lignes"]) == 3
+                # le motif est rangé dans l'arborescence : propriétés par le pilote
+                commande("motifs_hachures", nom)
                 # rouvrir puis annuler : rien ne change
                 commande("editeur_hachure", nom)
-                assert len(traits([v["id"] for v in commande("projet_natif")["projet"]["vues"] if v["genre"] == "dessin"][-1])) == 2
+                assert len(traits([v["id"] for v in commande("projet_natif")["projet"]["vues"] if v["genre"] == "dessin"][-1])) == 3
                 commande("annuler_motif")
                 apres = commande("projet_natif")["projet"]
                 assert not any(v["genre"] == "dessin" for v in apres["vues"]) and apres["motifs"] == projet["motifs"]

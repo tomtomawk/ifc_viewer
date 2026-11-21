@@ -1013,8 +1013,6 @@ impl Application {
         let t = (altitude * 0.001 - scene.origin.z - o.z as f64) / d.z as f64;
         if !t.is_finite() || t <= 0.0 { return None; }
         let p = (o.as_dvec3() + d.as_dvec3() * t + scene.origin) * 1000.0;
-        // vue d'un motif de hachures : seuls les nœuds de sa grille
-        if let Some(n) = self.noeud_motif([p.x, p.y]) { return Some((n, AccrocheMur::Extremite)); }
         let point = [(p.x / 10.0).round() * 10.0, (p.y / 10.0).round() * 10.0];
         let accroche = AccrocheMur::Grille;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));
@@ -1034,7 +1032,14 @@ impl Application {
                 deplaces.insert(id);
             }
         }
-        for m in &projet.murs {
+        // vue de dessin : ses traits (et le cadre d'un motif), pas le modèle
+        let dessin = self.vue_de_dessin();
+        if dessin {
+            let (c, a) = self.accroches_vue_dessin(&deplaces);
+            candidats.extend(c);
+            aretes.extend(a);
+        }
+        for m in projet.murs.iter().filter(|_| !dessin) {
             if deplaces.contains(&m.id) { continue; }
             // murs qui traversent ce plan (base au niveau, ou plus bas et plus haut)
             if projet.bas_haut(m).is_none_or(|(b, h)| altitude < b - 0.1 || altitude > h + 0.1) { continue; }
@@ -1054,7 +1059,7 @@ impl Application {
                 candidats.extend(c.into_iter().map(|p| (p, AccrocheMur::Angle(f64::NAN))));
             }
         }
-        for d in projet.dalles.iter().filter(|d| !deplaces.contains(&d.id)) {
+        for d in projet.dalles.iter().filter(|d| !dessin && !deplaces.contains(&d.id)) {
             candidats.extend(d.contours.iter().flatten().map(|&p| (p, AccrocheMur::Extremite)));
             for c in &d.contours {
                 for i in 0..c.len() {
@@ -1065,7 +1070,7 @@ impl Application {
             }
         }
         // poteaux et poutres : axe, extrémités, milieu, angles de la section en plan
-        for b in projet.barres.iter().filter(|b| !deplaces.contains(&b.id)) {
+        for b in projet.barres.iter().filter(|b| !dessin && !deplaces.contains(&b.id)) {
             let (a, f) = ([b.debut[0], b.debut[1]], [b.fin[0], b.fin[1]]);
             candidats.push((a, AccrocheMur::Extremite));
             if (a[0] - f[0]).hypot(a[1] - f[1]) > 1.0 {
@@ -1078,7 +1083,7 @@ impl Application {
             }
         }
         // quadrillage : extrémités, croisements des files, et les files elles-mêmes
-        for (i, g) in projet.quadrillages.iter().enumerate() {
+        for (i, g) in projet.quadrillages.iter().enumerate().filter(|_| !dessin) {
             candidats.push((g.debut, AccrocheMur::Extremite));
             candidats.push((g.fin, AccrocheMur::Extremite));
             aretes.push([g.debut, g.fin]);

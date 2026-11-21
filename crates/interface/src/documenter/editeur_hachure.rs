@@ -1,12 +1,16 @@
 //! Éditeur de hachures dessinées : une vue de dessin en mode motif. Le carré central de la
 //! vue (la tuile, `modele::motif_tuile::TAILLE_VUE`) se dessine avec les outils communs
 //! (Documenter : ligne, polyligne) et se modifie par le ruban Modifier ; le reste de la vue,
-//! grisé, en répète le dessin. Les points s'accrochent aux nœuds de la grille
-//! (`Application::noeud_motif`). Nom, côté papier, divisions, Terminer et Annuler sont dans
-//! Propriétés ; Terminer convertit les traits en familles de traits et retire la vue.
+//! grisé, en répète le dessin. Les points s'accrochent au cadre du carré (coins, milieux,
+//! bords : `Application::cadre_motif`) et aux traits. Nom, côté papier, Terminer et Annuler
+//! sont dans Propriétés ; Terminer convertit les traits en familles de traits
+//! (`TuileMotif::depuis_traits`) et retire la vue.
 use crate::*;
 use modele::documentation::{Annotation, AnnotationForme};
-use modele::motif_tuile::{TuileMotif, DIVISIONS_MAX, TAILLE_VUE};
+use modele::motif_tuile::{TuileMotif, DIVISIONS_VUE, TAILLE_VUE};
+
+/// Accrochages d'une vue de dessin : points (et leur genre), arêtes.
+type Accroches = (Vec<([f64; 2], crate::saisie::accrochage::AccrocheMur)>, Vec<[[f64; 2]; 2]>);
 
 /// Échelle de la vue du motif : traits fins devant le carré de 400 mm.
 const ECHELLE_VUE: f64 = 10.0;
@@ -16,9 +20,8 @@ pub(crate) struct EditeurHachure {
     /// Motif réédité (nom d'origine), sinon nouveau motif.
     pub origine: Option<String>,
     pub nom: String,
-    /// Côté du carré répété (mm du papier) et nœuds de la grille par côté.
+    /// Côté du carré répété (mm du papier).
     pub cote: f64,
-    pub divisions: u32,
     /// Vue de dessin du motif (retirée par Terminer ou Annuler).
     pub vue: String,
 }
@@ -30,10 +33,37 @@ impl Application {
         (self.vue_native_id().as_deref() == Some(ed.vue.as_str())).then_some(ed)
     }
 
-    /// Nœud de la grille du motif le plus proche (mm de la vue), quand la vue du motif est
-    /// active : seul point de tracé possible.
-    pub(crate) fn noeud_motif(&self, p: [f64; 2]) -> Option<[f64; 2]> {
-        self.editeur_motif_actif().map(|ed| TuileMotif::noeud_vue(ed.divisions, p))
+    /// Coins du carré du motif (mm de la vue, sens direct), quand sa vue est active.
+    pub(crate) fn cadre_motif(&self) -> Option<[[f64; 2]; 4]> {
+        self.editeur_motif_actif()?;
+        let h = TAILLE_VUE / 2.0;
+        Some([[-h, -h], [h, -h], [h, h], [-h, h]])
+    }
+
+    /// Accrochages d'une vue de dessin pour les transformations (`point_tracage`) :
+    /// extrémités et milieux de ses traits droits et cadre du motif (coins, milieux),
+    /// arêtes pour l'accrochage « sur l'arête » ; les annotations `exclues` (déplacées)
+    /// n'attirent pas le point.
+    pub(crate) fn accroches_vue_dessin(&self, exclues: &std::collections::HashSet<String>) -> Accroches {
+        use crate::saisie::accrochage::AccrocheMur;
+        let mut aretes: Vec<[[f64; 2]; 2]> = Vec::new();
+        if let (Some((p, _)), Some(vue)) = (&self.natif, self.vue_native_id()) {
+            for a in p.annotations.iter().filter(|a| a.vue == vue && !exclues.contains(&a.id)) {
+                match &a.forme {
+                    AnnotationForme::Ligne { debut, fin } => aretes.push([*debut, *fin]),
+                    AnnotationForme::Polyligne { points, fermee, .. } => {
+                        aretes.extend(points.windows(2).map(|w| [w[0], w[1]]));
+                        if *fermee && points.len() > 2 && let (Some(a), Some(b)) = (points.last(), points.first()) { aretes.push([*a, *b]); }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some(c) = self.cadre_motif() {
+            aretes.extend((0..4).map(|i| [c[i], c[(i + 1) % 4]]));
+        }
+        let candidats = aretes.iter().flat_map(|[a, b]| [(*a, AccrocheMur::Extremite), (*b, AccrocheMur::Extremite), ([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5], AccrocheMur::Milieu)]).collect();
+        (candidats, aretes)
     }
 
     /// Ouvre la vue du motif nommé `motif` (None : nouveau motif) ; si un motif est déjà
@@ -54,7 +84,7 @@ impl Application {
             Some(d) => d.nom.clone(),
             None => (1..).map(|k| format!("Motif dessiné {k}")).find(|n| !p.noms_motifs().contains(n)).unwrap_or_default(),
         };
-        let tuile = d.and_then(|d| d.tuile.clone()).unwrap_or(TuileMotif { cote: 4.0, divisions: 8, segments: Vec::new() });
+        let tuile = d.and_then(|d| d.tuile.clone()).unwrap_or(TuileMotif { cote: 4.0, divisions: DIVISIONS_VUE, segments: Vec::new() });
         let origine = d.map(|d| d.nom.clone());
         let mut q = p.clone();
         let vue = match q.ajouter_vue_dessin(ECHELLE_VUE) {
@@ -71,7 +101,7 @@ impl Application {
             self.error = Some(e);
             return;
         }
-        self.editeur_hachure = Some(EditeurHachure { origine, nom: nom.clone(), cote: tuile.cote, divisions: tuile.divisions, vue: vue.clone() });
+        self.editeur_hachure = Some(EditeurHachure { origine, nom: nom.clone(), cote: tuile.cote, vue: vue.clone() });
         self.ouvrir_vue_native(&vue);
         // carré sur un peu moins de la moitié de la hauteur de la vue
         self.camera.dist = (TAILLE_VUE as f32 * 0.001 / 0.9) / (self.camera.fov_y * 0.5).tan();
@@ -138,7 +168,7 @@ impl Application {
         let ed = self.editeur_hachure.as_ref().ok_or("Éditeur de hachures fermé.")?;
         let nom = ed.nom.trim().to_string();
         if nom.is_empty() { return Err("Nommer le motif.".into()); }
-        let tuile = TuileMotif::depuis_traits(ed.cote, ed.divisions, &traits)?;
+        let (tuile, corriges) = TuileMotif::depuis_traits(ed.cote, &traits)?;
         if tuile.segments.is_empty() { return Err("Dessiner au moins un trait dans le carré.".into()); }
         let mut q = self.projet_sans_vue_motif()?;
         if Some(&nom) != ed.origine.as_ref() && q.noms_motifs().contains(&nom) {
@@ -162,12 +192,15 @@ impl Application {
         self.appliquer_projet(q)?;
         self.editeur_hachure = None;
         self.reprendre_vue_ouverte(active);
-        self.motif_choisi = Some(nom.clone());
-        self.status = format!("Motif « {nom} » enregistré.");
+        self.motif_selectionne = Some(nom.clone());
+        self.status = match corriges {
+            0 => format!("Motif « {nom} » enregistré."),
+            n => format!("Motif « {nom} » enregistré ; {n} trait(s) redressé(s) vers la direction exacte la plus proche."),
+        };
         Ok(())
     }
 
-    /// Propriétés de la vue du motif : nom, côté papier, divisions, Terminer, Annuler.
+    /// Propriétés de la vue du motif : nom, côté papier, Terminer, Annuler.
     pub(crate) fn proprietes_motif(&mut self, ui: &mut egui::Ui) {
         if self.editeur_motif_actif().is_none() { return; }
         let Some(ed) = self.editeur_hachure.as_mut() else { return };
@@ -178,9 +211,6 @@ impl Application {
             ui.end_row();
             ui.label("Côté");
             ui.add(egui::DragValue::new(&mut ed.cote).speed(0.1).range(0.5..=100.0).max_decimals(2).suffix(" mm")).on_hover_text("Côté du carré répété, en mm du papier");
-            ui.end_row();
-            ui.label("Divisions");
-            ui.add(egui::DragValue::new(&mut ed.divisions).range(1..=DIVISIONS_MAX)).on_hover_text("Nœuds de la grille d'accrochage par côté ; à Terminer, les extrémités vont au nœud le plus proche");
             ui.end_row();
         });
         ui.label(egui::RichText::new("Tracer dans le carré (Documenter › Ligne de dessin, Polyligne) ; modifier par le ruban Modifier.").weak());
@@ -197,7 +227,7 @@ impl Application {
 
     /// Vue du motif : reste de la vue grisé, répétitions du carré, grille d'accrochage.
     pub(crate) fn dessiner_tuile_motif(&self, ui: &egui::Ui, rect: egui::Rect) {
-        let Some(ed) = self.editeur_motif_actif() else { return };
+        if self.editeur_motif_actif().is_none() { return; }
         let (Some(a), Some(b)) = (self.ecran_plan(rect, [-TAILLE_VUE / 2.0; 2], 0.0), self.ecran_plan(rect, [TAILLE_VUE / 2.0; 2], 0.0)) else { return };
         let carre = egui::Rect::from_two_pos(a, b);
         let peintre = ui.painter().with_clip_rect(rect);
@@ -227,16 +257,8 @@ impl Application {
                 }
             }
         }
-        peintre.rect_stroke(carre, 0.0, egui::Stroke::new(1.0, Color32::from_rgb(0, 120, 215)), egui::StrokeKind::Middle);
-        // nœuds de la grille, s'ils restent lisibles
-        let n = ed.divisions.max(1);
-        if cote_px / n as f32 >= 6.0 {
-            for x in 0..=n {
-                for y in 0..=n {
-                    let q = carre.left_bottom() + egui::vec2(x as f32, -(y as f32)) * (cote_px / n as f32);
-                    peintre.circle_filled(q, 1.3, Color32::from_gray(150));
-                }
-            }
-        }
+        // cadre en tirets : un trait posé sur un bord reste visible
+        let coins = [carre.left_bottom(), carre.right_bottom(), carre.right_top(), carre.left_top(), carre.left_bottom()];
+        peintre.extend(egui::Shape::dashed_line(&coins, egui::Stroke::new(1.0, Color32::from_rgb(0, 120, 215)), 6.0, 4.0));
     }
 }

@@ -507,6 +507,10 @@ impl Application {
         if section == LeftTab::Tout && !self.liste_materiaux.is_empty() {
             egui::CollapsingHeader::new(RichText::new(format!("Matériaux ({})", self.liste_materiaux.len())).strong()).id_salt(("nav", "materiaux")).open(ouvert.then_some(true)).show(ui, |ui| self.materiaux_ui(ui));
         }
+        if section == LeftTab::Tout && let Some((p, _)) = &self.natif {
+            let n = p.noms_motifs().len();
+            egui::CollapsingHeader::new(RichText::new(format!("Motifs de hachures ({n})")).strong()).id_salt(("nav", "motifs")).open(ouvert.then_some(true)).show(ui, |ui| self.motifs_ui(ui));
+        }
         if (rangement_modifie.is_some() || organisation_modifiee.is_some()) && let Some((p, _)) = &self.natif {
             let mut projet = p.clone();
             if let Some((id, valeur)) = rangement_modifie {

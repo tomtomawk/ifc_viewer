@@ -454,9 +454,11 @@ impl Application {
                 succes(&[])
             }
             "motifs_hachures" => {
-                // motifs_hachures [nom] : ouvre la fenêtre des motifs (sur le motif nommé)
-                if !argument.trim().is_empty() { self.motif_choisi = Some(argument.trim().to_string()); }
-                self.editeur_motifs = true;
+                // motifs_hachures [nom] : propriétés du motif nommé (sinon le premier)
+                let nom = argument.trim().to_string();
+                let nom = if nom.is_empty() { self.natif.as_ref().and_then(|(p, _)| p.noms_motifs().into_iter().next()).unwrap_or_default() } else { nom };
+                self.select(None, false);
+                self.motif_selectionne = Some(nom);
                 succes(&[])
             }
             "editeur_hachure" => {
