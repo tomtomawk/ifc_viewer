@@ -402,12 +402,12 @@ impl Application {
                         }
                     })
                     .response
-                    .on_hover_text("Même élément, nom et référence d'altitude différents (dessus ou sous-face)");
+                    .on_hover_text("Change la référence d’altitude : dessus, sous-face du plafond ou égout de la toiture");
                     ui.end_row();
                 }
                 ui.label(match d.sorte {
                     modele::SorteDalle::Plafond => "Hauteur sous plafond",
-                    modele::SorteDalle::Toiture => "Décalage (sous-face)",
+                    modele::SorteDalle::Toiture => "Décalage à l’égout",
                     _ => "Décalage (dessus)",
                 });
                 change |= ui.add(egui::DragValue::new(&mut d.decalage).speed(10.0).dimensions()).changed();

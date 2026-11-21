@@ -239,7 +239,10 @@ impl ExecutionCopier for Projet {
                     .attaches_toitures
                     .iter()
                     .filter(|(id, _)| map.contains_key(*id))
-                    .map(|(id, t)| (map[id].clone(), map.get(t).unwrap_or(t).clone()))
+                    .map(|(id, toits)| {
+                        let toits = toits.iter().map(|t| map.get(t).unwrap_or(t).clone()).collect();
+                        (map[id].clone(), toits)
+                    })
                     .collect();
                 self.attaches_toitures.extend(attaches);
                 let priorites: Vec<_> = self

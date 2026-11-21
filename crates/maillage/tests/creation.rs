@@ -96,10 +96,11 @@ fn plafond_et_toiture_en_pente() {
     assert_eq!(s.objects.len(), 2);
     let nav = s.navigateur.unwrap();
     assert!(nav.familles.iter().any(|f| f.categorie == "Plafonds") && nav.familles.iter().any(|f| f.categorie == "Toits"));
-    // toiture en dessous du faîtage, sous-face à l'égout (2,80 m), plafond sous-face à 2,50 m
+    // Le dessus de la toiture part de l’égout à 2,80 m. Le plafond part de sa sous-face.
     let o = &s.objects[1];
-    assert!((o.min.z as f64 + s.origin.z - 2.8).abs() < 1e-3, "{}", o.min.z as f64 + s.origin.z);
-    let faitage = 2.8 + 3.0 * 35f64.to_radians().tan() + e / 1000.0 / 35f64.to_radians().cos();
+    let sous_face_egout = 2.8 - e / 1000.0 / 35f64.to_radians().cos();
+    assert!((o.min.z as f64 + s.origin.z - sous_face_egout).abs() < 1e-3, "{}", o.min.z as f64 + s.origin.z);
+    let faitage = 2.8 + 3.0 * 35f64.to_radians().tan();
     assert!((o.max.z as f64 + s.origin.z - faitage).abs() < 1e-3);
     assert!((s.objects[0].min.z as f64 + s.origin.z - 2.5).abs() < 1e-3);
 }

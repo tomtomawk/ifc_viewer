@@ -24,7 +24,7 @@ impl ExecutionModifier for Projet {
                         return Err("Sélectionnez des murs ou assemblages.".into());
                     }
                     if let Some(t) = &toiture {
-                        self.attaches_toitures.insert(id.clone(), t.clone());
+                        self.attaches_toitures.entry(id.clone()).or_default().insert(t.clone());
                     } else {
                         self.attaches_toitures.remove(id);
                     }
@@ -157,7 +157,10 @@ impl ExecutionModifier for Projet {
                 self.vues.retain(|x| !set.contains(&x.id));
                 for vue in &mut self.vues { vue.elements_masques.retain(|id| !set.contains(id)); }
                 self.attaches_toitures
-                    .retain(|id, t| !set.contains(id) && !set.contains(t));
+                    .retain(|id, toits| {
+                        toits.retain(|toit| !set.contains(toit));
+                        !set.contains(id) && !toits.is_empty()
+                    });
                 self.priorites_jonction.retain(|id, _| !set.contains(id));
                 self.implantations.retain(|id, _| !set.contains(id));
                 self.contextes.retain(|id, _| !set.contains(id));

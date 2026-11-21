@@ -255,15 +255,13 @@ impl Projet {
                 _ => {}
             }
         }
-        for (id, toit) in &self.attaches_toitures {
+        for (id, toits) in &self.attaches_toitures {
             if !self.murs.iter().any(|m| &m.id == id) && self.assemblage(id).is_none() {
                 return Err("Mur attaché absent.".into());
             }
-            if !self
-                .dalles
-                .iter()
-                .any(|d| &d.id == toit && d.sorte == SorteDalle::Toiture)
-            {
+            if toits.is_empty() || toits.iter().any(|toit| {
+                !self.dalles.iter().any(|d| &d.id == toit && d.sorte == SorteDalle::Toiture)
+            }) {
                 return Err("Toiture d'attachement absente.".into());
             }
         }

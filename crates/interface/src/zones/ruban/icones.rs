@@ -68,7 +68,7 @@ pub(super) fn bouton_outil(
         Outil::ModifierContour => "Modifier l'élément sélectionné : tracé d'un contour, d'une polyligne, d'un terrain, d'un garde-corps ou d'une limite de propriété ; famille d'une ouverture, d'un composant ou d'une étiquette (MT)",
         Outil::CopierNiveau => "Copier la sélection sur un niveau en conservant la position en plan",
         Outil::Jonctions => "Priorité des jonctions entre murs",
-        Outil::AttacherToiture => "Attacher un ou plusieurs murs à la sous-face d'une toiture : sélectionner les murs puis cliquer la toiture",
+        Outil::AttacherToiture => "Attacher les murs à une ou plusieurs toitures : sélectionner les murs, cliquer les toitures puis Terminer",
         Outil::CreerIdentique => "Créer à l'identique (CS)",
         Outil::Deplacer => "Déplacer (MV) : point de base, puis destination ou distance tapée",
         Outil::Copier => "Copier (CO) : point de base, puis destination ; Multiple pour enchaîner",

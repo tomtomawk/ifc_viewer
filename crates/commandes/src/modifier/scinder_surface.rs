@@ -118,7 +118,7 @@ pub(super) fn executer(
         {
             return Err("La découpe prend en charge les surfaces planes sans talus.".into());
         }
-        if projet.attaches_toitures.values().any(|toit| toit == id) {
+        if projet.attaches_toitures.values().any(|toits| toits.contains(id)) {
             return Err("Détachez les murs de cette toiture avant la découpe.".into());
         }
         for (i, contours) in decouper(&source.contours, trace)?.into_iter().enumerate() {

@@ -230,13 +230,13 @@ impl Application {
                             } else {
                                 let ids = self.bim.murs_a_attacher.clone();
                                 match self.executer_bim(commandes::Commande::Attacher { ids, toiture: Some(id) }) {
-                                    Ok(_) => { self.status = "Murs attachés à la sous-face de la toiture.".into(); self.ruban_edition.annuler(); }
+                                    Ok(_) => self.status = "Jonction enregistrée. Cliquez une autre toiture ou cliquez Terminer.".into(),
                                     Err(e) => self.error = Some(e),
                                 }
                             }
                         } else if let Some(mur) = projet.assemblage(&id).map(|a| a.id.clone()).or_else(|| projet.murs.iter().find(|m| m.id == id).map(|m| m.assemblage.clone().unwrap_or(id))) {
                             if !self.bim.murs_a_attacher.contains(&mur) { self.bim.murs_a_attacher.push(mur); }
-                            self.status = "Mur ajouté : cliquez la toiture, ou ajoutez d'autres murs.".into();
+                            self.status = "Mur ajouté : cliquez une toiture, ou ajoutez d’autres murs.".into();
                         } else { self.status = "Attacher au toit : cliquez un mur ou une toiture.".into(); }
                     }
                 }
@@ -520,7 +520,7 @@ impl Application {
             let texte = if self.bim.murs_a_attacher.is_empty() {
                 "Attacher au toit : cliquer un mur, puis une toiture".to_string()
             } else {
-                format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une toiture ou ajouter un mur · Échap : retirer le dernier", self.bim.murs_a_attacher.len())
+                format!("Attacher au toit : {} mur(s) choisi(s) · cliquer une ou plusieurs toitures · Échap : retirer le dernier mur", self.bim.murs_a_attacher.len())
             };
             let painter = ui.painter().with_clip_rect(rect);
             if !self.message_visible() { crate::socle::messages::consigne_vue(ui, rect, self.dessin2d.bas_barre, &texte); }

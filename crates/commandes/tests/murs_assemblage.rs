@@ -79,3 +79,29 @@ fn couche_editee_hors_du_mur_compose_se_detache() {
     let (q, _) = p.executer(Commande::Tourner { ids: vec![id.clone()], centre: [0.0, 0.0], angle: 30.0 }).unwrap();
     assert_eq!(q.assemblage(&id).unwrap().couches, couches);
 }
+
+#[test]
+fn attacher_ajoute_les_toits_et_supprimer_ne_detache_que_le_toit_vise() {
+    use commandes::{Commande, Execution};
+
+    let mut p = modele::Projet::lire_json(include_str!(
+        "../../../samples/maison_native.modele.json"
+    )).unwrap();
+    let mur = "etage-m0".to_owned();
+    let toit_initial = "toiture".to_owned();
+    let mut autre = p.dalles.iter().find(|d| d.id == toit_initial).unwrap().clone();
+    autre.id = "toiture-ailleurs".into();
+    autre.contours.iter_mut().flatten().for_each(|pt| pt[0] += 40_000.0);
+    let toit_ajoute = autre.id.clone();
+    p.dalles.push(autre);
+
+    let attacher = || Commande::Attacher { ids: vec![mur.clone()], toiture: Some(toit_ajoute.clone()) };
+    let (p, _) = p.executer(attacher()).unwrap();
+    let (p, _) = p.executer(attacher()).unwrap();
+    assert_eq!(p.attaches_toitures[&mur], [toit_initial.clone(), toit_ajoute.clone()].into());
+
+    let (p, _) = p.executer(Commande::Supprimer { ids: vec![toit_initial] }).unwrap();
+    assert_eq!(p.attaches_toitures[&mur], [toit_ajoute].into());
+    let (p, _) = p.executer(Commande::Attacher { ids: vec![mur], toiture: None }).unwrap();
+    assert!(p.attaches_toitures.is_empty());
+}

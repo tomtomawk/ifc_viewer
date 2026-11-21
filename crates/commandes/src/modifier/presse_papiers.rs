@@ -124,8 +124,11 @@ pub fn copier_selection(source: &Projet, ids: &[String]) -> Result<Projet, Strin
     fragment.attaches_toitures = source
         .attaches_toitures
         .iter()
-        .filter(|(id, h)| ids.contains(*id) && ids.contains(*h))
-        .map(|(k, v)| (k.clone(), v.clone()))
+        .filter(|(id, _)| ids.contains(*id))
+        .filter_map(|(id, toits)| {
+            let conserves: std::collections::BTreeSet<_> = toits.iter().filter(|t| ids.contains(*t)).cloned().collect();
+            (!conserves.is_empty()).then(|| (id.clone(), conserves))
+        })
         .collect();
 
     // Résoudre les références dans l'ordre : les types citent eux-mêmes des

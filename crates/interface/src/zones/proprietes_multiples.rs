@@ -425,9 +425,16 @@ impl Application {
                                             v.get(&cle).cloned().unwrap_or_else(|| defaut(&cle))
                                         })
                                         .collect();
+                                    let nom = if cle == "decalage"
+                                        && objets.iter().all(|v| v["sorte"] == "toiture")
+                                    {
+                                        "Décalage à l’égout".into()
+                                    } else {
+                                        libelle(&cle)
+                                    };
                                     champ_ui(
                                         ui,
-                                        &libelle(&cle),
+                                        &nom,
                                         &mut vec![cle.clone()],
                                         valeurs,
                                         options(p, &cle, objets),

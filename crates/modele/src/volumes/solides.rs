@@ -826,7 +826,7 @@ mod tests_jonctions {
                 &prm,
             )
             .unwrap();
-        p.attaches_toitures.insert("m".into(), id);
+        p.attaches_toitures.insert("m".into(), [id].into());
         let coupes = jonctions::coupes(&p);
         let v = geometrie::volume(&mur(&p, &p.murs[0], &coupes).unwrap());
         assert!(v > 2.4e9);

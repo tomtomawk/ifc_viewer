@@ -364,7 +364,7 @@
       "sorte": "toiture",
       "type_dalle": "toit200",
       "niveau": "etage",
-      "decalage": 2800,
+      "decalage": 3044.156,
       "contours": [
         [
           [
@@ -525,10 +525,10 @@
     }
   ],
   "attaches_toitures": {
-    "etage-m0": "toiture",
-    "etage-m1": "toiture",
-    "etage-m2": "toiture",
-    "etage-m3": "toiture"
+    "etage-m0": ["toiture"],
+    "etage-m1": ["toiture"],
+    "etage-m2": ["toiture"],
+    "etage-m3": ["toiture"]
   },
   "implantations": {},
   "plumes": [

@@ -11,6 +11,7 @@ Usage : python3 tools/projet_demo_ilot.py [dossier de sortie]
 Nécessite numpy et Pillow (textures).
 """
 import json
+import math
 import os
 import sys
 
@@ -446,10 +447,10 @@ def projet():
         baies(sud1, 8000, 3000, 1200, 1400, 900)
         baies(nord1, 8000, 3000, 1000, 1200, 1000)
         for m in (sud1, est1, nord1, ouest1):
-            attaches[m] = f"{p}-toit"
+            attaches[m] = [f"{p}-toit"]
         plancher(f"{p}-p0", f"Plancher maison {i + 1}", "dalle250", "n0", x0, y0, x1, y1, (100, 100, 100, 100))
         plancher(f"{p}-p1", f"Plancher étage maison {i + 1}", "dalle250", "n1", x0, y0, x1, y1, (100, 100, 100, 100))
-        dalle(f"{p}-toit", f"Toiture maison {i + 1}", "ardoise200", "n1", 2800, rectangle(x0 - 500, y0 - 600, x1 + 500, y1 + 600), sorte="toiture", pentes=[35, None, 35, None])
+        dalle(f"{p}-toit", f"Toiture maison {i + 1}", "ardoise200", "n1", round(2800 + 200 / math.cos(math.radians(35)), 3), rectangle(x0 - 500, y0 - 600, x1 + 500, y1 + 600), sorte="toiture", pentes=[35, None, 35, None])
 
     # rue, trottoirs, parvis, allées
     dalle("chaussee", "Chaussée", "enrobe120", "n0", -20, rectangle(*CHAUSSEE), sorte="sol")

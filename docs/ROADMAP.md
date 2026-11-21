@@ -30,6 +30,7 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
+| IFC-TOIT1 | Aller-retour IFC avec couches de murs : dans `maison_native`, certaines cotes d’égout (par ex. 3 044,155 mm au-dessus du niveau) font relire 7 assemblages sur 8 dans le test `usage_des_couches_coherent_avec_l_axe_du_mur`. Diagnostiquer la perte du mur à la relecture | P1 | `crates/echanges/src/export_ifc/tests.rs` |
 | A6d | Export IFC : données absentes du modèle — coordonnées E/N et système de coordonnées (`IfcMapConversion`), `IsExternal`, classements feu et acoustique, phases et démolitions (décidé le 17/11/2026 : propriété `Status` des `Pset_*Common`, NEW / EXISTING / DEMOLISH / TEMPORARY, d'après la phase et `Projet::demolitions`, plus un jeu `BIMedit_Phase` pour le nom de la phase) (décision §3) | P2 | `docs/EDITION.md` « Sortie → IFC4 » |
 | A6e | Jeux de propriétés au-delà des `Pset_*Common` : en rester là pour le moment (décision du 17/11/2026) | P3 | — |
 | A7 | Import IFC, suite : toitures, escaliers et poteaux ou poutres non rectangulaires, inclinés ou à items mappés restent des maillages ; une barre convertie perd ses jeux de propriétés, son matériau et sa couleur (`Barre` n'en porte pas) ; `PredefinedType` perdu à l'export d'un élément importé ; `.ifczip` refusé | P1 | `crates/echanges/src/depuis_ifc.rs`, `crates/echanges/src/barres_ifc.rs`, `crates/echanges/src/export_ifc/importes.rs` |

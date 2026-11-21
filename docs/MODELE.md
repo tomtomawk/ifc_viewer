@@ -99,7 +99,7 @@ garde le RVT et ses vues ouverts, sans changer automatiquement de document (Déb
 | `murs[]` | `id`, `nom`, `type_mur`, `niveau`, `decalage_bas`, `haut`, `axe`, `origine`, `phase`, `sous_projet`, `variante` | `phase`, `sous_projet` et `variante` sont facultatifs (absents des anciens fichiers). `haut` : `{contrainte: libre, hauteur}` ou `{contrainte: niveau, niveau, decalage}` |
 | `axe` | `{forme: droit, debut, fin}` ou `{forme: arc, debut, fin, centre, direct}` | Ligne médiane de l'épaisseur, en plan (x, y) |
 | `ouvertures[]` | `id`, `nom`, `genre` (porte, fenetre, libre), `mur`, `type_ouverture`, `abscisse`, `largeur`, `hauteur`, `allege`, `representation`, `valeurs`, `retournee`, `inversee`, `origine` | Baie rectangulaire à travers le mur (ou vides de la famille du type) ; `abscisse` = milieu de la baie le long de l'axe ; `allege` au-dessus du niveau du mur ; `representation` = menuiserie lue (maillage) ; `valeurs` = paramètres d'occurrence de la famille (longueurs, oui/non) ; `materiaux` = paramètres matériau d'occurrence ; `retournee` / `inversee` = famille retournée (intérieur ↔ extérieur) / inversée (gauche ↔ droite) |
-| `dalles[]` | `id`, `nom`, `sorte`, `type_dalle`, `niveau`, `decalage`, `contours`, `pentes`, `phase`, `sous_projet`, `variante`, `origine` | `sorte` : `dalle` (défaut, omis), `sol`, `plafond`, `toiture`. `decalage` = dessus (dalle, sol) ou sous-face (plafond, toiture ; à l'égout si en pente) au-dessus du niveau ; `contours` en plan, pair-impair (trous) ; `pentes[c][k]` = pente en degrés de l'arête du sommet k au suivant du contour c, `null` sans pente (omis : élément plan) |
+| `dalles[]` | `id`, `nom`, `sorte`, `type_dalle`, `niveau`, `decalage`, `contours`, `pentes`, `phase`, `sous_projet`, `variante`, `origine` | `sorte` : `dalle` (défaut, omis), `sol`, `plafond`, `toiture`. `decalage` = dessus (dalle, sol), sous-face (plafond) ou dessus à l’égout (toiture) au-dessus du niveau ; `contours` en plan, pair-impair (trous) ; `pentes[c][k]` = pente en degrés de l'arête du sommet k au suivant du contour c, `null` sans pente (omis : élément plan) |
 | `positions_plan[]` | `nom`, `angle` (degrés, plan par rapport au nord du modèle) | Orientations enregistrées depuis le repère du plan (« Positions ») |
 | `orientation_nord` | angle en radians par rapport à l'axe Y du projet | Orientation des points cardinaux ; 0 par défaut pour les anciens projets |
 | `vues[]` | `id`, `nom`, `type_vue`, `echelle`, `niveau_detail` (`faible`, `moyen`, `eleve` ; absent : `moyen`), `genre` : `plan` (`niveau`, `coupe` mm au-dessus du niveau), `coupe` (`debut`, `fin`, `profondeur` mm, `elevation`), `camera` (`oeil`, `cible`, `champ`) ou `dessin` (sans autre champ) | Arborescence du projet ; une coupe ou une élévation regarde vers la gauche de sa ligne ; une vue de dessin ne montre aucun élément du modèle, seulement ses annotations (mm dans le plan de la vue, origine au centre) |
@@ -133,7 +133,7 @@ doublage d'une autre phase…). Conventions :
 
 Un seul élément, quatre sortes qui ne diffèrent que par leur nom, leurs types et leur
 référence d'altitude : dessus pour la dalle et le sol, sous-face pour le plafond
-(hauteur sous plafond) et la toiture. Type choisi dans le sélecteur de type (onglet par
+(hauteur sous plafond), et ligne d’égout sur le dessus pour la toiture. Type choisi dans le sélecteur de type (onglet par
 sorte, types du projet `types_dalles` rangés par leur `sorte`, couches du haut vers le bas ;
 sans type de cette sorte, le type par défaut du code, enregistré au premier élément),
 niveau et décalage dans Propriétés. Modifier, Dupliquer et « + Nouveau type… » ouvrent
@@ -146,6 +146,11 @@ moins trois sommets, 0,01 m² au moins, pas d'arête qui en croise une autre, or
 dans le sens trigonométrique. Affichage : une partie par couche (couleur du matériau),
 poché par couche en coupe. Classes IFC de la scène : `IfcSlab` (dalle), `IfcCovering`
 (sol, plafond), `IfcRoof` (toiture) ; familles de l'arborescence : Sols, Plafonds, Toits.
+
+La table `attaches_toitures` associe un identifiant de mur ou d’assemblage à un
+tableau non vide d’identifiants de toitures distinctes. Le format antérieur utilisait
+une chaîne pour une seule toiture. Il n’y a pas de migration. La cote des toitures
+déjà saisies est désormais interprétée à l’égout.
 
 ### Pente par arête
 
@@ -161,7 +166,8 @@ pignons font une toiture à deux pans ; aucune arête en pente, un élément pla
   pente), ou clic sur les repères des arêtes dans la vue quand l'élément est
   sélectionné (triangle plein et pente : arête en pente ; rond : sans pente).
 - Couches : épaisseur normale aux versants (verticale : épaisseur / cos pente), empilées
-  depuis la sous-face. Coupe d'égout verticale. Une couche de coupe par versant.
+  vers le bas depuis le dessus à l’égout pour la toiture, vers le haut depuis la
+  sous-face pour le plafond. Coupe d’égout verticale. Une couche de coupe par versant.
 - Contour convexe : enveloppe des plans par arête. Contour concave (L, T) :
   squelette droit pour une pente uniforme sur toutes les arêtes ; les autres
   combinaisons sont refusées explicitement (voir EDITION.md).

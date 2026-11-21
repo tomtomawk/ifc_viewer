@@ -141,10 +141,11 @@ impl Application {
                 }
                 Some(Outil::AttacherToiture) => {
                     let murs = &self.bim.murs_a_attacher;
-                    ui.label(if murs.is_empty() { "Cliquer un mur, puis la toiture dans la vue.".to_string() } else { format!("{} mur(s) : cliquer la toiture dans la vue.", murs.len()) });
-                    if ui.add_enabled(!murs.is_empty(), egui::Button::new("Détacher de la toiture")).clicked() {
+                    ui.label(if murs.is_empty() { "Cliquer un mur, puis la toiture dans la vue.".to_string() } else { format!("{} mur(s) : cliquer les toitures dans la vue.", murs.len()) });
+                    if ui.add_enabled(!murs.is_empty(), egui::Button::new("Détacher des toitures")).clicked() {
                         commande = Some(Commande::Attacher { ids: murs.clone(), toiture: None });
                     }
+                    if ui.button("Terminer").clicked() { self.ruban_edition.annuler(); }
                 }
                 _ => {}
             }

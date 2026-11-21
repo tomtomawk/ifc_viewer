@@ -679,7 +679,7 @@ fn champs(o: Outil) -> Vec<Champ> {
         ],
         Toiture => vec![
             Nombre("Épaisseur", 300.0, " mm"),
-            Nombre("Décalage sous-face", 2800.0, " mm"),
+            Nombre("Décalage à l’égout", 2800.0, " mm"),
             Nombre("Pente", 35.0, " °"),
         ],
         Plafond => vec![

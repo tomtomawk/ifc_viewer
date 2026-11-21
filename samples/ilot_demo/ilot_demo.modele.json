@@ -8542,7 +8542,7 @@
    "sorte": "toiture",
    "type_dalle": "ardoise200",
    "niveau": "n1",
-   "decalage": 2800,
+   "decalage": 3044.155,
    "contours": [
     [
      [
@@ -8637,7 +8637,7 @@
    "sorte": "toiture",
    "type_dalle": "ardoise200",
    "niveau": "n1",
-   "decalage": 2800,
+   "decalage": 3044.155,
    "contours": [
     [
      [
@@ -8732,7 +8732,7 @@
    "sorte": "toiture",
    "type_dalle": "ardoise200",
    "niveau": "n1",
-   "decalage": 2800,
+   "decalage": 3044.155,
    "contours": [
     [
      [
@@ -9193,18 +9193,18 @@
  "feuilles": [],
  "nomenclatures": [],
  "attaches_toitures": {
-  "C1-n1-0": "C1-toit",
-  "C1-n1-1": "C1-toit",
-  "C1-n1-2": "C1-toit",
-  "C1-n1-3": "C1-toit",
-  "C2-n1-0": "C2-toit",
-  "C2-n1-1": "C2-toit",
-  "C2-n1-2": "C2-toit",
-  "C2-n1-3": "C2-toit",
-  "C3-n1-0": "C3-toit",
-  "C3-n1-1": "C3-toit",
-  "C3-n1-2": "C3-toit",
-  "C3-n1-3": "C3-toit"
+  "C1-n1-0": ["C1-toit"],
+  "C1-n1-1": ["C1-toit"],
+  "C1-n1-2": ["C1-toit"],
+  "C1-n1-3": ["C1-toit"],
+  "C2-n1-0": ["C2-toit"],
+  "C2-n1-1": ["C2-toit"],
+  "C2-n1-2": ["C2-toit"],
+  "C2-n1-3": ["C2-toit"],
+  "C3-n1-0": ["C3-toit"],
+  "C3-n1-1": ["C3-toit"],
+  "C3-n1-2": ["C3-toit"],
+  "C3-n1-3": ["C3-toit"]
  },
  "implantations": {},
  "plumes": [

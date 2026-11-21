@@ -35,82 +35,101 @@ pub(super) fn volume_mur(
 ) -> Result<Vec<Tri>, String> {
     let contour = contour_mur(p, m, jonctions, epaisseur)?;
     let volume = prisme(&contour, bas, haut);
-    let attache_propre = p.attaches_toitures.get(&m.id);
-    let attache = attache_propre.or_else(|| {
-        m.assemblage
-            .as_ref()
-            .and_then(|id| p.attaches_toitures.get(id))
-    });
-    let Some(toit) = attache.and_then(|id| p.dalles.iter().find(|d| &d.id == id)) else {
+    let attaches: std::collections::BTreeSet<_> = std::iter::once(&m.id)
+        .chain(m.assemblage.iter())
+        .filter_map(|id| p.attaches_toitures.get(id))
+        .flatten()
+        .collect();
+    if attaches.is_empty() {
         return Ok(volume);
-    };
+    }
 
-    let z = p
-        .niveau(&toit.niveau)
-        .ok_or("Niveau de toiture absent.")?
-        .altitude
-        + toit.decalage;
-    let plans = pente::plans(toit);
-    let sommet = pente::morceaux(&toit.contours, &plans, 0.0)
-        .iter()
-        .flat_map(|(plan, polygone)| polygone.iter().map(move |v| z + plan.hauteur(*v)))
-        .fold(haut, f64::max);
-    let couche = |plans: &[Plan], z, e0, e1| {
+    let plan_horizontal = Plan {
+        gradient: DVec2::ZERO,
+        origine: 0.0,
+        secante: 1.0,
+    };
+    let appliquer = |a: &[Tri], b: &[Tri], op| {
+        booleen(a, b, op, 1e-5).ok_or_else(|| "Attachement à la toiture trop complexe.".to_owned())
+    };
+    let couche = |toit: &crate::Dalle, plans: &[Plan], z, e0, e1| {
         pente::couche(&toit.contours, plans, z, e0, e1)
             .into_iter()
             .map(|t| t.map(|v| v * 1000.0))
             .collect::<Vec<_>>()
     };
-    let appliquer = |a: &[Tri], b: &[Tri], op| {
-        booleen(a, b, op, 1e-5).ok_or_else(|| "Attachement à la toiture trop complexe.".to_owned())
-    };
 
-    // La partie sous le toit peut dépasser la hauteur nominale du mur.
-    let sous_face = couche(&plans, z, bas.min(z) - sommet.max(z) - 1.0, 0.0);
+    let mut toits = Vec::new();
+    let mut sommet = haut;
+    for id in attaches {
+        let toit = p
+            .dalles
+            .iter()
+            .find(|d| &d.id == id)
+            .ok_or("Toiture d’attachement absente.")?;
+        let z = p
+            .niveau(&toit.niveau)
+            .ok_or("Niveau de toiture absent.")?
+            .altitude
+            + toit.decalage;
+        let epaisseur = p
+            .type_dalle(&toit.type_dalle)
+            .ok_or("Type de toiture absent.")?
+            .epaisseur();
+        let plans = pente::plans(toit);
+        let sous_face = -epaisseur;
+        let max = pente::morceaux(&toit.contours, &plans, sous_face)
+            .iter()
+            .flat_map(|(plan, poly)| poly.iter().map(move |v| z + plan.hauteur(*v)))
+            .fold(f64::NEG_INFINITY, f64::max);
+        sommet = sommet.max(max);
+        toits.push((toit, plans, z, sous_face));
+    }
+
     let prolongement = prisme(&contour, bas, sommet + 1.0);
-    let couvert = appliquer(&prolongement, &sous_face, Op::Intersection)?;
-
-    // Le prisme de l'emprise prend aussi en compte les trémies du toit.
-    let plan = Plan {
-        gradient: DVec2::ZERO,
-        origine: 0.0,
-        secante: 1.0,
-    };
-    let emprise = couche(&[plan], bas, -1.0, haut - bas + 1.0);
-    if signed_volume(&couvert).abs() <= 1e-5 {
-        let recouvre = |volume: &[Tri]| -> Result<bool, String> {
-            Ok(signed_volume(&appliquer(volume, &emprise, Op::Intersection)?).abs() > 1e-5)
-        };
-        if recouvre(&volume)? {
-            return Err("La toiture se trouve sous le pied du mur.".into());
+    let mut exterieur = volume;
+    let mut interieur = Vec::new();
+    let mut au_dessus = Vec::new();
+    for (toit, plans, z, sous_face) in toits {
+        let emprise = couche(toit, &[plan_horizontal], bas, -1.0, sommet - bas + 2.0);
+        let emprise = appliquer(&prolongement, &emprise, Op::Intersection)?;
+        if signed_volume(&emprise).abs() <= 1e-5 {
+            // Le lien reste enregistré. Déplacer le toit ou le mur peut le rendre actif.
+            continue;
         }
-        // Un bord de toiture peut recouvrir certaines couches seulement.
-        if let Some(id) = m.assemblage.as_deref().filter(|_| attache_propre.is_none()) {
-            for autre in p.couches_assemblage(id) {
-                if autre.id == m.id || p.attaches_toitures.contains_key(&autre.id) {
-                    continue;
-                }
-                let epaisseur = p
-                    .type_mur(&autre.type_mur)
-                    .ok_or("Type de mur introuvable.")?
-                    .epaisseur();
-                let contour = contour_mur(p, autre, jonctions, epaisseur)?;
-                if recouvre(&prisme(&contour, bas, haut))? {
-                    return Ok(volume);
-                }
+        // Toutes les sécantes sont >= 1 : ce décalage place le bas du
+        // gabarit de coupe sous le pied du mur pour chaque versant.
+        let dessous = couche(toit, &plans, z, sous_face - (sommet - bas) - 1.0, sous_face);
+        let couvert = appliquer(&prolongement, &dessous, Op::Intersection)?;
+        if signed_volume(&couvert).abs() <= 1e-5 {
+            continue;
+        }
+        if !exterieur.is_empty() {
+            exterieur = appliquer(&exterieur, &emprise, Op::Difference)?;
+        }
+        interieur = if interieur.is_empty() {
+            couvert.clone()
+        } else {
+            appliquer(&interieur, &couvert, Op::Union)?
+        };
+        au_dessus.push((emprise, couvert));
+    }
+
+    // Là où deux toits se recouvrent, le mur s’arrête à la première sous-face
+    // rencontrée en montant. Les trémies sont absentes des masques d’emprise.
+    if au_dessus.len() > 1 {
+        for (emprise, couvert) in au_dessus {
+            let vide = appliquer(&emprise, &couvert, Op::Difference)?;
+            if !vide.is_empty() && !interieur.is_empty() {
+                interieur = appliquer(&interieur, &vide, Op::Difference)?;
             }
         }
-        return Err(format!(
-            "{} : le mur ne recouvre pas l'emprise de la toiture.",
-            m.nom
-        ));
     }
-
-    let exterieur = appliquer(&volume, &emprise, Op::Difference)?;
-    if exterieur.is_empty() {
-        return Ok(couvert);
+    match (exterieur.is_empty(), interieur.is_empty()) {
+        (true, _) => Ok(interieur),
+        (_, true) => Ok(exterieur),
+        _ => appliquer(&interieur, &exterieur, Op::Union),
     }
-    appliquer(&couvert, &exterieur, Op::Union)
 }
 
 #[cfg(test)]
@@ -132,7 +151,7 @@ mod tests {
                 type_dalle: p.types_murs[0].clone(),
                 pente: None,
                 niveau: Some("n".into()),
-                decalage,
+                decalage: decalage + p.types_murs[0].epaisseur(),
                 phase: None,
                 sous_projet: None,
                 variante: None,
@@ -145,10 +164,10 @@ mod tests {
     fn mur_partiellement_couvert_suit_le_toit_et_garde_sa_hauteur_a_lexterieur() {
         let mut p = exemple();
         let id = toiture(&mut p, &[rectangle(1000.0, 5000.0, -500.0, 500.0)], 4200.0);
-        p.attaches_toitures.insert("m".into(), id);
+        p.attaches_toitures.insert("m".into(), [id].into());
         let coupes = jonctions::coupes(&p);
         for hauteur in [4200.0, 2100.0] {
-            p.dalles[0].decalage = hauteur;
+            p.dalles[0].decalage = hauteur + p.types_murs[0].epaisseur();
             let tris = mur(&p, &p.murs[0], &coupes).unwrap();
             let attendu = 200.0 * (1000.0 * 3000.0 + 3000.0 * hauteur);
             assert!((signed_volume(&tris) - attendu).abs() < 1.0);
@@ -175,8 +194,9 @@ mod tests {
         ];
         let id = toiture(&mut p, &contours, 3500.0);
         // Une pente de 45° à partir du bord x = 1000 mm.
+        p.dalles[0].decalage = 3500.0 + p.types_murs[0].epaisseur() * 2.0_f64.sqrt();
         p.dalles[0].pentes = vec![vec![None, None, None, Some(45.0)], vec![None; 4]];
-        p.attaches_toitures.insert("m".into(), id);
+        p.attaches_toitures.insert("m".into(), [id].into());
         let tris = mur(&p, &p.murs[0], &jonctions::coupes(&p)).unwrap();
         let attendu = 200.0 * (2500.0 * 3000.0 + 500.0 * 3750.0 + 1000.0 * 5000.0);
         assert!((signed_volume(&tris) - attendu).abs() < 1.0);
@@ -198,7 +218,7 @@ mod tests {
             .ajouter_mur([0.0, 0.0], [4000.0, 0.0], &parametres)
             .unwrap();
         let toit = toiture(&mut p, &[rectangle(-500.0, 4500.0, -50.0, 500.0)], 4000.0);
-        p.attaches_toitures.insert(id, toit);
+        p.attaches_toitures.insert(id, [toit].into());
         let coupes = jonctions::coupes(&p);
         let mut hauteurs: Vec<_> = murs(&p, &coupes)
             .into_iter()
@@ -218,22 +238,45 @@ mod tests {
     }
 
     #[test]
-    fn un_toit_sans_recouvrement_ou_sous_le_pied_du_mur_reste_refuse() {
+    fn un_toit_hors_emprise_ou_sous_le_pied_ne_change_pas_le_mur() {
         let mut p = exemple();
         let id = toiture(&mut p, &[rectangle(4000.0, 5000.0, -500.0, 500.0)], 3500.0);
-        p.attaches_toitures.insert("m".into(), id);
+        p.attaches_toitures.insert("m".into(), [id].into());
         let coupes = jonctions::coupes(&p);
-        assert!(
-            mur(&p, &p.murs[0], &coupes)
-                .unwrap_err()
-                .contains("emprise")
-        );
+        let tris = mur(&p, &p.murs[0], &coupes).unwrap();
+        assert!((signed_volume(&tris) - 2.4e9).abs() < 1.0);
         p.dalles[0].contours = vec![rectangle(1000.0, 5000.0, -500.0, 500.0)];
         p.dalles[0].decalage = -100.0;
-        assert!(
-            mur(&p, &p.murs[0], &coupes)
-                .unwrap_err()
-                .contains("sous le pied")
-        );
+        let tris = mur(&p, &p.murs[0], &coupes).unwrap();
+        assert!((signed_volume(&tris) - 2.4e9).abs() < 1.0);
+    }
+    #[test]
+    fn decalage_place_le_dessus_a_legout() {
+        let mut p = exemple();
+        toiture(&mut p, &[rectangle(1000.0, 5000.0, -500.0, 500.0)], 3500.0);
+        let d = &mut p.dalles[0];
+        d.decalage = 3500.0;
+        d.pentes = vec![vec![None, None, None, Some(45.0)]];
+        let (bas, haut) = d.decalages_couches(p.types_murs[0].epaisseur());
+        let tris = pente::couche(&d.contours, &pente::plans(d), d.decalage, bas, haut);
+        let cote = tris
+            .iter()
+            .flatten()
+            .filter(|v| (v.x - 1.0).abs() < 1e-8)
+            .map(|v| v.z)
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!((cote - 3.5).abs() < 1e-8);
+    }
+
+    #[test]
+    fn deux_toitures_decoupent_un_mur_et_la_plus_basse_prime_au_recouvrement() {
+        let mut p = exemple();
+        let a = toiture(&mut p, &[rectangle(-500.0, 2500.0, -500.0, 500.0)], 2500.0);
+        let b = toiture(&mut p, &[rectangle(1500.0, 3500.0, -500.0, 500.0)], 4000.0);
+        let c = toiture(&mut p, &[rectangle(5000.0, 6000.0, -500.0, 500.0)], 6000.0);
+        p.attaches_toitures.insert("m".into(), [a, b, c].into());
+        let tris = mur(&p, &p.murs[0], &jonctions::coupes(&p)).unwrap();
+        let attendu = 200.0 * (2500.0 * 2500.0 + 1000.0 * 4000.0 + 500.0 * 3000.0);
+        assert!((signed_volume(&tris) - attendu).abs() < 1.0);
     }
 }

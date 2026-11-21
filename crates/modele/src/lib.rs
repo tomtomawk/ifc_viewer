@@ -190,7 +190,7 @@ pub struct Projet {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nomenclatures: Vec<documentation::Nomenclature>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub attaches_toitures: BTreeMap<String,String>,
+    pub attaches_toitures: BTreeMap<String, std::collections::BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub priorites_jonction: BTreeMap<String,i32>,
     /// Ligne d'implantation (justification) choisie à la création d'un mur ou d'un
@@ -909,8 +909,7 @@ pub struct Dalle {
     /// différents).
     #[serde(default, skip_serializing_if = "SorteDalle::est_dalle")]
     pub sorte: SorteDalle,
-    /// Altitude par rapport au niveau (mm) : du dessus (dalle, sol) ou de la sous-face
-    /// (plafond, toiture ; à l'égout pour une toiture en pente).
+    /// Altitude (mm) : dessus pour dalle/sol, sous-face pour plafond, égout pour toiture.
     pub decalage: f64,
     /// Contours dans le plan (mm) : extérieurs et trous, règle pair-impair.
     pub contours: Vec<Vec<[f64; 2]>>,
@@ -973,9 +972,9 @@ impl SorteDalle {
         }
     }
 
-    /// Le décalage repère la sous-face (plafond, toiture) et non le dessus.
+    /// Le plafond se référence par sa sous-face. La toiture se référence par le dessus à l’égout.
     pub fn sous_face(self) -> bool {
-        matches!(self, Self::Plafond | Self::Toiture)
+        self == Self::Plafond
     }
 
     /// Les arêtes peuvent définir une pente (toiture, plafond rampant).

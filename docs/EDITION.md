@@ -680,10 +680,13 @@ une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvre
   différentes ou d'arêtes sans pente sont refusées avec un message ; elles doivent
   être décomposées en plusieurs toitures. Les contours convexes gardent le calcul
   par arête existant.
-- L'attachement accepte un recouvrement partiel. Dans l'emprise de la toiture,
-  le mur suit la sous-face. En dehors de l'emprise et au droit des trémies, le mur
-  garde sa contrainte haute. Détacher rétablit cette contrainte sur l'ensemble du mur.
-  Supprimer la toiture détache ses murs.
+- Sélectionner les murs, cliquer une ou plusieurs toitures, puis choisir
+  **Terminer**. Une toiture sans recouvrement avec le mur reste liée, sans modifier
+  le mur. Sous plusieurs toitures, le mur suit la sous-face la plus basse. Hors
+  des emprises et au droit des trémies, le mur garde sa contrainte haute.
+  **Détacher des toitures** retire tous les liens des murs sélectionnés.
+  Supprimer une toiture ne retire que les liens vers cette toiture.
+  Dans Propriétés, le décalage de la toiture cote le dessus à l’égout.
 - Après chaque opération, les opérations booléennes des murs inchangés sont reprises
   de la mémoire (`noyau::csg_memoire`). Les arêtes jointes par matériau et
   l'assemblage de la scène sont recalculés en entier (mesures et suite :
@@ -777,6 +780,9 @@ retablir
 enregistrer /chemin/projet.modele.json
 ```
 
+Une deuxième commande `attacher` avec une autre toiture ajoute une jonction.
+Passer `"toiture":null` retire toutes les jonctions des murs indiqués.
+
 Le type `modele::commandes::Commande` décrit aussi `modifier_niveau`, `quadrillage`,
 `aligner`, `ajuster`, `actualiser_type`, `priorite_jonction`, `contour`, `tremie`,
 `annoter`, `feuille` et `nomenclature`. Les trois derniers acceptent respectivement
@@ -797,7 +803,7 @@ La sortie de dessin accepte `.svg` ou `.pdf`. `--editer` remplace le fichier d'e
 si la destination est omise. Les commandes renvoient un code non nul en cas d'erreur.
 
 Collections v0 ajoutées : `quadrillages`, `annotations`, `feuilles`, `nomenclatures`.
-Tables facultatives : `attaches_toitures` (id du mur/assemblage → id de toiture),
+Tables facultatives : `attaches_toitures` (id du mur/assemblage → tableau d’identifiants de toitures),
 `priorites_jonction` (id du mur/couche → entier). Les annotations appartiennent à une
 vue ; leurs formes : `texte`, `ligne`, `polyligne` (`points`, `fermee`, `courbures`), `spline`
 (`points` de passage, `fermee`, `type_trait`), `cercle` (`centre`, `rayon`, `type_trait`), `arc` (`points` :
