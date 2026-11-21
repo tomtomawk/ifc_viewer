@@ -21,7 +21,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene` (`maillage` en de
 
 Profondeur de la vue inversée : effacer à `LOIN_INVERSE`, comparer avec `COMPARAISON_INVERSEE`. Aucun décalage de profondeur sur les faces. Chaque dessin (vue, fenêtre de vue) a deux passes : faces opaques, copie de leur profondeur (`profondeur_faces`), puis traits et transparents. Les traits ne passent pas par le test du matériel : `trait_cache` (`scene.wgsl`) compare leur profondeur, avancée par `avancer`, à celle des faces lue au centre du trait et prolongée par leur pente. Les annotations sont avancées par `avancer` et testées par le matériel.
 
-Apparences (`scene.wgsl`) : `effet_apparence` reçoit une `Projection` ; les faces verticales courbes passent par `effet_courbe` (projections sur les plans verticaux des axes). Herbe : `fs_herbe` / `brin_herbe`, `COUCHES_HERBE` couches dessinées par instances.
+Apparences (`scene.wgsl`) : `effet_apparence` reçoit une `Projection` ; les faces verticales courbes passent par `effet_courbe` (projections sur les plans verticaux des axes). Herbe : `fs_herbe` / `brin_herbe`, `COUCHES_HERBE` couches dessinées par instances, trois réseaux de cellules tournés (pas de rangs).
 
 `MAX_APPARENCES` est dans `noyau::constantes` et en dur dans `scene.wgsl` : les deux valeurs doivent rester égales. Les tests `shader_*_valide` valident les shaders (naga) sans GPU. Le rendu lui-même ne se teste pas sans affichage. `gpu.rs` dépasse 600 lignes (`Renderer` à un seul `impl`) : ne pas l'agrandir.
 
