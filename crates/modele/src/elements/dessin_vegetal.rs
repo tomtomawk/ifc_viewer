@@ -120,17 +120,23 @@ fn solides(essence: Essence, graine: &str) -> (Vec<[DVec3; 3]>, Vec<[DVec3; 3]>)
             (corps, houppier)
         }
         Essence::Conifere => {
-            // trois cônes lisses (16 pans), du plus large au plus étroit
-            let fut = h * 0.12;
+            // trois cônes lisses (16 pans), du plus large au plus étroit ; chaque arbre tire
+            // la hauteur du fût, l'étagement, la largeur et la hauteur de chaque cône, son
+            // pivotement et un léger déport du sommet
+            let fut = h * alea.entre(0.08, 0.16);
             let corps = tronc(pied, h * 0.6, rt, rt * 0.5, 8);
             let mut houppier = Vec::new();
             let n = 16;
             for (z, r, hc) in [(0.0, 0.5, 0.5), (0.3, 0.38, 0.42), (0.55, 0.26, 0.45)] {
+                let z = if z > 0.0 { z + alea.entre(-0.05, 0.05) } else { z };
+                let (r, hc) = (r * alea.entre(0.85, 1.0), hc * alea.entre(0.9, 1.1));
                 let base = pied + DVec3::Z * (fut + (h - fut) * z);
                 let (rb, hh) = (d * r, (h - fut) * hc);
-                let sommet = base + DVec3::Z * hh;
+                let deport = alea.entre(0.0, std::f64::consts::TAU);
+                let sommet = base + DVec3::new(deport.cos(), deport.sin(), 0.0) * d * alea.entre(0.0, 0.03) + DVec3::Z * hh;
+                let pivot = alea.entre(0.0, std::f64::consts::TAU / n as f64);
                 for i in 0..n {
-                    let (a, b) = (i as f64 / n as f64 * std::f64::consts::TAU, (i + 1) as f64 / n as f64 * std::f64::consts::TAU);
+                    let (a, b) = (pivot + i as f64 / n as f64 * std::f64::consts::TAU, pivot + (i + 1) as f64 / n as f64 * std::f64::consts::TAU);
                     let p = |ang: f64| base + DVec3::new(ang.cos() * rb, ang.sin() * rb, 0.0);
                     houppier.push([p(a), p(b), sommet]);
                     houppier.push([p(b), p(a), base]);
