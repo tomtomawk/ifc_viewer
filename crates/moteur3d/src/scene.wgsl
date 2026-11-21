@@ -232,50 +232,69 @@ fn vs_herbe(s: Sommet, @builtin(instance_index) i: u32) -> VarieHerbe {
 }
 
 // Tranche d'un brin d'herbe à la hauteur relative `f` : section aplatie, orientée au
-// hasard, effilée en pointe et courbée vers son plat ; deux brins par cellule (j = 0, 1),
-// pied décalé, hauteur tirée. `haut` : hauteur relative au-delà de laquelle le brin est
-// effacé (fondu au loin). Traînée : la tranche est prolongée vers l'arrière le long du
-// regard (`axe`, sur `lg` cellules), pour couvrir à l'écran l'intervalle jusqu'à la couche
-// du dessus en vue rasante (sinon les brins fins apparaissent en pointillés) ;
-// `par_couche` : longueur de traînée qui correspond à l'écart d'une couche. Un point de la
-// traînée figure le brin entre deux couches : sa hauteur, continue, règle largeur et
-// teinte (pas de marches d'une couche à l'autre).
+// hasard, effilée en pointe et courbée vers son plat. Trois réseaux de cellules (j = 0,
+// 1, 2), un brin par cellule : réseaux tournés les uns par rapport aux autres et aux axes,
+// décalés, pied tiré loin dans la cellule (un seul réseau carré alignait les brins en
+// rangs). `uv` : point du sol (mm) ; `taille` : côté des cellules (mm) ; `touffe` (0..1) :
+// bruit lent qui module la hauteur (touffes, zones plus rases). `haut` : hauteur relative
+// au-delà de laquelle le brin est effacé (fondu au loin). Traînée : la tranche est
+// prolongée vers l'arrière le long du regard (`axe`, sur `lg` cellules), pour couvrir à
+// l'écran l'intervalle jusqu'à la couche du dessus en vue rasante (sinon les brins fins
+// apparaissent en pointillés) ; `par_couche` : longueur de traînée qui correspond à
+// l'écart d'une couche. Un point de la traînée figure le brin entre deux couches : sa
+// hauteur, continue, règle largeur et teinte (pas de marches d'une couche à l'autre).
 struct Brin {
     touche: bool,
     t: f32,
     // direction du plat du brin dans le plan du sol
     plat: vec2f,
-    // pied du brin dans sa cellule (-0,5..0,5)
+    // pied du brin (mm, plan du sol)
     pied: vec2f,
     teinte: f32,
 }
 
-fn brin_herbe(cellule: vec2f, local: vec2f, f: f32, j: f32, haut: f32, axe: vec2f, lg: f32, par_couche: f32) -> Brin {
+fn brin_herbe(uv: vec2f, taille: f32, j: f32, voisin: bool, touffe: f32, f: f32, haut: f32, axe: vec2f, lg: f32, par_couche: f32) -> Brin {
     var b: Brin;
-    let g = cellule + vec2f(17.3, 5.9) * j;
-    let hb = 0.35 + 0.65 * hachage(g + vec2f(2.7, 9.1));
-    b.t = f / hb;
     b.touche = false;
+    // réseau j : tourné de 0,41 + 2,09·j rad (aucun axe commun avec les autres ni avec
+    // X, Y), décalé d'une fraction de cellule
+    let ar = 0.41 + 2.09 * j;
+    let c = cos(ar);
+    let sn = sin(ar);
+    let rot = mat2x2f(c, sn, -sn, c);
+    let q0 = rot * uv / taille + vec2f(0.37, 0.71) * j;
+    let axe_r = rot * axe;
+    // `voisin` : la cellule voisine côté œil, dont le brin peut prolonger sa traînée
+    // jusqu'ici
+    let cellule = floor(q0) - select(vec2f(0.0), round(axe_r), voisin);
+    let local = q0 - cellule - 0.5;
+    let g = cellule + vec2f(17.3, 5.9) * j;
+    let hb = (0.35 + 0.65 * hachage(g + vec2f(2.7, 9.1))) * (0.6 + 0.55 * touffe);
+    b.t = f / hb;
     if b.t > haut {
         return b;
     }
     let a = hachage(g + vec2f(3.9, 4.4)) * 6.2832;
     let large = vec2f(cos(a), sin(a));
-    b.plat = vec2f(-large.y, large.x);
-    b.pied = (vec2f(hachage(g + vec2f(1.3, 6.1)), hachage(g + vec2f(8.4, 2.2))) - 0.5) * 0.36;
-    let courbe = (hachage(g + vec2f(7.1, 3.3)) - 0.5) * 0.8 * b.t * b.t;
-    var d = local - b.pied - b.plat * courbe;
+    let plat = vec2f(-large.y, large.x);
+    let pied = (vec2f(hachage(g + vec2f(1.3, 6.1)), hachage(g + vec2f(8.4, 2.2))) - 0.5) * 0.5;
+    let courbe = (hachage(g + vec2f(7.1, 3.3)) - 0.5) * 0.6 * b.t * b.t;
+    var d = local - pied - plat * courbe;
     if lg > 1e-4 {
-        let s = clamp(dot(d, axe), 0.0, lg);
-        d -= axe * s;
+        let s = clamp(dot(d, axe_r), 0.0, lg);
+        d -= axe_r * s;
         b.t = (f + s / max(par_couche, 1e-4) / f32(COUCHES_HERBE)) / hb;
     }
     if b.t >= 1.0 || b.t > haut {
         return b;
     }
-    let demi_largeur = 0.13 * pow(1.0 - b.t, 0.6) + 0.02;
-    let q = vec2f(dot(d, large) / demi_largeur, dot(d, b.plat) / 0.06);
+    let demi_largeur = 0.11 * pow(1.0 - b.t, 0.6) + 0.02;
+    let q = vec2f(dot(d, large) / demi_largeur, dot(d, plat) / 0.05);
     b.touche = dot(q, q) < 1.0;
+    // retour au plan du sol (rotation inverse)
+    let inv = transpose(rot);
+    b.plat = inv * plat;
+    b.pied = inv * (cellule + 0.5 + pied - vec2f(0.37, 0.71) * j) * taille;
     b.teinte = hachage(g + vec2f(5.3, 1.7));
     return b;
 }
@@ -290,18 +309,16 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
     let k = e.rang * 22;
     let regard = select(e.pos - g.eye.xyz, passe.view_dir.xyz, g.eye.w > 0.5);
     let dist = length(e.pos - g.eye.xyz);
-    // cellules de 16 mm près de la caméra ; au loin la cellule double par niveau (jusqu'à
-    // 128 mm) pour couvrir au moins 6 pixels (brin d'au moins 2 pixels de large),
+    // cellules de 20 mm près de la caméra (trois réseaux : environ 7 500 brins par m²) ; au
+    // loin la cellule double par niveau (jusqu'à 160 mm) pour couvrir au moins 6 pixels,
     // passage d'un niveau au suivant tramé cellule par cellule (pas de couture nette)
     // empreinte du pixel en travers du regard (la plus petite) : en vue rasante, l'autre
     // s'allonge sans que les brins, vus de côté, rapetissent à l'écran
     let empreinte = min(length(dx), length(dy));
-    let niveau_f = clamp(log2(max(empreinte * 6.0 / 16.0, 1.0)), 0.0, 3.0);
+    let niveau_f = clamp(log2(max(empreinte * 6.0 / 20.0, 1.0)), 0.0, 3.0);
     let niveau0 = floor(niveau_f);
-    let niveau = niveau0 + select(0.0, 1.0, hachage(floor(uv / (16.0 * exp2(niveau0))) + vec2f(4.2, 8.6)) < niveau_f - niveau0);
-    let taille = 16.0 * exp2(niveau);
-    let cellule = floor(uv / taille);
-    let local = fract(uv / taille) - 0.5;
+    let niveau = niveau0 + select(0.0, 1.0, hachage(floor(uv / (20.0 * exp2(niveau0))) + vec2f(4.2, 8.6)) < niveau_f - niveau0);
+    let taille = 20.0 * exp2(niveau);
     // brins effacés quand la cellule couvre moins de 3 pixels (pas de moiré), et au loin
     let fondu = (1.0 - smoothstep(0.17, 0.35, empreinte / taille)) * (1.0 - smoothstep(30.0, 60.0, dist));
     if e.fraction > fondu {
@@ -316,13 +333,21 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
         axe = regard.xy / horiz;
         par_couche = ecart / taille / max(abs(regard.z) / horiz, 0.05);
     }
-    let lg = min(par_couche, 0.6);
-    var b = brin_herbe(cellule, local, e.fraction, 0.0, fondu, axe, lg, par_couche);
-    if !b.touche {
-        b = brin_herbe(cellule, local, e.fraction, 1.0, fondu, axe, lg, par_couche);
-        if !b.touche {
-            discard;
+    let lg = min(par_couche, 1.2);
+    // touffes : hauteur modulée par un bruit lent (35 cm et 1,2 m)
+    let touffe = bruit_valeur(uv / 350.0) * 0.6 + bruit_valeur(uv / 1200.0 + vec2f(3.1, 7.7)) * 0.4;
+    // trois réseaux ; en vue rasante (traînée de plus de 0,35 cellule), aussi la cellule
+    // voisine côté œil de chacun
+    let voisins = select(1, 2, lg > 0.35);
+    var b: Brin;
+    b.touche = false;
+    for (var v = 0; v < voisins && !b.touche; v++) {
+        for (var j = 0; j < 3 && !b.touche; j++) {
+            b = brin_herbe(uv, taille, f32(j), v == 1, touffe, e.fraction, fondu, axe, lg, par_couche);
         }
+    }
+    if !b.touche {
+        discard;
     }
     let t = b.t;
     var base = e.couleur;
@@ -331,10 +356,9 @@ fn fs_herbe(e: VarieHerbe) -> @location(0) vec4f {
         // par brin : lue à la position de chaque tranche, le détail de la photo dessinait
         // des stries d'une couche à l'autre), mêlée à la teinte moyenne de la texture
         // (celle de la surface au loin) : pas de démarcation où les brins s'effacent
-        let uv_pied = (cellule + 0.5 + b.pied) * taille;
         let g_cellule = vec2f(taille, 0.0);
         let moyenne = carte(k, 0, uv, dx * 48.0, dy * 48.0).rgb;
-        base = mix(moyenne, carte(k, 0, uv_pied, g_cellule, g_cellule.yx).rgb, 0.45);
+        base = mix(moyenne, carte(k, 0, b.pied, g_cellule, g_cellule.yx).rgb, 0.45);
     }
     // racine sombre, pointe claire, quelques brins plus jaunes ; vers la teinte moyenne du
     // sol quand les brins s'effacent
