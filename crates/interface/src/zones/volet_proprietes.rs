@@ -126,10 +126,9 @@ impl Application {
             ui.separator();
         }
         // sélection native (une ou plusieurs) : le premier élément
-        let selection = self.selected.or_else(|| {
-            let id = self.bim.selection.first()?;
+        let selection = self.bim.selection.first().and_then(|id| {
             crate::socle::document_bim::elements_natifs(&self.natif.as_ref()?.0).find(|(_, c)| *c == id).map(|(g, c)| modele::identifiants::id_natif(g, c))
-        });
+        }).or(self.selected);
         let (Some(_), Some(id)) = (&self.scene, selection) else {
             if self.bim.selection.is_empty() {
                 ui.label(RichText::new("Sélectionner un élément dans la vue ou l'arborescence.").weak());
