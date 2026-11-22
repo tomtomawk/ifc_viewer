@@ -459,6 +459,7 @@ pub struct Application {
     natif: Option<(modele::Projet, PathBuf)>,
     historique: commandes::historique::Historique,
     collaboration: Option<::collaboration::session::Session>,
+    details_conflits: Option<usize>,
     natif_modifie: bool,
     /// Repère du plan : le prochain clic choisit l'arête à mettre à l'horizontale.
     alignement_plan: bool,
@@ -709,6 +710,7 @@ impl Application {
             natif: None,
             historique: Default::default(),
             collaboration: None,
+            details_conflits: None,
             natif_modifie: false,
             raccourci_en_attente: None,
             coupe_depart: None,

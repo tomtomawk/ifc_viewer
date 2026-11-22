@@ -50,8 +50,7 @@ impl Application {
                 }
             }
             let disponible = self.natif.is_some() && self.loading.is_none() && self.sauvegarde.is_none();
-            if let Some(c)=&self.collaboration{let largeur=(ui.available_width()-90.0).clamp(0.0,220.0);ui.add_sized([largeur,20.0],egui::Label::new(RichText::new(format!("Partagé · {}",c.etat)).small()).truncate()).on_hover_text(&c.etat);}
-            else if self.loading.is_some(){ui.label(RichText::new(&self.status).small());}
+            if self.loading.is_some(){ui.label(RichText::new(&self.status).small());}
             let mut historique_choisi = None;
             for (retablir, titre) in [(false, "Annuler"), (true, "Rétablir")] {
                 let famille = self.famille.as_ref().filter(|_| self.famille_active);

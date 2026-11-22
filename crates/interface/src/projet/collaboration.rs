@@ -112,17 +112,52 @@ impl Application {
         if self.saisie_active || self.avant_saisie.is_some() {
             return;
         }
-        if let Some(c) = &mut self.collaboration {
-            match c.recevoir() {
-                Ok(Some(_)) => {
-                    let affichage=c.affichage();
-                    if let Err(e) = affichage.and_then(|p|self.appliquer_projet_interne(p, true)) {
-                        self.error = Some(e);
-                    }
-                }
-                Ok(None) => (),
-                Err(e) => self.error = Some(e),
-            }
+        let Some(c) = self.collaboration.as_mut() else { return; };
+        if !c.synchronisation_en_cours() {
+            return;
+        }
+        let resultat = match c.recevoir() {
+            Ok(Some(_)) => c.affichage().map(Some),
+            Ok(None) if c.synchronisation_en_cours() => return,
+            Ok(None) => Err(c.etat.clone()),
+            Err(e) => Err(e),
+        };
+        let attente = c.copie.attente.len();
+        self.message = None;
+        if let Err(e) = resultat.and_then(|p| {
+            p.map_or(Ok(()), |p| self.appliquer_projet_interne(p, true))
+        }) {
+            self.signaler(crate::socle::messages::Niveau::Erreur, format!("La synchronisation n’a pas abouti. {e}"));
+        } else if let Some(message) = self.message_conflits() {
+            self.journaliser_conflit(message);
+            self.selectionner_conflits();
+        } else if attente == 0 {
+            self.informer("Synchronisation terminée. Le projet partagé est à jour.");
+        } else {
+            self.informer(format!("Synchronisation terminée. {attente} proposition(s) en attente."));
+        }
+    }
+
+    pub(crate) fn message_conflits(&self) -> Option<String> {
+        let n = self.collaboration.as_ref()?.copie.conflits.len();
+        match n {
+            0 => None,
+            1 => Some("Synchronisation : une proposition en conflit n’a pas été publiée.".into()),
+            _ => Some(format!("Synchronisation : {n} propositions en conflit n’ont pas été publiées.")),
+        }
+    }
+
+    pub(crate) fn ouvrir_details_conflits(&mut self) {
+        self.selectionner_conflits();
+        self.details_conflits = Some(self.document_actif);
+    }
+
+    fn selectionner_conflits(&mut self) {
+        let (Some(c), Some((p, _))) = (&self.collaboration, &self.natif) else { return; };
+        let ids = crate::projet::conflits::elements_concernes(&c.copie, p);
+        if !ids.is_empty() {
+            self.select(None, false);
+            self.bim.selection = ids;
         }
     }
     pub(crate) fn cles_collaboration(&self) -> Vec<String> {
@@ -233,7 +268,14 @@ impl Application {
             return;
         };
         use crate::projet::conflits::Choix;
-        if let Some(choix) = crate::projet::conflits::fenetre(ctx, &c.copie, !c.synchronisation_en_cours()) {
+        let mut ouvert = self.details_conflits == Some(self.document_actif) && !c.copie.conflits.is_empty();
+        let choix = if ouvert {
+            crate::projet::conflits::fenetre(ctx, &c.copie, !c.synchronisation_en_cours(), &mut ouvert)
+        } else { None };
+        if !ouvert && self.details_conflits == Some(self.document_actif) {
+            self.details_conflits = None;
+        }
+        if let Some(choix) = choix {
             let r = self
                 .collaboration
                 .as_mut()

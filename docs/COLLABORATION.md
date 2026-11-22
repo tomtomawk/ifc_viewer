@@ -13,7 +13,10 @@ dans le journal local (`apercu_conflit`). Cet aperçu n'est pas publié, ne sert
 base à une nouvelle édition et reste visible après réouverture. Les décisions de
 résolution sont explicites et archivent les propositions avant de changer cet aperçu.
 
-La fenêtre **Modifications à vérifier** affiche chaque proposition avec le motif
+À la fin de la synchronisation, le résultat apparaît dans les messages de la vue.
+En cas de conflit, les éléments concernés présents dans le projet sont sélectionnés.
+Le message rouge ouvre, avec **Détails**, la fenêtre **Modifications à vérifier**.
+Elle affiche chaque proposition avec le motif
 du blocage et les modifications qu’elle contient. **Garder le projet partagé**
 archive la proposition locale et la retire de la synchronisation. **Soumettre ma
 proposition à nouveau** la remet en attente de validation. Le choix s’applique à

@@ -12,6 +12,54 @@ pub(super) enum Choix {
     Local(String),
 }
 
+/// Ne retient que les identités encore présentes dans le projet affiché.
+pub(super) fn elements_concernes(copie: &Copie, p: &modele::Projet) -> Vec<String> {
+    let presents: BTreeSet<&str> = crate::socle::document_bim::elements_natifs(p)
+        .map(|(_, id)| id.as_str())
+        .chain(p.annotations.iter().map(|a| a.id.as_str()))
+        .chain(p.pieces.iter().map(|a| a.id.as_str()))
+        .chain(p.quadrillages.iter().map(|a| a.id.as_str()))
+        .chain(p.vues.iter().map(|a| a.id.as_str()))
+        .collect();
+    let retenir = |ids: &mut BTreeSet<String>, cle: &str, valeurs: &[Option<&Value>]| {
+        let cle = cle.strip_prefix("#usages/").unwrap_or(cle);
+        if !cle.starts_with('#')
+            && !cle.starts_with("@ordre/")
+            && let Some((_, id)) = cle.rsplit_once('/')
+            && presents.contains(id)
+        {
+            ids.insert(id.to_owned());
+        }
+        for v in valeurs.iter().flatten() {
+            if let Some(id) = v["id"].as_str().filter(|id| presents.contains(id)) {
+                ids.insert(id.to_owned());
+            }
+        }
+    };
+    let mut ids = BTreeSet::new();
+    for (id, conflits) in &copie.conflits {
+        let mut cibles = BTreeSet::new();
+        for c in conflits.iter().filter(|c| c.raison != EFFET) {
+            retenir(
+                &mut cibles,
+                &c.cle,
+                &[c.locale.as_ref(), c.acceptee.as_ref(), c.base.as_ref()],
+            );
+        }
+        // Un refus de zone ne donne pas d’identifiant. Montrer alors la proposition
+        // locale plutôt que de sélectionner tous les éléments de la zone.
+        if cibles.is_empty()
+            && let Some(t) = copie.attente.iter().find(|t| &t.id == id)
+        {
+            for c in &t.changements {
+                retenir(&mut cibles, &c.cle, &[c.avant.as_ref(), c.apres.as_ref()]);
+            }
+        }
+        ids.extend(cibles);
+    }
+    ids.into_iter().collect()
+}
+
 fn categorie(cle: &str) -> Option<&'static str> {
     Some(match cle {
         "murs" => "Mur",
@@ -225,7 +273,12 @@ fn champs(local: &Value, partage: &Value, objets: &Objets) -> Vec<(&'static str,
     lignes
 }
 
-pub(super) fn fenetre(ctx: &egui::Context, copie: &Copie, libre: bool) -> Option<Choix> {
+pub(super) fn fenetre(
+    ctx: &egui::Context,
+    copie: &Copie,
+    libre: bool,
+    ouvert: &mut bool,
+) -> Option<Choix> {
     if copie.conflits.is_empty() {
         return None;
     }
@@ -233,6 +286,7 @@ pub(super) fn fenetre(ctx: &egui::Context, copie: &Copie, libre: bool) -> Option
     let objets = &copie.base.objets;
     egui::Window::new("Modifications à vérifier")
         .id(egui::Id::unique("conflits_collaboration"))
+        .open(ouvert)
         .default_width(620.0)
         .default_pos(ctx.content_rect().center() - egui::vec2(310.0, 165.0))
         .show(ctx, |ui| {

@@ -14,7 +14,7 @@ Rôle : état et services de l'application autour de `Application` (défini avec
 | `fenetre.rs` | seul module public : `lancer` (appelé par `app`), `arriere_plan`, `cadre_natif` ; `include_bytes!("../../assets/icone.png")` |
 | `presse_papiers.rs` | instantané des objets copiés, événements du presse-papiers et collage entre projets ou sur un niveau |
 | `parametres.rs` | paramètres personnels, raccourcis clavier |
-| `messages.rs` | messages centralisés sous le bandeau de dessin : `informer`, `signaler` (information, avertissement, erreur), `afficher_messages`, `consigne_vue`, `origine_consigne` ; journal (`Journal`, `suivre_messages` une fois par image, `bouton_journal`, commande `journal` du pilote). `error` et `status` restent écrits directement partout : le journal les relève, ne pas les remplacer par des appels |
+| `messages.rs` | messages centralisés sous le bandeau de dessin : `informer`, `signaler` (information, avertissement, erreur), `afficher_messages` (dont le message de conflit avec **Détails**), `consigne_vue`, `origine_consigne` ; journal (`Journal`, `suivre_messages` une fois par image, `bouton_journal`, commande `journal` du pilote). `error` et `status` restent écrits directement partout : le journal les relève, ne pas les remplacer par des appels |
 | `aides.rs` | aides communes (icônes, libellés, réticule) ; importé en glob par `lib.rs` |
 | `commandes_pilote.rs`, `pilotage.rs` | exécution des requêtes du pilote MCP (`piloter`) |
 | `volets.rs` | palettes flottantes natives |
