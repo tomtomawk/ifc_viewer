@@ -312,17 +312,27 @@ impl Application {
         let Some(c) = self.collaboration.as_mut() else {
             return;
         };
-        let (resultat, message) = match choix {
-            Choix::Central(id) => (c.abandonner(&id), "Version centrale acceptée."),
-            Choix::Local(id) => (
-                c.resoudre_locale(&id),
-                "Modifications locales en attente de synchronisation.",
-            ),
+        let publier = matches!(choix, Choix::Local(_));
+        let resultat = match choix {
+            Choix::Central(id) => c.abandonner(&id),
+            Choix::Local(id) => c.resoudre_locale(&id),
         };
         match resultat.and_then(|p| self.appliquer_projet_interne(p, true)) {
             Ok(()) => {
-                self.informer(message);
                 self.selectionner_conflits();
+                if publier {
+                    if let Some(c) = &mut self.collaboration {
+                        match c.synchroniser(None, false) {
+                            Ok(()) => self.informer("Publication des modifications locales…"),
+                            Err(e) => self.signaler(
+                                crate::socle::messages::Niveau::Erreur,
+                                format!("Modifications conservées en local. La publication n’a pas démarré. {e}"),
+                            ),
+                        }
+                    }
+                } else {
+                    self.informer("Version centrale acceptée.");
+                }
             }
             Err(e) => self.signaler(crate::socle::messages::Niveau::Erreur, e),
         }

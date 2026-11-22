@@ -3,6 +3,7 @@ mod apercu;
 pub mod cli;
 pub mod concurrence;
 pub mod partage;
+mod resolution;
 pub mod session;
 pub mod stockage;
 #[cfg(test)]

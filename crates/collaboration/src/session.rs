@@ -43,7 +43,7 @@ pub struct Session {
     // Le verrou local reste vivant pour interdire deux propriétaires de la même queue.
     _local: std::fs::File,
 }
-fn overlay(base: &Etat, transactions: &[Transaction]) -> Resultat<Etat> {
+pub(super) fn overlay(base: &Etat, transactions: &[Transaction]) -> Resultat<Etat> {
     let mut etat = base.clone();
     for t in transactions {
         if etat.acceptes.contains_key(&t.id) {
@@ -272,8 +272,6 @@ impl Session {
         let copie = self.copie.clone();
         let journal_local = self.chemin.clone();
         let (tx, rx) = mpsc::channel();
-        self.messages = Some(rx);
-        self.etat = "Synchronisation…".into();
         std::thread::Builder::new()
             .name("collaboration-nas".into())
             .spawn(move || {
@@ -367,6 +365,8 @@ impl Session {
                 let _ = tx.send(resultat);
             })
             .map_err(|e| e.to_string())?;
+        self.messages = Some(rx);
+        self.etat = "Synchronisation…".into();
         Ok(())
     }
     /// Appelé uniquement hors saisie : une réponse n'écrase jamais un champ actif.
@@ -412,28 +412,7 @@ impl Session {
                 self.mesure_sync_ms = ms;
                 self.mesures_fichiers = mesures;
                 // Réapplication séquentielle ; un refus conserve la proposition entière.
-                let mut valides = Vec::new();
-                for t in &self.copie.attente {
-                    if self.copie.conflits.contains_key(&t.id) {
-                        continue;
-                    }
-                    let mut essais = valides.clone();
-                    essais.push(t.clone());
-                    if let Err(e) = overlay(&self.copie.base, &essais) {
-                        self.copie.conflits.insert(
-                            t.id.clone(),
-                            vec![Conflit {
-                                cle: "réapplication".into(),
-                                base: None,
-                                locale: None,
-                                acceptee: None,
-                                raison: e,
-                            }],
-                        );
-                    } else {
-                        valides = essais;
-                    }
-                }
+                resolution::revalider(&mut self.copie);
                 for (id, e) in &mut self.editeurs {
                     if let Some(t) = self.copie.base.textes.get(id) {
                         for u in t.mises_a_jour.values() {
@@ -472,46 +451,46 @@ impl Session {
         if self.messages.is_some() {
             return Err("Synchronisation en cours : attendre sa fin avant de résoudre".into());
         }
-        let proposition = self
+        let index = self
             .copie
             .attente
             .iter()
-            .find(|t| t.id == id)
-            .cloned()
+            .position(|t| t.id == id)
             .ok_or("Proposition absente")?;
-        let courant = self.travail()?;
-        let mut cibles = objets(&courant)?;
-        for c in concurrence::decomposer(proposition.changements.clone()) {
-            concurrence::affecter(&mut cibles, &c.cle, c.apres.clone());
-        }
-        let cible = projet(&cibles)?;
+        let proposition = &self.copie.attente[index];
+        let precedentes: Vec<_> = self.copie.attente[..index].iter()
+            .filter(|t| !self.copie.conflits.contains_key(&t.id))
+            .cloned().collect();
+        let base = overlay(&self.copie.base, &precedentes)?;
         let mut resolution = Transaction::entre(
-            &courant,
-            &cible,
+            &base.projection()?,
+            &resolution::cible(&base, proposition)?,
             &self.copie.session,
-            self.copie.base.revision,
+            base.revision,
         )?;
         resolution.textes = proposition.textes.clone();
         resolution.compense = Some(proposition.id.clone());
+        if resolution.changements.is_empty() && resolution.textes.is_empty() {
+            return self.abandonner(id);
+        }
         let archive = self
             .chemin
             .with_extension(format!("conflit-{}.json", uuid()));
         stockage::sauver_local(&archive, &encoder(&self.copie)?)?;
         let sauvegarde = self.copie.clone();
-        self.copie.attente.retain(|t| t.id != id);
+        self.copie.attente[index] = resolution.clone();
         self.copie.annulations.retain(|t| t.id != id);
         self.copie.conflits.remove(id);
+        resolution::revalider(&mut self.copie);
         if self.copie.conflits.is_empty() {
             self.copie.apercu_conflit = None;
         }
-        self.copie.attente.push(resolution.clone());
+        self.copie.annulations.push(resolution);
         match self.affichage().and_then(|p| {
             self.persister()?;
             Ok(p)
         }) {
             Ok(p) => {
-                self.copie.annulations.push(resolution);
-                self.persister()?;
                 self.etat = libelle_etat(!self.copie.conflits.is_empty(), true).into();
                 Ok(p)
             }

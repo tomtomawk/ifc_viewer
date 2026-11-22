@@ -19,9 +19,7 @@ pub(super) fn boutons(ui: &mut egui::Ui, id: &str, libre: bool, local: bool) -> 
         .clicked();
     let local = ui
         .add_enabled(libre && local, egui::Button::new("Conserver le local"))
-        .on_hover_text(
-            "Remet la version locale des éléments en attente pour la prochaine synchronisation.",
-        )
+        .on_hover_text("Relance la synchronisation pour publier vos modifications locales.")
         .clicked();
     if central {
         Some(Choix::Central(id.into()))

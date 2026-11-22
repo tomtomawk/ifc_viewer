@@ -10,7 +10,8 @@ Dépendances internes autorisées : `noyau`, `modele`, `maillage`, `commandes`, 
 |---|---|
 | `lib.rs` | `PROTOCOLE`, `projet`, `Transaction`, validation et fusion ; libellés de session (`libelle_etat`, `libelle_echec`, `echec`) |
 | `apercu.rs` | Affichage de la dernière base de travail pendant un conflit, avec les propositions locales compatibles en aperçu |
-| `session.rs` | `Session` (599 lignes : ne pas agrandir) |
+| `resolution.rs` | Reprise des champs modifiés sur la base de la proposition et validation séquentielle de la file locale |
+| `session.rs` | `Session` : copie de travail persistante et synchronisation |
 | `stockage.rs` | `Depot` (626 lignes : ne pas agrandir) |
 | `concurrence.rs`, `partage.rs`, `texte.rs`, `cli.rs` | décomposition et empreintes, `.bimpartage`, texte `yrs`, CLI |
 | `tests.rs` | 37 tests ; `course_entre_deux_processus…` et `crash_processus…` relancent le binaire de test par `--exact "tests::enfant_…"` : garder ce chemin si le module change de nom |

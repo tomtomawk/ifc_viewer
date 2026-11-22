@@ -22,7 +22,10 @@ Le bandeau rouge affiche le premier conflit en attente et permet de le traiter
 avec **Accepter le central** ou **Conserver le local**. **Détail** ouvre la liste
 des conflits avec le nom et le type des éléments, les écarts et le motif du blocage.
 **Accepter le central** archive les modifications locales du conflit.
-**Conserver le local** les remet en attente pour la prochaine synchronisation.
+**Conserver le local** reprend les champs modifiés sur la version partagée et
+lance aussitôt une synchronisation. La publication respecte l’ordre des
+modifications et les contrôles du dépôt. Si le dépôt est inaccessible ou
+refuse la publication, les modifications restent dans la copie locale.
 Lorsque des modifications ont été faites ensemble, le choix s’applique à leur
 ensemble. Les clés et les versions JSON sont accessibles dans **Détails techniques**.
 
