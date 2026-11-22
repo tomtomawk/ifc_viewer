@@ -76,13 +76,13 @@ impl Application {
                 let resp = ui.selectable_label(self.motif_selectionne.as_deref() == Some(n.as_str()), texte)
                     .on_hover_text("Clic : propriétés ; double-clic : modifier");
                 if resp.double_clicked() {
-                    action = Some(if d.tuile.is_some() { ActionMotif::Redessiner(n.clone()) } else { ActionMotif::Choisir(n.clone()) });
+                    action = Some(ActionMotif::Redessiner(n.clone()));
                 } else if resp.clicked() {
                     action = Some(ActionMotif::Choisir(n.clone()));
                 }
                 resp.context_menu(|ui| {
                     if ui.button("Modifier…").clicked() {
-                        action = Some(if d.tuile.is_some() { ActionMotif::Redessiner(n.clone()) } else { ActionMotif::Choisir(n.clone()) });
+                        action = Some(ActionMotif::Redessiner(n.clone()));
                         ui.close();
                     }
                     if ui.button("Dupliquer").clicked() { action = Some(ActionMotif::Dupliquer(n.clone())); ui.close(); }
@@ -226,7 +226,7 @@ impl Application {
             ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                if d.tuile.is_some() && ui.button("Redessiner…").on_hover_text("Ouvrir le motif dans sa vue de dessin").clicked() { action = Some(ActionMotif::Redessiner(choisi.clone())); }
+                if ui.button("Redessiner…").on_hover_text("Ouvrir le motif dans sa vue de dessin").clicked() { action = Some(ActionMotif::Redessiner(choisi.clone())); }
                 if ui.button("Dupliquer").clicked() { action = Some(ActionMotif::Dupliquer(choisi.clone())); }
             });
         });

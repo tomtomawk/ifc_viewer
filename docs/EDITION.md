@@ -852,6 +852,9 @@ tracent avec les outils ordinaires (Documenter › Ligne de dessin, Polyligne : 
 de dessin n'apparaît qu'avec l'outil lancé) et se modifient par le ruban Modifier
 (déplacer, copier, supprimer…). Les points s'accrochent au cadre (coins, milieux des
 bords, sur un bord), au centre du carré et aux traits déjà tracés ; pas de grille.
+Pour un motif défini par des familles de traits, la vue charge un échantillon carré du
+motif. Les modifications du dessin sont enregistrées sous forme de tuile répétée.
+Si le dessin, le genre et le côté sont conservés, **Terminer** garde les familles d’origine.
 Propriétés de la vue : nom, genre (Dessin ou Modèle), côté du carré (mm du papier, ou mm réels pour un motif de modèle), **Terminer** et **Annuler**.
 Terminer ramène les extrémités au 1/240 du carré, redresse un trait dont la direction
 serait trop fine pour être dessinée vers la direction exacte la plus proche (le message

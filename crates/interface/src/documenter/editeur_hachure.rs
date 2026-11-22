@@ -7,13 +7,40 @@
 //! (`TuileMotif::depuis_traits`) et retire la vue.
 use crate::*;
 use modele::documentation::{Annotation, AnnotationForme};
-use modele::motif_tuile::{TuileMotif, DIVISIONS_VUE, TAILLE_VUE};
+use modele::motif_tuile::{TuileMotif, TAILLE_VUE};
+use noyau::motif::{GrilleMotif, Motif, hachures_plan};
 
 /// Accrochages d'une vue de dessin : points (et leur genre), arêtes.
 type Accroches = (Vec<([f64; 2], crate::saisie::accrochage::AccrocheMur)>, Vec<[[f64; 2]; 2]>);
 
 /// Échelle de la vue du motif : traits fins devant le carré de 400 mm.
 const ECHELLE_VUE: f64 = 10.0;
+
+type TraitMotif = [[f64; 2]; 2];
+
+fn dessin_initial(motif: &modele::DefinitionMotif) -> (f64, Vec<TraitMotif>) {
+    if let Some(tuile) = &motif.tuile {
+        return (tuile.cote, tuile.traits_vue());
+    }
+    let grilles: Vec<_> = motif.lignes.iter().map(|ligne| GrilleMotif {
+        angle: ligne.angle.to_radians(),
+        origine: ligne.origine,
+        glissement: ligne.glissement,
+        decalage: ligne.pas,
+        tirets: ligne.tirets.iter().map(|t| t.abs()).collect(),
+    }).collect();
+    let cote = grilles.iter().map(|g| g.decalage.abs().max(g.tirets.iter().sum()))
+        .fold(1.0, f64::max) * 4.0;
+    let limite = if motif.genre == modele::GenreMotif::Modele { 10_000.0 } else { 100.0 };
+    let cote = cote.min(limite);
+    let carre = [[[0.0, 0.0], [cote, 0.0], [cote, cote]], [[0.0, 0.0], [cote, cote], [0.0, cote]]];
+    let grille = Motif { nom: motif.nom.clone(), modele: motif.genre == modele::GenreMotif::Modele, grilles };
+    let traits = hachures_plan(&carre, &grille, 1.0, 2_000).into_iter()
+        .filter(|[a, b]| a != b)
+        .map(|segment| segment.map(|p| p.map(|x| (x / cote - 0.5) * TAILLE_VUE)))
+        .collect();
+    (cote, traits)
+}
 
 /// État de l'éditeur ouvert.
 pub(crate) struct EditeurHachure {
@@ -25,6 +52,8 @@ pub(crate) struct EditeurHachure {
     pub genre: modele::GenreMotif,
     /// Vue de dessin du motif (retirée par Terminer ou Annuler).
     pub vue: String,
+    cote_initial: f64,
+    traits_initiaux: Vec<TraitMotif>,
 }
 
 impl Application {
@@ -74,6 +103,7 @@ impl Application {
         if let Some(ed) = &self.editeur_hachure {
             if p.vues.iter().any(|v| v.id == ed.vue) {
                 let (vue, nom) = (ed.vue.clone(), ed.nom.clone());
+                self.motif_selectionne = None;
                 self.ouvrir_vue_native(&vue);
                 self.status = format!("Motif « {nom} » en cours : Terminer ou Annuler dans Propriétés.");
                 return;
@@ -81,15 +111,15 @@ impl Application {
             self.editeur_hachure = None;
         }
         let d = motif.and_then(|n| p.definition_motif(&modele::MotifCoupe::hachures(n)));
-        if motif.is_some() && d.as_ref().is_none_or(|d| d.tuile.is_none()) {
-            self.error = Some("Ce motif se modifie dans ses propriétés, avec ses familles de traits.".into());
+        if motif.is_some() && d.is_none() {
+            self.error = Some("Motif introuvable.".into());
             return;
         }
         let nom = match &d {
             Some(d) => d.nom.clone(),
             None => (1..).map(|k| format!("Motif dessiné {k}")).find(|n| !p.noms_motifs().contains(n)).unwrap_or_default(),
         };
-        let tuile = d.as_ref().and_then(|d| d.tuile.clone()).unwrap_or(TuileMotif { cote: 4.0, divisions: DIVISIONS_VUE, segments: Vec::new() });
+        let (cote, traits) = d.as_ref().map_or_else(|| (4.0, Vec::new()), dessin_initial);
         let origine = d.as_ref().map(|d| d.nom.clone());
         let genre = d.as_ref().map_or(modele::GenreMotif::Dessin, |d| d.genre);
         let mut q = p.clone();
@@ -100,14 +130,18 @@ impl Application {
         if let Some(v) = q.vues.iter_mut().find(|v| v.id == vue) {
             v.nom = format!("Motif — {nom}");
         }
-        for [debut, fin] in tuile.traits_vue() {
+        for &[debut, fin] in &traits {
             q.annotations.push(Annotation { id: format!("annotation-{}", noyau::uuid::uuid()), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Ligne { debut, fin } });
         }
         if let Err(e) = self.appliquer_projet(q) {
             self.error = Some(e);
             return;
         }
-        self.editeur_hachure = Some(EditeurHachure { origine, nom: nom.clone(), cote: tuile.cote, genre, vue: vue.clone() });
+        self.editeur_hachure = Some(EditeurHachure {
+            origine, nom: nom.clone(), cote, genre, vue: vue.clone(),
+            cote_initial: cote, traits_initiaux: traits,
+        });
+        self.motif_selectionne = None;
         self.ouvrir_vue_native(&vue);
         // carré sur un peu moins de la moitié de la hauteur de la vue
         self.camera.dist = (TAILLE_VUE as f32 * 0.001 / 0.9) / (self.camera.fov_y * 0.5).tan();
@@ -174,8 +208,6 @@ impl Application {
         let ed = self.editeur_hachure.as_ref().ok_or("Éditeur de hachures fermé.")?;
         let nom = ed.nom.trim().to_string();
         if nom.is_empty() { return Err("Nommer le motif.".into()); }
-        let (tuile, corriges) = TuileMotif::depuis_traits(ed.cote, &traits)?;
-        if tuile.segments.is_empty() { return Err("Dessiner au moins un trait dans le carré.".into()); }
         let mut q = self.projet_sans_vue_motif()?;
         if ed.genre == modele::GenreMotif::Modele && let Some(o) = &ed.origine
             && q.materiaux.iter().any(|m| [Some(&m.motif), m.coupe_fond_motif.as_ref()].into_iter().flatten().any(|x| x.nom_hachures() == Some(o.as_str()))) {
@@ -184,8 +216,18 @@ impl Application {
         if Some(&nom) != ed.origine.as_ref() && q.noms_motifs().contains(&nom) {
             return Err(format!("Un motif s'appelle déjà « {nom} »."));
         }
-        let id = ed.origine.as_ref().and_then(|o| q.motifs.iter().find(|m| &m.nom == o)).map_or_else(noyau::uuid::uuid, |m| m.id.clone());
-        let d = modele::DefinitionMotif { id, nom: nom.clone(), genre: ed.genre, lignes: tuile.lignes(), tuile: Some(tuile) };
+        let original = ed.origine.as_ref().and_then(|o| q.definition_motif(&modele::MotifCoupe::hachures(o)));
+        let (mut d, corriges) = match original {
+            Some(d) if d.genre == ed.genre && ed.cote == ed.cote_initial && traits == ed.traits_initiaux => (d, 0),
+            original => {
+                let (tuile, corriges) = TuileMotif::depuis_traits(ed.cote, &traits)?;
+                if tuile.segments.is_empty() { return Err("Dessiner au moins un trait dans le carré.".into()); }
+                let id = original.map_or_else(String::new, |m| m.id);
+                (modele::DefinitionMotif { id, nom: nom.clone(), genre: ed.genre, lignes: tuile.lignes(), tuile: Some(tuile) }, corriges)
+            }
+        };
+        if d.id.is_empty() { d.id = noyau::uuid::uuid(); }
+        d.nom.clone_from(&nom);
         if let Some(o) = &ed.origine {
             q.motifs.retain(|m| &m.nom != o);
             if *o != nom {
@@ -292,5 +334,21 @@ pub(crate) fn libelle_genre(g: modele::GenreMotif) -> &'static str {
     match g {
         modele::GenreMotif::Dessin => "Dessin",
         modele::GenreMotif::Modele => "Modèle",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn les_motifs_du_gabarit_fournissent_des_traits_editables() {
+        let projet = modele::Projet::depuis_gabarit("Motifs", &modele::gabarit::Gabarit::defaut());
+        for motif in &projet.motifs {
+            let (cote, traits) = dessin_initial(motif);
+            assert!(!traits.is_empty(), "{}", motif.nom);
+            let (tuile, _) = TuileMotif::depuis_traits(cote, &traits).unwrap();
+            assert!(!tuile.segments.is_empty(), "{}", motif.nom);
+        }
     }
 }
