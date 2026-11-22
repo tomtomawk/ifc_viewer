@@ -2,6 +2,22 @@ use super::*;
 use glam::DVec3;
 use modele::{ElementImporte, Maillage, Origine};
 
+#[test]
+fn murs_superposes_meme_type_sans_trait_a_la_jonction() {
+    use modele::creation::ParametresMur;
+    let mut p = Projet::nouveau("Murs superposés");
+    let options = ParametresMur { hauteur: 2800.0, ..Default::default() };
+    let bas = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &options).unwrap();
+    let haut = p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &ParametresMur { decalage: 2800.0, ..options }).unwrap();
+    assert_eq!(p.murs.iter().find(|m| m.id == bas).unwrap().type_mur, p.murs.iter().find(|m| m.id == haut).unwrap().type_mur);
+    let scene = depuis_natif(&p, std::path::Path::new("test.bem")).unwrap();
+    let traits: Vec<_> = scene.objects.iter().filter(|o| [id_natif("mur", &bas), id_natif("mur", &haut)].contains(&o.id))
+        .flat_map(|o| scene.vertices[o.aretes.start as usize..(o.aretes.start + o.aretes.count) as usize].chunks_exact(2))
+        .filter(|s| s.iter().all(|v| (f64::from(v.pos[2]) + scene.origin.z - 2.8).abs() < 1e-4))
+        .collect();
+    assert!(traits.is_empty(), "traits à la jonction : {}", traits.len());
+}
+
 /// Topographie importée de Revit : élément géographique, que les plans d'étage gardent
 /// (la plage de vue décide ensuite de ce qui est vu).
 #[test]

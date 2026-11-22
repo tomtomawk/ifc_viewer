@@ -215,7 +215,10 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             }]));
         }
         let tris = solide.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        materiaux_parts.push(vec![materiau.as_ref().map(|m| m.nom.clone())]);
+        materiaux_parts.push(vec![Some(materiau.as_ref().map_or_else(
+            || format!("\0type-mur:{}", m.type_mur),
+            |materiau| materiau.nom.clone(),
+        ))]);
         geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![materiau.as_ref().map(|m| rendu_materiau(m, couleur, &mut table_apparences))], motifs: vec![materiau.as_ref().and_then(|m| motif_surface(projet, m, &mut table_motifs))] });
     }
     chrono("scène : mise en objets des murs", &mut t_etape);
