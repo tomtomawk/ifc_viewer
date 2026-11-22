@@ -13,6 +13,13 @@ dans le journal local (`apercu_conflit`). Cet aperçu n'est pas publié, ne sert
 base à une nouvelle édition et reste visible après réouverture. Les décisions de
 résolution sont explicites et archivent les propositions avant de changer cet aperçu.
 
+La fenêtre **Modifications à vérifier** affiche chaque proposition avec le motif
+du blocage et les modifications qu’elle contient. **Garder le projet partagé**
+archive la proposition locale et la retire de la synchronisation. **Soumettre ma
+proposition à nouveau** la remet en attente de validation. Le choix s’applique à
+toute la proposition. Les clés internes et les versions JSON sont accessibles
+dans **Détails techniques**.
+
 Les nouvelles transactions portent le protocole 3 et des lectures `#voisinage3/…`.
 Les décisions déjà acceptées des protocoles 1 et 2 gardent leur vérification exacte ;
 aucun journal central n'est réécrit. Les deux instances doivent être mises à jour

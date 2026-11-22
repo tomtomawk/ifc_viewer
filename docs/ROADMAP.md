@@ -116,7 +116,6 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 |---|---|---|---|
 | C1 | Qualification NAS à deux machines (9 étapes) | P1 | `docs/COLLABORATION.md`, « Qualification NAS à deux machines » |
 | C2 | Commande de compactage du registre partagé | P3 | `docs/COLLABORATION.md` |
-| C3 | Résolution des conflits : regrouper par proposition, séparer motif du refus et éléments retenus, afficher les noms et paramètres qui diffèrent, garder le JSON dans les détails et expliciter l’effet de chaque choix | P1 | `crates/interface/src/projet/collaboration.rs` |
 | C4 | Réduire les refus spatiaux sur des éléments sans interaction réelle. Prendre en compte la séparation verticale et distinguer un changement de géométrie d’un changement de libellé. Cas reproduit : modifier la hauteur d’un mur et renommer un autre mur situé 12 m plus haut avec le même tracé en plan déclenche un refus. Préserver les protections des jonctions et changements d’hôte | P1 | `crates/collaboration/src/concurrence.rs` et `crates/collaboration/src/lib.rs` |
 
 ## 9. Décisions en attente

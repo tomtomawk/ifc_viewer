@@ -232,74 +232,16 @@ impl Application {
         let Some(c) = self.collaboration.as_ref() else {
             return;
         };
-        let mut abandon = None;
-        let mut locale = None;
-        let libre = !c.synchronisation_en_cours();
-        if !c.copie.conflits.is_empty() {
-            egui::Window::new("Conflits collaboratifs — propositions conservées").show(ctx, |ui| {
-                if c.copie.apercu_conflit.is_some() {
-                    ui.label("Vos modifications locales restent affichées et sauvegardées dans la copie locale. Elles ne sont pas publiées tant que le conflit n'est pas résolu.");
-                }
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    for (id, conflits) in &c.copie.conflits {
-                        ui.label(format!("Transaction {id}"));
-                        for conflit in conflits {
-                            ui.label(format!("{} : {}", conflit.cle, conflit.raison));
-                            ui.columns(3, |cols| {
-                                for (col, (titre, v)) in cols.iter_mut().zip([
-                                    ("Base", &conflit.base),
-                                    ("Proposition locale", &conflit.locale),
-                                    ("État accepté", &conflit.acceptee),
-                                ]) {
-                                    col.label(titre);
-                                    col.label(
-                                        v.as_ref()
-                                            .map(|v| {
-                                                serde_json::to_string_pretty(v).unwrap_or_default()
-                                            })
-                                            .unwrap_or_else(|| "∅".into()),
-                                    );
-                                }
-                            });
-                        }
-                        ui.collapsing("Transaction complète récupérable", |ui| {
-                            if let Some(t) = c.copie.attente.iter().find(|t| &t.id == id) {
-                                ui.label(serde_json::to_string_pretty(t).unwrap_or_default());
-                            }
-                        });
-                        if ui
-                            .add_enabled(libre, egui::Button::new("Conserver l'état accepté et archiver cette proposition"))
-                            .clicked()
-                        {
-                            abandon = Some(id.clone());
-                        }
-                        if ui
-                            .add_enabled(libre, egui::Button::new("Choisir la proposition locale : nouvelle transaction validée"))
-                            .clicked()
-                        {
-                            locale = Some(id.clone());
-                        }
-                    }
-                });
-            });
-        }
-        if let Some(id) = abandon {
+        use crate::projet::conflits::Choix;
+        if let Some(choix) = crate::projet::conflits::fenetre(ctx, &c.copie, !c.synchronisation_en_cours()) {
             let r = self
                 .collaboration
                 .as_mut()
                 .ok_or_else(|| String::from("Collaboration absente"))
-                .and_then(|c| c.abandonner(&id))
-                .and_then(|p| self.appliquer_projet_interne(p, true));
-            if let Err(e) = r {
-                self.error = Some(e);
-            }
-        }
-        if let Some(id) = locale {
-            let r = self
-                .collaboration
-                .as_mut()
-                .ok_or_else(|| String::from("Collaboration absente"))
-                .and_then(|c| c.resoudre_locale(&id))
+                .and_then(|c| match choix {
+                    Choix::Partage(id) => c.abandonner(&id),
+                    Choix::Local(id) => c.resoudre_locale(&id),
+                })
                 .and_then(|p| self.appliquer_projet_interne(p, true));
             if let Err(e) = r {
                 self.error = Some(e);
