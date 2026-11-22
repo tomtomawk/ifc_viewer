@@ -747,7 +747,7 @@ impl Application {
             loading: None,
             annule_chargement: None,
             partage_en_cours: false,
-            status: "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into(),
+            status: crate::socle::documents::ACCUEIL_PROJET.into(),
             message: None,
             error,
             camera: Camera::default(),

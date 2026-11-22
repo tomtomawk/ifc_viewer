@@ -2,6 +2,9 @@
 use crate::*;
 use echanges::enregistrement::{EXTENSION_FAMILLE, EXTENSION_PROJET, extension_projet, fichier_famille};
 
+pub(crate) const ACCUEIL_PROJET: &str =
+    "Créer un projet BIMedit (Ctrl+N) ou ouvrir un fichier .bem (Ctrl+O).";
+
 impl Application {
     /// Identifiants de scène masqués par les filtres temporaires de contexte.
     pub(crate) fn ids_masques_contextes(&self) -> HashSet<Id> {
@@ -723,7 +726,7 @@ impl Application {
         self.camera = Camera::default();
         self.vol = Vol::default();
         self.error = None;
-        self.status = "Ouvrir un fichier IFC ou Revit (Ctrl+O), ou le glisser dans la fenêtre.".into();
+        self.status = ACCUEIL_PROJET.into();
         for tx in self.attente_ouverture.drain(..) {
             let _ = tx.send("Erreur : ouverture annulée par la fermeture du fichier.".into());
         }
