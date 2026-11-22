@@ -1,4 +1,5 @@
 //! Transactions de valeurs persistantes, indépendantes de l'interface et du transport.
+mod apercu;
 pub mod cli;
 pub mod concurrence;
 pub mod partage;
@@ -42,7 +43,7 @@ pub fn echec(etat: &str) -> bool {
 /// Libellé de session d'après les conflits et propositions restants.
 pub fn libelle_etat(conflits: bool, attente: bool) -> &'static str {
     if conflits {
-        "Conflit — modifications locales conservées à l'écran"
+        "Conflit — propositions locales conservées"
     } else if attente {
         "Enregistré localement — en attente"
     } else {

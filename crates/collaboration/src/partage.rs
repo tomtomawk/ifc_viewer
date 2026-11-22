@@ -357,8 +357,11 @@ mod tests {
         drop(sb);
         let (p, reutilise, s) = ouvrir(&entree, &cache).unwrap();
         assert_eq!(reutilise, local_b);
-        assert_eq!(p.vues[0].nom, "Architecte B");
-        assert_eq!(s.travail().unwrap().vues[0].nom,"Architecte A");
+        assert_eq!(p.vues[0].nom, "Architecte A");
+        assert_eq!(
+            s.copie.apercu_conflit.as_ref().unwrap().vues[0].nom,
+            "Architecte B"
+        );
         assert_eq!(s.copie.attente.len(), 1);
         assert!(!s.copie.conflits.is_empty());
     }

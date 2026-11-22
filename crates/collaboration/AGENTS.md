@@ -9,12 +9,13 @@ Dépendances internes autorisées : `noyau`, `modele`, `maillage`, `commandes`, 
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `lib.rs` | `PROTOCOLE`, `projet`, `Transaction`, validation et fusion ; libellés de session (`libelle_etat`, `libelle_echec`, `echec`) |
+| `apercu.rs` | Affichage de la dernière base de travail pendant un conflit, avec les propositions locales compatibles en aperçu |
 | `session.rs` | `Session` (599 lignes : ne pas agrandir) |
 | `stockage.rs` | `Depot` (626 lignes : ne pas agrandir) |
 | `concurrence.rs`, `partage.rs`, `texte.rs`, `cli.rs` | décomposition et empreintes, `.bimpartage`, texte `yrs`, CLI |
 | `tests.rs` | 37 tests ; `course_entre_deux_processus…` et `crash_processus…` relancent le binaire de test par `--exact "tests::enfant_…"` : garder ce chemin si le module change de nom |
 
-`tests/` : 2 tests d'intégration (aller-retour par `collaboration::projet`). Les `include_str!` de `samples/` et de `modele/src/lib.rs` sont relatifs à `src/`.
+`tests/` : aller-retour par `collaboration::projet` et aperçu après synchronisation et réouverture. Les `include_str!` de `samples/` et de `modele/src/lib.rs` sont relatifs à `src/`.
 
 ## Quand modifier ici
 

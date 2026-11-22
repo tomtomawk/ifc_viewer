@@ -23,7 +23,7 @@ pub struct Copie {
     /// un dépôt disparu n'est alors jamais recréé en silence.
     #[serde(default)]
     pub central_connu: bool,
-    /// Dernier document local valide, affiché sans le publier pendant un conflit.
+    /// Instantané de récupération local pris avant la réception d'un conflit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub apercu_conflit: Option<Projet>,
     pub annulations: Vec<Transaction>,
@@ -151,7 +151,7 @@ impl Session {
         }
         Self::depot_local(&self.chemin).ecrire_document(&self.chemin, &self.copie)
     }
-    pub fn travail(&self) -> Resultat<Projet> {
+    fn etat_travail(&self) -> Resultat<Etat> {
         overlay(
             &self.copie.base,
             &self
@@ -161,13 +161,18 @@ impl Session {
                 .filter(|t| !self.copie.conflits.contains_key(&t.id))
                 .cloned()
                 .collect::<Vec<_>>(),
-        )?
-        .projection()
+        )
     }
-    /// L'affichage d'une proposition n'est jamais un état accepté ni une base d'édition.
+    pub fn travail(&self) -> Resultat<Projet> {
+        self.etat_travail()?.projection()
+    }
+    /// Projection visuelle distincte de la base de travail utilisée pour l'édition.
     pub fn affichage(&self) -> Resultat<Projet> {
-        if !self.copie.conflits.is_empty() && let Some(p)=&self.copie.apercu_conflit {return Ok(p.clone());}
-        self.travail()
+        apercu::afficher(
+            self.etat_travail()?,
+            &self.copie.attente,
+            &self.copie.conflits,
+        )
     }
     pub fn texte_local(&self, id: &str) -> Resultat<EtatTexte> {
         let mut e = self.copie.base.textes.get(id).cloned().unwrap_or_default();
@@ -381,7 +386,10 @@ impl Session {
                 Ok(None)
             }
             Ok((base, mut attente, conflits, ms, mesures)) => {
-                let apercu = self.affichage()?;
+                let apercu = match self.copie.apercu_conflit.take() {
+                    Some(p) => p,
+                    None => self.travail()?,
+                };
                 // Conserve les éditions effectuées pendant le transfert.
                 let presents: BTreeSet<_> = attente
                     .iter()
@@ -453,10 +461,12 @@ impl Session {
         self.copie.annulations.retain(|t| t.id != id);
         self.copie.retablissements.retain(|t| t.id != id);
         self.copie.conflits.remove(id);
-        self.copie.apercu_conflit = None;
+        if self.copie.conflits.is_empty() {
+            self.copie.apercu_conflit = None;
+        }
         self.persister()?;
         self.etat = libelle_etat(!self.copie.conflits.is_empty(), !self.copie.attente.is_empty()).into();
-        self.travail()
+        self.affichage()
     }
     pub fn resoudre_locale(&mut self, id: &str) -> Resultat<Projet> {
         if self.messages.is_some() {
@@ -491,9 +501,11 @@ impl Session {
         self.copie.attente.retain(|t| t.id != id);
         self.copie.annulations.retain(|t| t.id != id);
         self.copie.conflits.remove(id);
-        self.copie.apercu_conflit = None;
+        if self.copie.conflits.is_empty() {
+            self.copie.apercu_conflit = None;
+        }
         self.copie.attente.push(resolution.clone());
-        match self.travail().and_then(|p| {
+        match self.affichage().and_then(|p| {
             self.persister()?;
             Ok(p)
         }) {

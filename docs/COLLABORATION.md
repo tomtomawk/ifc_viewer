@@ -8,10 +8,13 @@ diagonaux ou éloignés ne bloque plus leurs créations indépendantes. Les croi
 voisinages réels, changements d'hôte et modifications du même objet restent contrôlés.
 Les autres géométries gardent leurs enveloppes conservatrices.
 
-Un vrai conflit conserve à l'écran le dernier projet local valide et le sauvegarde
-dans le journal local (`apercu_conflit`). Cet aperçu n'est pas publié, ne sert pas de
-base à une nouvelle édition et reste visible après réouverture. Les décisions de
-résolution sont explicites et archivent les propositions avant de changer cet aperçu.
+Pendant un conflit, l’écran part de la dernière version reçue du projet partagé,
+y compris à la réouverture. Une proposition locale reste visible en aperçu si elle
+peut se superposer en entier aux valeurs actuelles et si le projet obtenu est valide.
+Si une valeur partagée est incompatible, la proposition reste accessible dans
+**Détails**. Le journal local (`apercu_conflit`) conserve le dernier état local d’avant
+le conflit pour la récupération. L’aperçu ne sert ni à la publication ni à l’édition.
+Chaque choix de résolution archive la proposition.
 
 À la fin de la synchronisation, le résultat apparaît dans les messages de la vue.
 En cas de conflit, les éléments concernés présents dans le projet sont sélectionnés.
