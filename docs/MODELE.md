@@ -169,7 +169,8 @@ pignons font une toiture à deux pans ; aucune arête en pente, un élément pla
   35°) ; décochée, toiture plate.
 - Modification (toiture, plafond rampant) : liste des arêtes dans Propriétés (case et
   pente), ou clic sur les repères des arêtes dans la vue quand l'élément est
-  sélectionné (triangle plein et pente : arête en pente ; rond : sans pente).
+  sélectionné (triangle plein : arête en pente ; rond : sans pente). Cliquer la
+  valeur en degrés pour la saisir, puis valider avec Entrée, ou la faire glisser.
 - Couches : épaisseur normale aux versants (verticale : épaisseur / cos pente), empilées
   vers le bas depuis le dessus à l’égout pour la toiture, vers le haut depuis la
   sous-face pour le plafond. Coupe d’égout verticale. Une couche de coupe par versant.

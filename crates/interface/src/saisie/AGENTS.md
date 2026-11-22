@@ -8,6 +8,7 @@ Rôle : interaction commune aux outils de la vue et aux éditeurs.
 | `accrochage.rs` | choix du point accroché, contraintes (Maj), marqueur ; `AccrocheMur` et `marqueur` importés par `lib.rs` |
 | `reperage.rs` | guides temporaires (repérage polaire) |
 | `saisie_trace.rs` | saisie clavier des points (distance, angle, coordonnées) |
+| `pentes_vue.rs` | repères des arêtes, angle de pente éditable dans la vue et menu des talus |
 | `saisie_plan.rs` | saisie en plan : création des murs, dalles et vues natives, aperçus, axes |
 | `cycle.rs` | cycle de sélection commun projet et familles : candidats sous le curseur, présélection bleue, Tab, bulle |
 | `candidats.rs` | candidats du projet (objets à 6 px par rayons, traits 2D, repères, limites ; dalles après les murs en plan) et application du clic |
