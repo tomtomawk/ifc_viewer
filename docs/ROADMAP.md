@@ -117,7 +117,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | C1 | Qualification NAS à deux machines (9 étapes) | P1 | `docs/COLLABORATION.md`, « Qualification NAS à deux machines » |
 | C2 | Commande de compactage du registre partagé | P3 | `docs/COLLABORATION.md` |
 | C4 | Réduire les refus spatiaux sur des éléments sans interaction réelle. Prendre en compte la séparation verticale et distinguer un changement de géométrie d’un changement de libellé. Cas reproduit : modifier la hauteur d’un mur et renommer un autre mur situé 12 m plus haut avec le même tracé en plan déclenche un refus. Préserver les protections des jonctions et changements d’hôte | P1 | `crates/collaboration/src/concurrence.rs` et `crates/collaboration/src/lib.rs` |
-| C5 | Préserver les paramètres partagés que la proposition n’avait pas modifiés lors d’une resoumission manuelle. Le bouton « Soumettre ma proposition à nouveau » reprend actuellement les valeurs locales de l’objet entier à partir de la proposition d’origine | P1 | `crates/collaboration/src/session.rs`, `resoudre_locale` |
+| C5 | Préserver les paramètres partagés que la proposition n’avait pas modifiés lors d’une resoumission manuelle. Le bouton « Conserver le local » reprend actuellement les valeurs locales de l’objet entier à partir de la proposition d’origine | P1 | `crates/collaboration/src/session.rs`, `resoudre_locale` |
 
 ## 9. Décisions en attente
 

@@ -12,19 +12,19 @@ Pendant un conflit, l’écran part de la dernière version reçue du projet par
 y compris à la réouverture. Une proposition locale reste visible en aperçu si elle
 peut se superposer en entier aux valeurs actuelles et si le projet obtenu est valide.
 Si une valeur partagée est incompatible, la proposition reste accessible dans
-**Détails**. Le journal local (`apercu_conflit`) conserve le dernier état local d’avant
+**Détail**. Le journal local (`apercu_conflit`) conserve le dernier état local d’avant
 le conflit pour la récupération. L’aperçu ne sert ni à la publication ni à l’édition.
 Chaque choix de résolution archive la proposition.
 
 À la fin de la synchronisation, le résultat apparaît dans les messages de la vue.
 En cas de conflit, les éléments concernés présents dans le projet sont sélectionnés.
-Le message rouge ouvre, avec **Détails**, la fenêtre **Modifications à vérifier**.
-Elle affiche chaque proposition avec le motif
-du blocage et les modifications qu’elle contient. **Garder le projet partagé**
-archive la proposition locale et la retire de la synchronisation. **Soumettre ma
-proposition à nouveau** la remet en attente de validation. Le choix s’applique à
-toute la proposition. Les clés internes et les versions JSON sont accessibles
-dans **Détails techniques**.
+Le bandeau rouge affiche le premier conflit en attente et permet de le traiter
+avec **Accepter le central** ou **Conserver le local**. **Détail** ouvre la liste
+des conflits avec le nom et le type des éléments, les écarts et le motif du blocage.
+**Accepter le central** archive les modifications locales du conflit.
+**Conserver le local** les remet en attente pour la prochaine synchronisation.
+Lorsque des modifications ont été faites ensemble, le choix s’applique à leur
+ensemble. Les clés et les versions JSON sont accessibles dans **Détails techniques**.
 
 Les nouvelles transactions portent le protocole 3 et des lectures `#voisinage3/…`.
 Les décisions déjà acceptées des protocoles 1 et 2 gardent leur vérification exacte ;

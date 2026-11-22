@@ -190,30 +190,22 @@ pub(crate) fn consigne_avec_aide(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32
 /// Message au premier plan (visible au-dessus des éditeurs flottants), `decalage` pixels
 /// plus bas, avec un bouton × pour une erreur. `alpha` estompe la fin d'un message
 /// temporaire. Retourne si l'utilisateur l'a fermé et la hauteur du cadre.
-fn afficher_a(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, niveau: Niveau, texte: &str, alpha: f32, decalage: f32, details: bool) -> (bool, f32) {
+fn afficher_a(ui: &egui::Ui, rect: egui::Rect, bas_barre: f32, niveau: Niveau, texte: &str, alpha: f32, decalage: f32) -> (bool, f32) {
     let couleur = niveau.couleur().gamma_multiply(alpha);
-    let fermable = niveau == Niveau::Erreur && !details;
-    let marge_bouton = if details { 64.0 } else if fermable { 22.0 } else { 0.0 };
+    let fermable = niveau == Niveau::Erreur;
+    let marge_bouton = if fermable { 22.0 } else { 0.0 };
     let origine = origine_consigne(rect, bas_barre) + egui::vec2(0.0, decalage);
-    egui::Area::new(ui.scope_id().with(("message_vue", niveau.libelle(), details)))
+    egui::Area::new(ui.scope_id().with(("message_vue", niveau.libelle())))
         .order(egui::Order::Foreground)
         .fixed_pos(origine)
         .constrain_to(rect)
-        .interactable(fermable || details)
+        .interactable(fermable)
         .show(ui.ctx(), |ui| {
             let galley = ui.painter().layout(texte.into(), egui::FontId::proportional(13.0), couleur, (rect.width() - 24.0 - marge_bouton).max(1.0));
             let taille = galley.size() + egui::vec2(8.0 + marge_bouton, 6.0);
             let (cadre, _) = ui.allocate_exact_size(egui::vec2(taille.x, taille.y.max(22.0)), Sense::hover());
             ui.painter().rect(cadre, 3.0, Color32::from_gray(250).gamma_multiply(alpha), egui::Stroke::new(1.0, couleur.gamma_multiply(0.5)), egui::StrokeKind::Inside);
             ui.painter().galley(cadre.min + egui::vec2(4.0, 3.0), galley, couleur);
-            if details {
-                let bouton = egui::Rect::from_min_size(
-                    cadre.right_top() - egui::vec2(62.0, 0.0) + egui::vec2(0.0, 1.0),
-                    egui::vec2(60.0, 20.0),
-                );
-                let clic = ui.put(bouton, egui::Button::new(RichText::new("Détails").color(couleur))).clicked();
-                return (clic, cadre.height());
-            }
             if !fermable { return (false, cadre.height()); }
             let fermer = egui::Rect::from_min_size(cadre.right_top() - egui::vec2(22.0, 0.0), egui::vec2(22.0, 22.0));
             let ferme = ui.put(fermer, egui::Button::new(RichText::new("×").size(16.0).color(couleur)).frame(false))
@@ -335,13 +327,25 @@ impl Application {
     pub(crate) fn afficher_messages(&mut self, ui: &egui::Ui, rect: egui::Rect, bas_barre: f32) {
         self.suivre_messages(ui.ctx());
         let mut decalage = 0.0;
-        if let Some(texte) = self.message_conflits() {
-            let (details, h) = afficher_a(ui, rect, bas_barre, Niveau::Erreur, &texte, 1.0, 0.0, true);
-            if details { self.ouvrir_details_conflits(); }
-            decalage = h + 4.0;
+        if self.message_conflits().is_some() {
+            let couleur = Niveau::Erreur.couleur();
+            let bandeau = egui::Area::new(ui.scope_id().with("conflit_vue"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(origine_consigne(rect, bas_barre))
+                .constrain_to(rect)
+                .show(ui.ctx(), |ui| {
+                    ui.set_max_width((rect.width() - 16.0).max(1.0));
+                    egui::Frame::new()
+                        .fill(Color32::from_gray(250))
+                        .stroke(egui::Stroke::new(1.0, couleur.gamma_multiply(0.5)))
+                        .corner_radius(3.0)
+                        .inner_margin(4.0)
+                        .show(ui, |ui| self.actions_conflit_vue(ui, couleur));
+                });
+            decalage = bandeau.response.rect.height() + 4.0;
         }
         if let Some(texte) = self.journal.erreur.clone() {
-            let (ferme, h) = afficher_a(ui, rect, bas_barre, Niveau::Erreur, &texte, 1.0, decalage, false);
+            let (ferme, h) = afficher_a(ui, rect, bas_barre, Niveau::Erreur, &texte, 1.0, decalage);
             if ferme {
                 self.journal.erreur = None;
                 if self.error.as_deref() == Some(texte.as_str()) { self.error = None; }
@@ -349,7 +353,7 @@ impl Application {
             decalage += h + 4.0;
         } else if let Some(texte) = self.dessin2d.message.clone() {
             // Erreur de l'outil de dessin en cours : effacée par l'outil ou par ×.
-            let (ferme, h) = afficher_a(ui, rect, bas_barre, Niveau::Erreur, &texte, 1.0, decalage, false);
+            let (ferme, h) = afficher_a(ui, rect, bas_barre, Niveau::Erreur, &texte, 1.0, decalage);
             if ferme { self.dessin2d.message = None; }
             decalage += h + 4.0;
         }
@@ -359,7 +363,7 @@ impl Application {
             self.message = None;
             return;
         }
-        afficher_a(ui, rect, bas_barre, *niveau, texte, ((DUREE - age) / 0.5).min(1.0), decalage, false);
+        afficher_a(ui, rect, bas_barre, *niveau, texte, ((DUREE - age) / 0.5).min(1.0), decalage);
         ui.ctx().request_repaint();
     }
 }

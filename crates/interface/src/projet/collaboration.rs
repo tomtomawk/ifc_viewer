@@ -1,5 +1,6 @@
 //! Parcours Collaborer / Ouvrir un projet partagé et commandes du ruban Sortie.
 use crate::*;
+use crate::projet::conflits::{self, Choix};
 use ::collaboration::{partage, session::Session};
 
 impl Application {
@@ -142,14 +143,41 @@ impl Application {
         let n = self.collaboration.as_ref()?.copie.conflits.len();
         match n {
             0 => None,
-            1 => Some("Synchronisation : une proposition en conflit n’a pas été publiée.".into()),
-            _ => Some(format!("Synchronisation : {n} propositions en conflit n’ont pas été publiées.")),
+            1 => Some("Un conflit de synchronisation".into()),
+            _ => Some(format!("{n} conflits de synchronisation")),
         }
     }
 
-    pub(crate) fn ouvrir_details_conflits(&mut self) {
-        self.selectionner_conflits();
-        self.details_conflits = Some(self.document_actif);
+    pub(crate) fn actions_conflit_vue(&mut self, ui: &mut egui::Ui, couleur: egui::Color32) {
+        let Some(c) = &self.collaboration else {
+            return;
+        };
+        let proposition = c.copie.attente.iter()
+            .find(|t| c.copie.conflits.contains_key(&t.id));
+        let Some((id, conflits)) = proposition
+            .and_then(|t| c.copie.conflits.get_key_value(&t.id))
+            .or_else(|| c.copie.conflits.first_key_value())
+        else {
+            return;
+        };
+        let titre = conflits::titre(proposition, conflits, &c.copie.base.objets);
+        let n = c.copie.conflits.len();
+        let nombre = if n == 1 { "Conflit".into() } else { format!("{n} conflits") };
+        let libre = !c.synchronisation_en_cours();
+        let (choix, detail) = ui.push_id(id, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.colored_label(couleur, format!("{nombre} · {titre}"));
+                let choix = conflits::boutons(ui, id, libre, proposition.is_some());
+                (choix, ui.button("Détail").clicked())
+            }).inner
+        }).inner;
+        if let Some(choix) = choix {
+            self.resoudre_conflit(choix);
+        }
+        if detail {
+            self.selectionner_conflits();
+            self.details_conflits = Some(self.document_actif);
+        }
     }
 
     fn selectionner_conflits(&mut self) {
@@ -267,28 +295,36 @@ impl Application {
         let Some(c) = self.collaboration.as_ref() else {
             return;
         };
-        use crate::projet::conflits::Choix;
         let mut ouvert = self.details_conflits == Some(self.document_actif) && !c.copie.conflits.is_empty();
         let choix = if ouvert {
-            crate::projet::conflits::fenetre(ctx, &c.copie, !c.synchronisation_en_cours(), &mut ouvert)
+            conflits::fenetre(ctx, &c.copie, !c.synchronisation_en_cours(), &mut ouvert)
         } else { None };
         if !ouvert && self.details_conflits == Some(self.document_actif) {
             self.details_conflits = None;
         }
         if let Some(choix) = choix {
-            let r = self
-                .collaboration
-                .as_mut()
-                .ok_or_else(|| String::from("Collaboration absente"))
-                .and_then(|c| match choix {
-                    Choix::Partage(id) => c.abandonner(&id),
-                    Choix::Local(id) => c.resoudre_locale(&id),
-                })
-                .and_then(|p| self.appliquer_projet_interne(p, true));
-            if let Err(e) = r {
-                self.error = Some(e);
-            }
+            self.resoudre_conflit(choix);
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    }
+
+    fn resoudre_conflit(&mut self, choix: Choix) {
+        let Some(c) = self.collaboration.as_mut() else {
+            return;
+        };
+        let (resultat, message) = match choix {
+            Choix::Central(id) => (c.abandonner(&id), "Version centrale acceptée."),
+            Choix::Local(id) => (
+                c.resoudre_locale(&id),
+                "Modifications locales en attente de synchronisation.",
+            ),
+        };
+        match resultat.and_then(|p| self.appliquer_projet_interne(p, true)) {
+            Ok(()) => {
+                self.informer(message);
+                self.selectionner_conflits();
+            }
+            Err(e) => self.signaler(crate::socle::messages::Niveau::Erreur, e),
+        }
     }
 }

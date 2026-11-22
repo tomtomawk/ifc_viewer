@@ -1,5 +1,5 @@
 //! Présentation des propositions retenues. Le protocole conserve ses détails d’origine.
-use ::collaboration::{Conflit, session::Copie};
+use ::collaboration::{Changement, Conflit, Transaction, session::Copie};
 use commandes::objets::Objets;
 use eframe::egui;
 use serde_json::Value;
@@ -8,8 +8,26 @@ use std::collections::BTreeSet;
 const EFFET: &str = "Transaction entière retenue après refus de précondition";
 
 pub(super) enum Choix {
-    Partage(String),
+    Central(String),
     Local(String),
+}
+
+pub(super) fn boutons(ui: &mut egui::Ui, id: &str, libre: bool, local: bool) -> Option<Choix> {
+    let central = ui
+        .add_enabled(libre, egui::Button::new("Accepter le central"))
+        .on_hover_text("Garde la version partagée et archive vos modifications pour ce conflit.")
+        .clicked();
+    let local = ui
+        .add_enabled(libre && local, egui::Button::new("Conserver le local"))
+        .on_hover_text(
+            "Remet la version locale des éléments en attente pour la prochaine synchronisation.",
+        )
+        .clicked();
+    if central {
+        Some(Choix::Central(id.into()))
+    } else {
+        local.then(|| Choix::Local(id.into()))
+    }
 }
 
 /// Ne retient que les identités encore présentes dans le projet affiché.
@@ -64,14 +82,17 @@ fn categorie(cle: &str) -> Option<&'static str> {
     Some(match cle {
         "murs" => "Mur",
         "assemblages" => "Mur composé",
-        "dalles" => "Dalle, plafond ou toiture",
+        "dalles" => "Dalle",
         "terrains" => "Terrain",
+        "limites_propriete" => "Limite de propriété",
         "niveaux" => "Niveau",
         "barres" => "Poteau ou poutre",
         "composants" => "Composant",
         "ouvertures" => "Ouverture",
         "escaliers" => "Escalier",
         "garde_corps" => "Garde-corps",
+        "importes" => "Élément importé",
+        "liens" => "Lien",
         "quadrillages" => "Quadrillage",
         "pieces" => "Pièce",
         "vues" => "Vue",
@@ -104,18 +125,41 @@ fn nom(v: &Value) -> Option<&str> {
         .filter(|s| !s.trim().is_empty())
 }
 
-fn objet(cle: &str, valeurs: &[Option<&Value>], objets: &Objets) -> String {
-    let famille = cle
+fn cle_objet(cle: &str) -> (&str, &str) {
+    let cle = cle
         .strip_prefix("@ordre/")
         .or_else(|| cle.strip_prefix("@/"))
         .unwrap_or(cle);
-    let (famille, id) = famille.split_once('/').unwrap_or((famille, ""));
-    let categorie = categorie(famille).unwrap_or("Donnée du projet");
+    cle.split_once('/').unwrap_or((cle, ""))
+}
+
+fn objet(cle: &str, valeurs: &[Option<&Value>], objets: &Objets) -> String {
+    let (famille, id) = cle_objet(cle);
+    let courant = ::collaboration::concurrence::valeur(objets, cle);
+    let genre = |champ: &str| {
+        valeurs
+            .iter()
+            .copied()
+            .chain([courant])
+            .flatten()
+            .find_map(|v| v.get(champ).and_then(Value::as_str))
+    };
+    let categorie = match (famille, genre("genre"), genre("sorte")) {
+        ("ouvertures", Some("porte"), _) => "Porte",
+        ("ouvertures", Some("fenetre"), _) => "Fenêtre",
+        ("barres", Some("poteau"), _) => "Poteau",
+        ("barres", Some("poutre"), _) => "Poutre",
+        ("dalles", _, Some("toiture")) => "Toiture",
+        ("dalles", _, Some("plafond")) => "Plafond",
+        ("dalles", _, Some("sol")) => "Sol",
+        ("dalles", _, Some("terre_plein")) => "Terre-plein",
+        _ => categorie(famille).unwrap_or("Donnée du projet"),
+    };
     let nom = valeurs
         .iter()
         .flatten()
         .find_map(|v| nom(v))
-        .or_else(|| objets.get(cle).and_then(nom))
+        .or_else(|| courant.and_then(nom))
         .or_else(|| {
             (!id.is_empty())
                 .then(|| {
@@ -135,6 +179,49 @@ fn objet(cle: &str, valeurs: &[Option<&Value>], objets: &Objets) -> String {
     )
 }
 
+fn titre_changement(c: &Changement, objets: &Objets) -> String {
+    objet(&c.cle, &[c.apres.as_ref(), c.avant.as_ref()], objets)
+}
+
+fn changements_visibles(t: Option<&Transaction>) -> impl Iterator<Item = &Changement> {
+    t.into_iter().flat_map(|t| &t.changements).filter(|c| {
+        let (famille, id) = cle_objet(&c.cle);
+        !c.cle.starts_with("@ordre/") && (!id.is_empty() || categorie(famille).is_some())
+    })
+}
+
+pub(super) fn titre(t: Option<&Transaction>, conflits: &[Conflit], objets: &Objets) -> String {
+    let mut changements = changements_visibles(t);
+    if let Some(c) = changements.next() {
+        let premier = titre_changement(c, objets);
+        return match changements.count() {
+            0 => premier,
+            1 => format!("{premier} et 1 autre élément"),
+            n => format!("{premier} et {n} autres éléments"),
+        };
+    }
+    if let Some(c) = t
+        .into_iter()
+        .flat_map(|t| &t.changements)
+        .find(|c| categorie(cle_objet(&c.cle).0).is_some())
+    {
+        return titre_changement(c, objets);
+    }
+    conflits
+        .iter()
+        .find(|c| c.cle.contains('/') && !c.cle.starts_with('#'))
+        .map_or_else(
+            || "Projet partagé".into(),
+            |c| {
+                objet(
+                    &c.cle,
+                    &[c.locale.as_ref(), c.acceptee.as_ref(), c.base.as_ref()],
+                    objets,
+                )
+            },
+        )
+}
+
 fn expliquer(c: &Conflit, objets: &Objets) -> Option<String> {
     let cle = c.cle.as_str();
     let texte = if c.raison == EFFET {
@@ -142,14 +229,14 @@ fn expliquer(c: &Conflit, objets: &Objets) -> Option<String> {
     } else if c.raison.starts_with("Réservation requise")
         || c.raison.starts_with("Réservation périmée")
     {
-        "La réservation nécessaire pour modifier un élément a expiré ou n’est plus à vous.".into()
+        "La réservation a expiré ou appartient à un autre poste.".into()
     } else if cle == "#spatial" || cle.starts_with("#voisinage3/") || cle.starts_with("#zones/") {
-        "Un élément dans la même zone en plan, ou une donnée liée, a changé dans le projet partagé. BIMedit doit revérifier votre modification.".into()
+        "La même zone en plan ou une donnée liée a changé.".into()
     } else if cle.starts_with("#types-terrains-") || cle.starts_with("#usagers-terrain-") {
-        "Le type de terrain par défaut ou les terrains qui l’utilisent ont changé dans le projet partagé.".into()
+        "Le type de terrain par défaut ou ses terrains ont changé.".into()
     } else if let Some(cle) = cle.strip_prefix("#usages/") {
         let cible = objet(cle, &[], objets);
-        format!("{cible} : un élément lié a changé dans le projet partagé.")
+        format!("{cible} · Un élément lié a changé.")
     } else if c.raison == "Propositions concurrentes incompatibles" {
         let cible = objet(
             cle,
@@ -157,26 +244,21 @@ fn expliquer(c: &Conflit, objets: &Objets) -> Option<String> {
             objets,
         );
         if c.acceptee.is_none() && c.base.is_some() {
-            format!(
-                "{cible} · Cet élément a été retiré du projet partagé depuis votre modification."
-            )
+            format!("{cible} · Supprimé du projet partagé.")
         } else if c.locale.is_none() && c.base.is_some() {
-            format!(
-                "{cible} a changé dans le projet partagé alors que votre proposition le supprime."
-            )
+            format!("{cible} · Modifié dans le projet partagé, supprimé en local.")
         } else {
-            format!("{cible} : votre modification et la version partagée nécessitent un choix.")
+            format!("{cible} · Modifié des deux côtés.")
         }
     } else if cle == "protocole" {
-        "Cette proposition est liée à une version ou à un état incompatible du projet.".into()
+        "Version du projet incompatible.".into()
     } else if cle == "validation" {
-        "Cette proposition ne peut pas être appliquée au projet partagé dans son état actuel."
-            .into()
+        "Modification incompatible avec le projet actuel.".into()
     } else if c.raison == "Dépendance ou collection de relations modifiée" {
         let cible = objet(cle, &[], objets);
-        format!("{cible} : une donnée utilisée par votre modification a changé.")
+        format!("{cible} · Une donnée liée a changé.")
     } else {
-        "BIMedit n’a pas pu publier cette proposition. Le motif précis figure dans les détails techniques.".into()
+        "Publication bloquée.".into()
     };
     Some(texte)
 }
@@ -284,78 +366,76 @@ pub(super) fn fenetre(
     }
     let mut choix = None;
     let objets = &copie.base.objets;
-    egui::Window::new("Modifications à vérifier")
+    egui::Window::new("Éléments en conflit")
         .id(egui::Id::unique("conflits_collaboration"))
         .open(ouvert)
         .default_width(620.0)
         .default_pos(ctx.content_rect().center() - egui::vec2(310.0, 165.0))
         .show(ctx, |ui| {
-            let n = copie.conflits.len();
-            ui.label(if n == 1 {
-                "Une proposition n’a pas été publiée.".into()
-            } else {
-                format!("{n} propositions n’ont pas été publiées.")
-            });
-            if copie.apercu_conflit.is_some() {
-                ui.label("Vos modifications sont conservées dans votre copie locale et restent visibles ici.");
-            }
-            ui.label("Le choix s’applique à toute la proposition.");
-            egui::ScrollArea::vertical().max_height(570.0).show(ui, |ui| {
-                for (i, (id, conflits)) in copie.conflits.iter().enumerate() {
-                    ui.push_id(id, |ui| {
-                        let proposition = copie.attente.iter().find(|t| &t.id == id);
-                        let changements = proposition.map_or(&[][..], |t| t.changements.as_slice());
-                        let titre = match changements {
-                            [c] => objet(&c.cle, &[c.apres.as_ref(), c.avant.as_ref()], objets),
-                            c if c.len() > 1 => format!("Proposition {} · {} modifications", i + 1, c.len()),
-                            _ => format!("Proposition {}", i + 1),
-                        };
-                        ui.separator();
-                        ui.heading(titre);
-                        let causes: BTreeSet<_> = conflits.iter().filter_map(|c| expliquer(c, objets)).collect();
-                        for cause in causes { ui.label(cause); }
-                        egui::CollapsingHeader::new("Modifications de la proposition")
-                            .default_open(n == 1 && changements.len() <= 4)
-                            .show(ui, |ui| {
-                            for c in changements {
-                                let partage = ::collaboration::concurrence::valeur(objets, &c.cle);
-                                let titre = objet(&c.cle, &[c.apres.as_ref(), partage, c.avant.as_ref()], objets);
-                                let action = match (&c.avant, &c.apres) { (None, Some(_)) => "Ajouter", (_, None) => "Supprimer", _ => "Modifier" };
-                                ui.strong(format!("{action} · {titre}"));
-                                if let (Some(a), Some(b)) = (c.apres.as_ref(), partage) {
-                                    for (champ, local, partage) in champs(a, b, objets) {
-                                        if local.is_empty() && partage.is_empty() {
-                                            ui.label(format!("{champ} : les deux versions diffèrent."));
+            egui::ScrollArea::vertical()
+                .max_height(570.0)
+                .show(ui, |ui| {
+                    for (id, conflits) in &copie.conflits {
+                        ui.push_id(id, |ui| {
+                            let proposition = copie.attente.iter().find(|t| &t.id == id);
+                            let nombre = changements_visibles(proposition).count();
+                            if nombre == 0 {
+                                ui.heading(titre(proposition, conflits, objets));
+                            }
+                            for c in changements_visibles(proposition) {
+                                ui.heading(titre_changement(c, objets));
+                                let central = ::collaboration::concurrence::valeur(objets, &c.cle);
+                                if c.apres.is_none() {
+                                    ui.label("Suppression locale");
+                                } else if c.avant.is_none() {
+                                    ui.label("Ajout local");
+                                } else if central.is_none() {
+                                    ui.label("Supprimé du projet partagé");
+                                }
+                                if let (Some(a), Some(b)) = (c.apres.as_ref(), central) {
+                                    for (champ, local, central) in champs(a, b, objets) {
+                                        if local.is_empty() && central.is_empty() {
+                                            ui.label(format!("{champ} différent"));
                                         } else {
-                                            ui.label(format!("{champ} · Votre proposition : {local} · Projet partagé : {partage}"));
+                                            ui.label(format!(
+                                                "{champ} · Local : {local} · Central : {central}"
+                                            ));
                                         }
                                     }
-                                } else if partage.is_none() && c.avant.is_some() {
-                                    ui.label("Cet élément n’est plus dans le projet partagé.");
                                 }
                             }
-                        });
-                        ui.horizontal_wrapped(|ui| {
-                            if ui.add_enabled(libre, egui::Button::new("Garder le projet partagé")).clicked() {
-                                choix = Some(Choix::Partage(id.clone()));
+                            let causes: BTreeSet<_> = conflits
+                                .iter()
+                                .filter_map(|c| expliquer(c, objets))
+                                .collect();
+                            for cause in causes {
+                                ui.label(cause);
                             }
-                            if ui.add_enabled(libre && proposition.is_some(), egui::Button::new("Soumettre ma proposition à nouveau")).clicked() {
-                                choix = Some(Choix::Local(id.clone()));
+                            if let Some(action) = ui
+                                .horizontal_wrapped(|ui| {
+                                    boutons(ui, id, libre, proposition.is_some())
+                                })
+                                .inner
+                            {
+                                choix = Some(action);
                             }
+                            ui.collapsing("Détails techniques", |ui| {
+                                ui.monospace(id);
+                                ui.monospace(
+                                    serde_json::to_string_pretty(conflits).unwrap_or_default(),
+                                );
+                                if let Some(t) = proposition {
+                                    ui.collapsing("Transaction complète", |ui| {
+                                        ui.monospace(
+                                            serde_json::to_string_pretty(t).unwrap_or_default(),
+                                        );
+                                    });
+                                }
+                            });
+                            ui.separator();
                         });
-                        ui.label("Le premier choix retire votre proposition de la synchronisation et l’archive. Le second la remet en attente de validation.");
-                        ui.collapsing("Détails techniques", |ui| {
-                            ui.monospace(id);
-                            ui.monospace(serde_json::to_string_pretty(conflits).unwrap_or_default());
-                            if let Some(t) = proposition {
-                                ui.collapsing("Transaction complète", |ui| {
-                                    ui.monospace(serde_json::to_string_pretty(t).unwrap_or_default());
-                                });
-                            }
-                        });
-                    });
-                }
-            });
+                    }
+                });
         });
     choix
 }
@@ -407,5 +487,92 @@ mod tests {
         assert_eq!(l.len(), 1);
         assert_eq!(l[0].0, "Contrainte haute");
         assert_ne!(l[0].1, l[0].2);
+    }
+
+    #[test]
+    fn libelles_des_elements_utilisent_le_genre_et_le_nom() {
+        let objets = Objets::from([
+            (
+                "ouvertures/o-1".into(),
+                json!({"genre": "porte", "nom": "Entrée"}),
+            ),
+            (
+                "dalles/d-1".into(),
+                json!({"sorte": "toiture", "nom": "Garage"}),
+            ),
+        ]);
+        assert_eq!(objet("ouvertures/o-1", &[], &objets), "Porte « Entrée »");
+        assert_eq!(objet("dalles/d-1", &[], &objets), "Toiture « Garage »");
+        assert_eq!(
+            objet(
+                "ouvertures/o-2",
+                &[Some(&json!({"genre": "fenetre"}))],
+                &objets
+            ),
+            "Fenêtre"
+        );
+    }
+
+    #[test]
+    fn boutons_de_resolution_ciblent_le_conflit_affiche() {
+        for (libelle, libre, attendu) in [
+            (
+                "Accepter le central",
+                true,
+                Some(("central", "conflit-affiche".into())),
+            ),
+            (
+                "Conserver le local",
+                true,
+                Some(("local", "conflit-affiche".into())),
+            ),
+            ("Conserver le local", false, None),
+        ] {
+            let ctx = egui::Context::default();
+            let mut action = None;
+            let mut image = |events| {
+                ctx.run_ui(
+                    egui::RawInput {
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            action = boutons(ui, "conflit-affiche", libre, true);
+                        });
+                    },
+                )
+            };
+            image(vec![]);
+            let sortie = image(vec![]);
+            let pos = sortie
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.text() == libelle => {
+                        Some(t.pos + t.galley.size() / 2.0)
+                    }
+                    _ => None,
+                })
+                .expect("bouton de résolution introuvable");
+            for pressed in [true, false] {
+                image(vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+            }
+            assert_eq!(
+                action.map(|a| match a {
+                    Choix::Central(id) => ("central", id),
+                    Choix::Local(id) => ("local", id),
+                }),
+                attendu
+            );
+        }
     }
 }
