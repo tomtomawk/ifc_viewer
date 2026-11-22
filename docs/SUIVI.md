@@ -49,6 +49,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 22/11/2026 | Motifs du gabarit : accès à la modification des familles de traits par double-clic ou menu Modifier, sans ouvrir une vue de dessin vide. | ce commit | `cargo check --workspace --tests` et `cargo test -p interface --release` (102 tests). Non essayé en fenêtre native. |
 | 22/11/2026 | Murs superposés de même type sans matériau : suppression des arêtes à leur jonction en 3D. | ce commit | `cargo check --workspace --tests`, `cargo test -p maillage --release` (21 tests réussis, 1 ignoré), dont deux murs empilés. Non essayé en fenêtre native. |
 | 22/11/2026 | Attacher toiture : retrait du bouton Terminer et de la consigne en double dans le bandeau, consigne conservée sous celui-ci. | ce commit | `cargo check --workspace --tests`, `cargo test -p interface --release` (102 tests). Non essayé en fenêtre native. |
 | 22/11/2026 | Poignées du projet — accrochage sur l’axe ou la tangente et sur sa perpendiculaire, ancrés au point saisi. Décaler — champ Distance au bandeau, côté choisi dans la vue et même distance en aperçu et au clic, y compris pour les murs courbes. | ce commit | `cargo check --workspace --tests`, `cargo test -p interface --release` (102 tests dont poignée oblique, guides d’un sommet et distance imposée des deux côtés). Non essayé dans une fenêtre native. |

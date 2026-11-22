@@ -80,14 +80,18 @@ impl Application {
             }
             self.editeur_hachure = None;
         }
-        let d = motif.and_then(|n| p.motifs.iter().find(|m| m.nom == n));
-        let nom = match d {
+        let d = motif.and_then(|n| p.definition_motif(&modele::MotifCoupe::hachures(n)));
+        if motif.is_some() && d.as_ref().is_none_or(|d| d.tuile.is_none()) {
+            self.error = Some("Ce motif se modifie dans ses propriétés, avec ses familles de traits.".into());
+            return;
+        }
+        let nom = match &d {
             Some(d) => d.nom.clone(),
             None => (1..).map(|k| format!("Motif dessiné {k}")).find(|n| !p.noms_motifs().contains(n)).unwrap_or_default(),
         };
-        let tuile = d.and_then(|d| d.tuile.clone()).unwrap_or(TuileMotif { cote: 4.0, divisions: DIVISIONS_VUE, segments: Vec::new() });
-        let origine = d.map(|d| d.nom.clone());
-        let genre = d.map_or(modele::GenreMotif::Dessin, |d| d.genre);
+        let tuile = d.as_ref().and_then(|d| d.tuile.clone()).unwrap_or(TuileMotif { cote: 4.0, divisions: DIVISIONS_VUE, segments: Vec::new() });
+        let origine = d.as_ref().map(|d| d.nom.clone());
+        let genre = d.as_ref().map_or(modele::GenreMotif::Dessin, |d| d.genre);
         let mut q = p.clone();
         let vue = match q.ajouter_vue_dessin(ECHELLE_VUE) {
             Ok(v) => v,

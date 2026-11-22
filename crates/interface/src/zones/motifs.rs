@@ -1,5 +1,5 @@
 //! Motifs de hachures dans l'arborescence du projet, comme les matériaux : liste avec
-//! aperçu, clic pour les propriétés, double-clic pour redessiner un motif dessiné, menu
+//! aperçu, clic pour les propriétés, double-clic pour modifier, menu
 //! (Redessiner, Dupliquer, Supprimer ou Rétablir), Nouveau. Propriétés du motif choisi :
 //! nom (renommer met à jour les matériaux), familles de traits (angle, pas, glissement,
 //! origine, tirets en mm du papier) et aperçu. Un motif de base modifié est copié dans le
@@ -74,14 +74,17 @@ impl Application {
                     _ => n.clone(),
                 };
                 let resp = ui.selectable_label(self.motif_selectionne.as_deref() == Some(n.as_str()), texte)
-                    .on_hover_text("Clic : propriétés ; double-clic : redessiner");
+                    .on_hover_text("Clic : propriétés ; double-clic : modifier");
                 if resp.double_clicked() {
-                    action = Some(ActionMotif::Redessiner(n.clone()));
+                    action = Some(if d.tuile.is_some() { ActionMotif::Redessiner(n.clone()) } else { ActionMotif::Choisir(n.clone()) });
                 } else if resp.clicked() {
                     action = Some(ActionMotif::Choisir(n.clone()));
                 }
                 resp.context_menu(|ui| {
-                    if ui.button("Redessiner…").clicked() { action = Some(ActionMotif::Redessiner(n.clone())); ui.close(); }
+                    if ui.button("Modifier…").clicked() {
+                        action = Some(if d.tuile.is_some() { ActionMotif::Redessiner(n.clone()) } else { ActionMotif::Choisir(n.clone()) });
+                        ui.close();
+                    }
                     if ui.button("Dupliquer").clicked() { action = Some(ActionMotif::Dupliquer(n.clone())); ui.close(); }
                     let libelle = if de_base && du_projet { "Rétablir" } else { "Supprimer" };
                     if ui.add_enabled(du_projet && (de_base || !utilise(p, &n)), egui::Button::new(libelle)).clicked() {
@@ -223,7 +226,7 @@ impl Application {
             ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                if ui.button("Redessiner…").on_hover_text("Ouvrir le motif dans sa vue de dessin (un motif à familles repart d'un carré vide)").clicked() { action = Some(ActionMotif::Redessiner(choisi.clone())); }
+                if d.tuile.is_some() && ui.button("Redessiner…").on_hover_text("Ouvrir le motif dans sa vue de dessin").clicked() { action = Some(ActionMotif::Redessiner(choisi.clone())); }
                 if ui.button("Dupliquer").clicked() { action = Some(ActionMotif::Dupliquer(choisi.clone())); }
             });
         });
@@ -253,7 +256,10 @@ impl Application {
             if d.lignes != avant.lignes { d.tuile = None; }
             match p.motifs.iter_mut().find(|x| x.nom == choisi) {
                 Some(x) => *x = d,
-                None => p.motifs.push(d),
+                None => {
+                    if d.id.is_empty() { d.id = noyau::uuid::uuid(); }
+                    p.motifs.push(d);
+                }
             }
         } else {
             return true;
