@@ -8,7 +8,7 @@ Rôle : état et services de l'application autour de `Application` (défini avec
 | `vues.rs` | mémorisation, onglets et activation des vues (`onglets_vues`, `activer_vue`) |
 | `detail.rs` | niveau de détail et type de la vue ouverte (`affichage`, `regler_detail_vue`, commande `niveau_detail`) ; champ d'échelle et menu du niveau de détail communs aux barres de vue du projet et des familles |
 | `viewport.rs` | zone de vue : souris, rendu, superpositions, clics successifs d’attachement aux toitures (`viewport`) |
-| `projection.rs` | monde ↔ écran et zoom à la molette, communs aux vues du projet et des familles |
+| `projection.rs` | monde ↔ écran, visée brute sur un plan horizontal du projet et zoom à la molette |
 | `soleil.rs` | lieu, date et heure du soleil, ombres portées en cascades (`soleil`), caméra de vue, mode piéton |
 | `navigation_vue.rs` | type de la vue active (`vue_3d`, `vue_en_plan`) et navigation à la souris (`glisser`, `voler`) |
 | `fenetre.rs` | seul module public : `lancer` (appelé par `app`), `arriere_plan`, `cadre_natif` ; `include_bytes!("../../assets/icone.png")` |

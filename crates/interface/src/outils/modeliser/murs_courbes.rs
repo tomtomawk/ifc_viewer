@@ -81,7 +81,10 @@ impl Application {
         if let (Some((_,i,_)),Some(q))=(self.dessin2d.arc_glisse.clone(),resp.interact_pointer_pos().or(resp.hover_pos())) {
             let saisie = std::mem::take(&mut self.dessin2d.saisie);
             let fixe=points[if i==0 {2}else{0}].to_array();
-            let position=self.point_edition_axe(ui,rect,q,ui.input(|i|i.modifiers.shift),fixe,fixe);
+            let origine = points[i];
+            let appui = noyau::forme2d::arc_3_points(points[0], points[1], points[2])
+                .map_or(origine, |(centre, ..)| origine + (origine - centre).perp());
+            let position=self.point_edition_axe(ui,rect,q,ui.input(|i|i.modifiers.shift),fixe,[origine.to_array(),appui.to_array()]);
             self.dessin2d.saisie = saisie;
             let valeur = self.dessin2d.saisie.replace(',', ".").parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).map(|v| v * modele::unite::unite().facteur());
             let axe = self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(&id)).map(|(axe,_)|axe);

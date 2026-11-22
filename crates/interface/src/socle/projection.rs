@@ -9,6 +9,18 @@ pub(crate) fn ndc(rect: egui::Rect, p: egui::Pos2) -> Vec2 {
     Vec2::new((p.x - rect.left()) / rect.width().max(1.0) * 2.0 - 1.0, 1.0 - (p.y - rect.top()) / rect.height().max(1.0) * 2.0)
 }
 
+impl Application {
+    /// Intersection brute du curseur avec un plan horizontal du projet (mm).
+    pub(crate) fn point_plan_horizontal(&self, rect: egui::Rect, q: egui::Pos2, altitude: f64) -> Option<glam::DVec3> {
+        let scene = self.scene.as_ref()?;
+        let n = ndc(rect, q);
+        let (o, d) = self.camera.ray(n.x, n.y, rect.width() / rect.height().max(1.0));
+        if d.z.abs() < 1e-6 { return None; }
+        let t = (altitude * 0.001 - scene.origin.z - o.z as f64) / d.z as f64;
+        (t.is_finite() && t > 0.0).then(|| (o.as_dvec3() + d.as_dvec3() * t + scene.origin) * 1000.0)
+    }
+}
+
 /// Projection à l'écran d'un point `q` (repère de rendu, m) par la matrice `vp`.
 pub(crate) fn ecran(vp: Mat4, rect: egui::Rect, q: Vec3) -> Option<egui::Pos2> {
     let c = vp * q.extend(1.0);

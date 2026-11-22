@@ -183,12 +183,15 @@ impl Application {
     /// Point retenu pour la commande : Décaler prend la distance tapée, du côté du curseur.
     fn point_commande(&self, commande: CommandeContour, p: DVec2) -> DVec2 {
         if commande != CommandeContour::Decaler { return p; }
-        let Some(distance) = crate::saisie::moteur_accrochage::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur()) else { return p };
+        let distance = crate::saisie::moteur_accrochage::distance_saisie(&self.dessin2d.saisie, modele::unite::unite().facteur())
+            .unwrap_or(self.transfo.distance_decalage);
+        if distance <= 0.0 { return p; }
+        let cote = self.dessin2d.curseur.unwrap_or(p);
         let Some((c, i)) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.segment) else { return p };
         let Some(points) = self.dessin2d.dalle.get(c).filter(|x| i < x.len()) else { return p };
         let (a, b) = (DVec2::from_array(points[i]), DVec2::from_array(points[(i + 1) % points.len()]));
         let Some(n) = (b - a).try_normalize().map(|d| d.perp()) else { return p };
-        a + n * distance.copysign((p - a).dot(n))
+        a + n * distance.copysign((cote - a).dot(n))
     }
 
     /// Clic pendant une commande du ruban Modifier sur le tracé : point de départ, de

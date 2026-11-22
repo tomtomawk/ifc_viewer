@@ -205,7 +205,9 @@ impl Application {
             let maj = ui.input(|i| i.modifiers.shift);
             // commande de Modifier : repérage et distance tapée depuis son point de départ
             let base = self.dessin2d.edition_contour.as_ref().and_then(|e| e.commande.and(e.depart));
-            self.dessin2d.point = self.dessin2d.curseur.map(|c| if base.is_some() { self.point_dessin_depuis(rect, c, maj, temps, base) } else { self.point_dessin(rect, c, maj, temps) });
+            if self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.glisse.is_none()) {
+                self.dessin2d.point = self.dessin2d.curseur.map(|c| if base.is_some() { self.point_dessin_depuis(rect, c, maj, temps, base) } else { self.point_dessin(rect, c, maj, temps) });
+            }
             if self.dessin2d.reperage.survol_accroche.is_some() || self.dessin2d.reperage.survol_segment.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
             if let Some(commande) = self.dessin2d.edition_contour.as_ref().and_then(|e| e.commande) {
                 if resp.clicked_by(PointerButton::Secondary) {
@@ -243,12 +245,15 @@ impl Application {
                 }
             }
             if resp.drag_started_by(PointerButton::Primary) {
+                self.dessin2d.reperage.oublier();
                 if let Some((_, c, i)) = sommet {
+                    let ferme = self.dessin2d.edition_contour.as_ref().is_some_and(|e| e.fermee(c));
+                    let glisse = GlisseContour::sommet(&self.dessin2d, c, i, ferme);
                     let Some(e) = self.dessin2d.edition_contour.as_mut() else { return };
                     e.selection = Some(c);
                     e.segment = None;
                     e.sommet = Some((c, i));
-                    e.glisse = Some(GlisseContour::Sommet(c, i));
+                    e.glisse = Some(glisse);
                 } else if let (Some((_, c, i, _)), Some(q)) = (arete, q)
                     && let Some(origine) = self.depuis_ecran(rect, q) {
                         let a = DVec2::from_array(self.dessin2d.dalle[c][i]);
@@ -264,24 +269,12 @@ impl Application {
             let curseur = resp.interact_pointer_pos().or(resp.hover_pos());
             if let (Some(glisse), Some(q)) = (glisse, curseur)
                 && let Some(p) = self.depuis_ecran(rect, q) {
-                    match glisse {
-                        GlisseContour::Sommet(c, i) => {
-                            // La poignée suit le curseur librement : elle ne s'accroche
-                            // pas à sa propre position ni aux guides pendant le déplacement.
-                            self.dessin2d.dalle[c][i] = [(p.x * 10.0).round() / 10.0, (p.y * 10.0).round() / 10.0];
-                        }
-                        GlisseContour::Segment { contour, segment, origine, a, b } => {
-                            let delta = p - origine;
-                            let suivant = (segment + 1) % self.dessin2d.dalle[contour].len();
-                            self.dessin2d.dalle[contour][segment] = (a + delta).to_array();
-                            self.dessin2d.dalle[contour][suivant] = (b + delta).to_array();
-                        }
-                    }
-                }
+                self.glisser_contour(rect, glisse, p, maj, temps);
+            }
             if resp.drag_stopped() {
                 // Les deux extrémités d'un tracé ouvert réunies ferment le contour,
                 // sans conserver deux sommets identiques ni créer de segment nul.
-                if let (Some(GlisseContour::Sommet(c, i)), Some(q)) = (glisse, curseur) {
+                if let (Some(GlisseContour::Sommet { contour: c, sommet: i, .. }), Some(q)) = (glisse, curseur) {
                     let n = self.dessin2d.dalle[c].len();
                     let ouvert = self.dessin2d.edition_contour.as_ref().is_some_and(|e| !e.fermee(c));
                     if ouvert && n >= 4 && (i == 0 || i + 1 == n) {
@@ -298,6 +291,7 @@ impl Application {
                     }
                 }
                 if let Some(e) = self.dessin2d.edition_contour.as_mut() { e.glisse = None; }
+                if glisse.is_some() { self.dessin2d.reperage.oublier(); }
             }
             let topologie_fixe = self.dessin2d.edition_contour.as_ref().is_some_and(|e| matches!(e.creation, Some(Usage::Terrain | Usage::Escalier | Usage::GardeCorps | Usage::Annotation)));
             // (le clic droit ne supprime rien : Suppr retire le trait ou le sommet sélectionné)

@@ -54,6 +54,8 @@ pub(crate) struct Visee<'a> {
     /// Angle des axes du repère (plan tourné), radians.
     pub angle_axes: f64,
     pub trace_actif: bool,
+    /// Droites projetables propres à la poignée saisie.
+    pub guides_locaux: &'a [(DVec2, DVec2)],
     /// Texte tapé (distance, `d<a`, `@x;y`, `#dx;dy`).
     pub saisie: &'a str,
     /// mm par unité de l'utilisateur.
@@ -180,7 +182,7 @@ fn viser_sans_distance(reperage: &mut Reperage, source: &dyn SourceAccrochage, c
         return (point, Accroche::Polaire(angle));
     }
     let (geoms, droites) = (source.geoms(), source.droites());
-    if let Some(point) = reperage.calculer(c, v.tol, geoms, droites, v.precedent, v.maj, v.temps, v.delai, v.angle_axes, v.trace_actif) {
+    if let Some(point) = reperage.calculer(c, v.tol, geoms, droites, v.precedent, v.maj, v.temps, v.delai, v.angle_axes, v.trace_actif, v.guides_locaux) {
         return point;
     }
     if !v.maj && let Some(p) = proche(c, v.tol, geoms, droites) {
@@ -260,7 +262,7 @@ mod tests {
         assert!((p.x - p.y).abs() < 1e-9);
         let mut r = Reperage::default();
         let source = Geometrie::default();
-        let v = Visee { tol: 5.0, precedent: Some(DVec2::ZERO), maj: false, temps: 0.0, delai: 0.8, angle_axes: 0.0, trace_actif: true, saisie: "250", facteur: 1.0, pas: 10.0 };
+        let v = Visee { tol: 5.0, precedent: Some(DVec2::ZERO), maj: false, temps: 0.0, delai: 0.8, angle_axes: 0.0, trace_actif: true, guides_locaux: &[], saisie: "250", facteur: 1.0, pas: 10.0 };
         let (p, _) = viser(&mut r, &source, DVec2::new(400.0, 3.0), &v);
         assert!((p - DVec2::new(250.0, 0.0)).length() < 1e-9, "{p}");
         assert_eq!(distance_saisie("2,5>45", 1000.0), Some(2500.0));

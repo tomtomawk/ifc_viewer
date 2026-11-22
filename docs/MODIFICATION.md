@@ -49,6 +49,7 @@ bloquante. Concrètement :
 - **Cotes temporaires** : distance, angle, nombre ou facteur affichés pendant le mouvement. Un clic sur une cote temporaire permet de la saisir.
 - **Aperçu fantôme** du résultat final, copies et jonctions comprises.
 - **Poignées** sur la sélection, quand aucune commande n'est active : extrémités (prolonger), milieu (déplacer), centre de rotation (déplaçable), flèches d'inversion. Tirer une poignée équivaut à la commande correspondante. Murs droits et poutres (sélection d'un seul élément) : ronds aux extrémités de la ligne (implantation du mur, ligne tracée de la poutre) — glisser allonge, raccourcit ou pivote autour de l'autre extrémité, accrochages de la vue, Maj pour les axes, longueur tapée pendant le glissement ou dans la cote affichée ensuite ; carré au milieu — glisser déplace (`Deplacer`) ; flèches d'inversion pour les murs seulement. Une poutre garde la hauteur de ses extrémités et s'enregistre par `Commande::Barre` ; un glissement = une étape d'annulation (`interface/src/outils/modifier/poignees.rs`, `Barre::avec_extremite`).
+- Pendant le glissement, l’axe ou la tangente au point saisi et sa perpendiculaire servent de guides d’accrochage. Ces guides restent ancrés à la position initiale de la poignée. Aux sommets de contour, les arêtes voisines fournissent les directions.
 - **Les mêmes fonctions dans les trois vues** : en 3D, la saisie se fait sur le plan de travail du niveau de l'élément.
 
 Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote (clics simulés), puis vérifie l'aperçu, la transaction, l'annulation et Échap.
@@ -59,7 +60,7 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 |---|---|---|---|---|---|
 | 1 | **Aligner** | AL | aucune préalable | 1. segment de référence en plan ou face de référence en 3D ; 2. segment ou face de l’élément à déplacer, clic par clic | Échap ou clic droit pour changer de référence |
 | 2 | **Déplacer** | MV | éléments | point de départ → point d'arrivée, ou distance saisie | Copier ; Contraindre ; Déconnecter (détacher les jonctions) ; Déplacer en Z |
-| 3 | **Décaler** | DE | murs, lignes, contours | côté par la souris + distance, ou clic de passage | Copier (par défaut : oui) ; Mesure : axe / face |
+| 3 | **Décaler** | DE | murs, lignes, contours | saisir la distance au bandeau, puis cliquer du côté voulu | Copier (par défaut : oui) ; mesure : axe / face ; distance à zéro pour suivre le curseur |
 | 4 | **Tourner** | RO | éléments | centre (sélection par défaut, déplaçable) → direction de départ → angle, ou angle saisi | Copier ; Pas angulaire |
 | 5 | **Copier** | CO | éléments | point de départ → point(s) d'arrivée | Multiple ; Sur un niveau (= `CopierSurNiveau`) |
 | 6 | **Réseau** | RE | éléments | linéaire : 2 points + nombre ; polaire : centre + angle + nombre | Linéaire / polaire ; Dernier = distance totale ou pas ; Grouper |
@@ -96,7 +97,7 @@ Règle : le verrouillage s'applique au **modèle** (partagé en collaboration). 
 |---|---|---|
 | Aligner | référence → élément(s) | référence en bleu, segment ou face visé en orange |
 | Déplacer | départ → arrivée | élément fantôme attaché au curseur, cote de distance, lignes d'alignement sur les autres éléments |
-| Décaler | survol → clic du côté voulu | ligne décalée en fantôme du côté du curseur, cote de décalage |
+| Décaler | régler Distance → choisir l’élément → cliquer du côté voulu | aperçu et cote à la distance réglée, ou déterminée par la position du curseur si le champ vaut zéro |
 | Tourner | centre (glissable) → direction → angle | rapporteur, arc d'angle, cote d'angle, fantôme tourné |
 | Copier | départ → arrivées successives | fantôme à chaque position, compteur de copies |
 | Réseau | départ → deuxième élément ou dernier | toutes les copies en fantôme, nombre modifiable au clic sur l'étiquette, poignée pour étirer le réseau |

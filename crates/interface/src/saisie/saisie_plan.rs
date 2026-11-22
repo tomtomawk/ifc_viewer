@@ -871,13 +871,7 @@ impl Application {
     pub(crate) fn point_tracage(&self, q: egui::Pos2, rect: egui::Rect, orthogonal: bool, depart: Option<[f64; 2]>, altitude: f64) -> Option<([f64; 2], AccrocheMur)> {
         let (projet, _) = self.natif.as_ref()?;
         let scene = self.scene.as_ref()?;
-        let x = (q.x - rect.left()) / rect.width() * 2.0 - 1.0;
-        let y = 1.0 - (q.y - rect.top()) / rect.height() * 2.0;
-        let (o, d) = self.camera.ray(x, y, rect.width() / rect.height().max(1.0));
-        if d.z.abs() < 1e-6 { return None; }
-        let t = (altitude * 0.001 - scene.origin.z - o.z as f64) / d.z as f64;
-        if !t.is_finite() || t <= 0.0 { return None; }
-        let p = (o.as_dvec3() + d.as_dvec3() * t + scene.origin) * 1000.0;
+        let p = self.point_plan_horizontal(rect, q, altitude)?;
         let point = [(p.x / 10.0).round() * 10.0, (p.y / 10.0).round() * 10.0];
         let accroche = AccrocheMur::Grille;
         let vp = self.camera.view_proj(rect.width() / rect.height().max(1.0));

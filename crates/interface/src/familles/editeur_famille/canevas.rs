@@ -279,7 +279,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
     let facteur = if papier { 1.0 } else { modele::unite::unite().facteur() };
     let point_guide = curseur_guide.map(|q| {
         let (h, v) = cadre.modele(q);
-        let visee = crate::saisie::moteur_accrochage::Visee { tol: tol_accroche, precedent: depart_courant.map(|p| glam::DVec2::new(p.0, p.1)), maj, temps: ui.input(|i| i.time), delai: delai_accrochage, angle_axes: 0.0, trace_actif: ed.trace_polyligne.is_some(), saisie: &ed.saisie_trace.texte, facteur, pas: 1.0 };
+        let visee = crate::saisie::moteur_accrochage::Visee { tol: tol_accroche, precedent: depart_courant.map(|p| glam::DVec2::new(p.0, p.1)), maj, temps: ui.input(|i| i.time), delai: delai_accrochage, angle_axes: 0.0, trace_actif: ed.trace_polyligne.is_some(), guides_locaux: &[], saisie: &ed.saisie_trace.texte, facteur, pas: 1.0 };
         crate::saisie::moteur_accrochage::viser(&mut ed.reperage, &source, glam::DVec2::new(h, v), &visee)
     });
     let (o, h1, v1) = (cadre.ecran(0.0, 0.0), cadre.ecran(1.0, 0.0), cadre.ecran(0.0, 1.0));

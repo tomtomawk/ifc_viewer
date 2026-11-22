@@ -6,7 +6,7 @@ Rôle : interaction commune aux outils de la vue et aux éditeurs.
 |---|---|
 | `moteur_accrochage.rs` | moteur unique d'accrochage et de repérage des tracés 2D (projet, familles, plan de dessin actif en 3D) : `SourceAccrochage` (tracés, droites), `viser`, `viser_simple`, `peindre_marqueur`, distance tapée |
 | `accrochage.rs` | choix du point accroché, contraintes (Maj), marqueur ; `AccrocheMur` et `marqueur` importés par `lib.rs` |
-| `reperage.rs` | guides temporaires (repérage polaire) |
+| `reperage.rs` | guides temporaires (repérage polaire, axe et perpendiculaire de la poignée saisie) |
 | `saisie_trace.rs` | saisie clavier des points (distance, angle, coordonnées) |
 | `pentes_vue.rs` | repères des arêtes, angle de pente éditable dans la vue et menu des talus |
 | `saisie_plan.rs` | saisie en plan : création des murs, dalles et vues natives, aperçus, axes |

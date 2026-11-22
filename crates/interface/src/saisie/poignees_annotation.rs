@@ -4,7 +4,7 @@ use glam::{DVec2, DVec3};
 use modele::documentation::Annotation;
 
 enum MouvementAnnotation {
-    Poignee { annotation: Annotation, indice: usize },
+    Poignee { annotation: Annotation, indice: usize, guides: Vec<(DVec2, DVec2)> },
     Groupe { ids: Vec<String>, annotations: Vec<Annotation>, origine: DVec2, delta: DVec2 },
 }
 
@@ -15,6 +15,13 @@ pub(crate) struct GlissementAnnotation {
 }
 
 impl Application {
+    pub(crate) fn id_poignee_annotation(&self) -> Option<&str> {
+        match &self.poignee_annotation.as_ref()?.mouvement {
+            MouvementAnnotation::Poignee { annotation, .. } => Some(&annotation.id),
+            _ => None,
+        }
+    }
+
     fn annotations_selectionnees(&self) -> Option<(Vec<String>, Vec<Annotation>)> {
         let ids = self.selection_bim();
         if ids.is_empty() { return None; }
@@ -100,8 +107,17 @@ impl Application {
             && let Some(q) = ui.input(|i| i.pointer.press_origin())
         {
             let poignee = if ids.len() == 1 && let [annotation] = annotations.as_slice() {
-                crate::outils::dessiner::dessin_plan::poignees_forme(&annotation.forme).iter().position(|p| self.ecran_annotation(rect, *p).is_some_and(|e| e.distance(q) <= 8.0))
-                    .map(|indice| MouvementAnnotation::Poignee { annotation: annotation.clone(), indice })
+                crate::outils::dessiner::dessin_plan::poignees_forme(&annotation.forme).into_iter().enumerate()
+                    .find(|(_, p)| self.ecran_annotation(rect, *p).is_some_and(|e| e.distance(q) <= 8.0))
+                    .map(|(indice, origine)| {
+                        use crate::saisie::reperage::{axes_poignee, directions_au_point};
+                        let origine = DVec2::from_array(origine);
+                        let guides = annotation.forme.forme_2d().into_iter()
+                            .flat_map(|forme| directions_au_point(origine, &forme.geoms()))
+                            .flat_map(|direction| axes_poignee(origine, direction))
+                            .collect();
+                        MouvementAnnotation::Poignee { annotation: annotation.clone(), indice, guides }
+                    })
             } else { None };
             let mouvement = poignee.or_else(|| {
                 let admissible = annotations.iter().all(|a| a.forme.forme_2d().is_some() || matches!(a.forme, modele::documentation::AnnotationForme::Texte { .. }));
@@ -115,17 +131,30 @@ impl Application {
         }
         if self.poignee_annotation.is_some() && (ui.input(|i| i.key_pressed(egui::Key::Escape)) || response.clicked_by(PointerButton::Secondary)) {
             self.poignee_annotation = None;
+            self.dessin2d.reperage.oublier();
+            self.dessin2d.point = None;
             return true;
         }
         let active = self.poignee_annotation.is_some();
-        if active && let Some(point) = response.interact_pointer_pos().and_then(|q| self.point_annotation(rect, q))
-            && let Some(glisse) = &mut self.poignee_annotation {
-            match &mut glisse.mouvement {
-                MouvementAnnotation::Poignee { annotation, indice } => crate::outils::dessiner::dessin_plan::deplacer_poignee_forme(&mut annotation.forme, *indice, point),
-                MouvementAnnotation::Groupe { origine, delta, .. } => *delta = DVec2::from_array(point) - *origine,
+        if active && let Some(mut point) = response.interact_pointer_pos().and_then(|q| self.point_annotation(rect, q)) {
+            if let Some(GlissementAnnotation { mouvement: MouvementAnnotation::Poignee { guides, .. }, .. }) = &self.poignee_annotation {
+                use moteur2d::dao::Accroche;
+                let guides = guides.clone();
+                let (maj, temps) = ui.input(|i| (i.modifiers.shift, i.time));
+                let (vise, accroche) = self.point_dessin_guide(rect, DVec2::from_array(point), maj, temps, None, &guides);
+                if accroche != Accroche::Libre { point = vise.to_array(); }
+                self.dessin2d.point = Some((DVec2::from_array(point), accroche));
+            }
+            if let Some(glisse) = &mut self.poignee_annotation {
+                match &mut glisse.mouvement {
+                    MouvementAnnotation::Poignee { annotation, indice, .. } => crate::outils::dessiner::dessin_plan::deplacer_poignee_forme(&mut annotation.forme, *indice, point),
+                    MouvementAnnotation::Groupe { origine, delta, .. } => *delta = DVec2::from_array(point) - *origine,
+                }
             }
         }
         if response.drag_stopped_by(PointerButton::Primary) && let Some(glisse) = self.poignee_annotation.take() {
+            self.dessin2d.reperage.oublier();
+            self.dessin2d.point = None;
             let commande = match glisse.mouvement {
                 MouvementAnnotation::Poignee { annotation, .. } => Some(commandes::Commande::Annoter { annotation }),
                 MouvementAnnotation::Groupe { ids, delta, .. } if delta.length_squared() > 1e-12 => {
@@ -152,6 +181,12 @@ impl Application {
         };
         let painter = ui.painter().with_clip_rect(rect);
         let bleu = Color32::from_rgb(0, 115, 210);
+        if self.id_poignee_annotation().is_some()
+            && let Some((point, accroche)) = self.dessin2d.point
+            && let Some(e) = self.ecran_annotation(rect, point.to_array()) {
+            self.dessin2d.reperage.peindre(&painter, |p| self.ecran_annotation(rect, p.to_array()).unwrap_or(e));
+            crate::saisie::moteur_accrochage::peindre_marqueur(&painter, e, accroche);
+        }
         if let Some(GlissementAnnotation { mouvement: MouvementAnnotation::Groupe { ids, annotations, delta, .. }, .. }) = &self.poignee_annotation
             && ids.len() > annotations.len()
             && let (Some(scene), Some((_, u, h))) = (&self.scene, self.repere_annotation()) {

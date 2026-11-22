@@ -6,7 +6,6 @@
 //! droit pour revenir d'une étape.
 use crate::*;
 use commandes::Commande;
-use modele::Axe;
 use crate::zones::ruban::Outil;
 
 /// Nombre d'éléments d'un réseau quand aucun n'est réglé.
@@ -34,6 +33,8 @@ pub(crate) struct Transformation {
     pub polaire: bool,
     /// Scinder : écart laissé entre les deux parties (mm).
     pub ecart: f64,
+    /// Décaler : distance définie au bandeau (mm). Zéro suit le curseur.
+    pub distance_decalage: f64,
     /// Valeur tapée au clavier (distance en unité d'affichage, angle en degrés, facteur).
     pub saisie: String,
     /// Dernière position du curseur dans le plan (mm), pour une valeur tapée.
@@ -58,13 +59,13 @@ impl Transformation {
     }
     /// Remet l'état à zéro en gardant les options.
     pub fn reinitialiser(&mut self) {
-        let (copie, multiple, outil, nombre, polaire, ecart) = (self.copie, self.multiple, self.outil, self.nombre, self.polaire, self.ecart);
-        *self = Self { copie, multiple, outil, nombre, polaire, ecart, ..Default::default() };
+        let (copie, multiple, outil, nombre, polaire, ecart, distance_decalage) = (self.copie, self.multiple, self.outil, self.nombre, self.polaire, self.ecart, self.distance_decalage);
+        *self = Self { copie, multiple, outil, nombre, polaire, ecart, distance_decalage, ..Default::default() };
     }
     /// Nouvel outil : options par défaut de la commande (Symétrie et Décaler copient).
     pub fn commencer(&mut self, outil: Option<Outil>) {
-        let (nombre, polaire, ecart) = (self.nombre, self.polaire, self.ecart);
-        *self = Self { outil, nombre, polaire, ecart, copie: matches!(outil, Some(Outil::Symetrie | Outil::Decaler)), ..Default::default() };
+        let (nombre, polaire, ecart, distance_decalage) = (self.nombre, self.polaire, self.ecart, self.distance_decalage);
+        *self = Self { outil, nombre, polaire, ecart, distance_decalage, copie: matches!(outil, Some(Outil::Symetrie | Outil::Decaler)), ..Default::default() };
     }
     pub fn nombre_reseau(&self) -> usize {
         if self.nombre >= 2 { self.nombre } else { NOMBRE_RESEAU }
@@ -103,6 +104,7 @@ impl Transformation {
             Outil::Aligner if self.alignement.reference.is_none() => "Cliquer la référence (segment ou face)".into(),
             Outil::Aligner => "Cliquer le segment ou la face à aligner · Échap : changer de référence".into(),
             Outil::Decaler if self.element.is_none() => "Cliquer le mur ou la dalle à décaler".into(),
+            Outil::Decaler if self.distance_decalage > 0.0 && self.saisie.is_empty() => "Cliquer le côté du décalage".into(),
             Outil::Decaler => format!("Cliquer le côté et la distance, ou taper la distance{valeur}"),
             Outil::Scinder if self.element.is_some() => "Tracer la coupe de bord à bord · Entrée pour scinder".into(),
             Outil::Scinder => "Choisir une surface à découper ou cliquer un mur ou une poutre au point de coupure".into(),
@@ -244,48 +246,9 @@ impl Application {
     }
 
     /// Axe (justification) d'un mur ou mur composé.
-    fn axe_mur(&self, id: &str) -> Option<([f64; 2], [f64; 2], f64)> {
+    pub(super) fn axe_mur(&self, id: &str) -> Option<([f64; 2], [f64; 2], f64)> {
         let (p, _) = self.natif.as_ref()?;
         p.axe_element(id)
-    }
-
-    /// Distance de décalage (mm) donnée par le curseur `p` pour l'élément `id` : à gauche
-    /// du sens d'un mur droit, vers le centre d'un arc trigonométrique, vers l'extérieur
-    /// d'un contour de dalle.
-    fn distance_decalage(&self, id: &str, p: [f64; 2]) -> Option<f64> {
-        let (projet, _) = self.natif.as_ref()?;
-        if let Some(d) = projet.dalles.iter().find(|d| d.id == id) {
-            let c = d.contours.first()?;
-            let n = c.len();
-            let dist = (0..n).map(|i| {
-                let (a, b) = (c[i], c[(i + 1) % n]);
-                let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
-                let l2 = (ux * ux + uy * uy).max(1e-9);
-                let t = (((p[0] - a[0]) * ux + (p[1] - a[1]) * uy) / l2).clamp(0.0, 1.0);
-                (p[0] - a[0] - ux * t).hypot(p[1] - a[1] - uy * t)
-            }).fold(f64::MAX, f64::min);
-            let mut dedans = false;
-            for i in 0..n {
-                let (a, b) = (c[i], c[(i + n - 1) % n]);
-                if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0] {
-                    dedans = !dedans;
-                }
-            }
-            return Some(if dedans { -dist } else { dist });
-        }
-        let couche = projet.assemblage(id).and_then(|a| a.couches.first().cloned()).unwrap_or(id.to_string());
-        if let Some(Axe::Arc { debut, centre, direct, .. }) = projet.murs.iter().find(|m| m.id == couche).map(|m| m.axe) {
-            let r = (debut[0] - centre[0]).hypot(debut[1] - centre[1]);
-            let rp = (p[0] - centre[0]).hypot(p[1] - centre[1]);
-            return Some(if direct { r - rp } else { rp - r });
-        }
-        let (a, b, _) = self.axe_mur(id)?;
-        Some(distance_signee(p, a, b))
-    }
-
-    /// Élément décalable : mur (droit, courbe, composé) ou dalle.
-    fn decalable(&self, id: &str) -> bool {
-        self.axe_mur(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.dalles.iter().any(|d| d.id == id))
     }
 
     /// Exécute la transformation de la sélection en une seule transaction ; `copie` : sur
@@ -385,7 +348,7 @@ impl Application {
                     None => self.status = "Décaler : cliquer un mur ou une dalle.".into(),
                 },
                 Some(id) => {
-                    if let Some(d) = self.distance_decalage(&id, p) {
+                    if let Some(d) = self.distance_decalage_visee(&id, p, self.point_plan_horizontal(rect, ecran, altitude).map(|p| [p.x, p.y])) {
                         self.valider_decalage(&id, d);
                     }
                 }
@@ -558,7 +521,8 @@ impl Application {
             self.valider_coupe_surface();
             return;
         }
-        if !self.transfo.attend_valeur(outil) || self.saisie_active {
+        if !self.transfo.attend_valeur(outil) || self.saisie_active
+            || (outil == Outil::Decaler && ctx.egui_wants_keyboard_input()) {
             return;
         }
         let mut entree = false;
@@ -640,7 +604,8 @@ impl Application {
             };
             self.point_tracage(q, rect, orthogonal, depart, altitude)
         });
-        self.transfo.curseur = point.map(|(p, _)| p);
+        let brut = (outil == Outil::Decaler).then(|| self.point_plan_horizontal(rect, survol?, altitude).map(|p| [p.x, p.y])).flatten();
+        self.transfo.curseur = brut.or_else(|| point.map(|(p, _)| p));
         if let (Some(q), Some((p, acc))) = (survol, point) {
             if let Some(e) = self.ecran_plan(rect, p, altitude) {
                 marqueur(&painter, e, acc);
@@ -800,10 +765,7 @@ impl Application {
                 }
                 Some(id) => {
                     let Some((p, _)) = point else { return };
-                    let Some(mut d) = self.distance_decalage(&id, p) else { return };
-                    if let Some(v) = lire_valeur(&self.transfo.saisie) {
-                        d = d.signum() * unite.vers_mm(v.abs());
-                    }
+                    let Some(d) = self.distance_decalage_visee(&id, p, brut) else { return };
                     // dalle : contour décalé en fantôme
                     if let Some((projet, _)) = &self.natif
                         && let Some(dalle) = projet.dalles.iter().find(|x| x.id == id) {
@@ -817,21 +779,9 @@ impl Application {
                             }
                             return;
                         }
-                    let Some((a, b, z)) = self.axe_mur(&id) else { return };
-                    trait_axe(&id, bleu, 2.0);
-                    let _ = distance_signee(p, a, b);
-                    if let Some(v) = lire_valeur(&self.transfo.saisie) {
-                        d = d.signum() * unite.vers_mm(v.abs());
+                    if let Some((a, b)) = self.apercu_decalage_mur(&id, d, rect, &painter, bleu) {
+                        cote(a, b, unite.afficher(d.abs()));
                     }
-                    let (ux, uy) = (b[0] - a[0], b[1] - a[1]);
-                    let l = ux.hypot(uy).max(1e-9);
-                    let n = [-uy / l * d, ux / l * d];
-                    let (a2, b2) = ([a[0] + n[0], a[1] + n[1]], [b[0] + n[0], b[1] + n[1]]);
-                    if let (Some(x), Some(y)) = (self.ecran_plan(rect, a2, z), self.ecran_plan(rect, b2, z)) {
-                        painter.line_segment([x, y], egui::Stroke::new(2.5, bleu.gamma_multiply(0.7)));
-                    }
-                    let m = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
-                    cote(m, [m[0] + n[0], m[1] + n[1]], unite.afficher(d.abs()));
                 }
             },
             Outil::Demolir | Outil::Reproduire | Outil::ChangerHote | Outil::Inverser => {

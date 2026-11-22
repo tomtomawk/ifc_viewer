@@ -67,6 +67,7 @@ impl Application {
         let edition = self.dessin2d.edition_contour.as_ref();
         let selection = edition.is_some_and(|e| !e.dessin);
         let commande = edition.is_some_and(|e| e.commande.is_some());
+        let decaler = edition.is_some_and(|e| e.commande == Some(CommandeContour::Decaler));
         let ligne = edition.is_some_and(|e| e.ligne());
         let contours = self.dessin2d.dalle.len();
         let mut copies = edition.and_then(|e| match e.commande { Some(CommandeContour::Reseau(n)) => Some(n), _ => None });
@@ -91,6 +92,7 @@ impl Application {
             let outil_enfonce = if suivre { OutilDessin::Cercle } else { outil };
             (choisir_selection, forme_choisie) = boutons_trace(ui, selection && !suivre, commande, outil_enfonce, formes_usage(usage), raison_forme);
             if usage == Usage::Poutre { self.options_poutre(ui); }
+            if decaler { self.champ_distance_decalage(ui); }
             if let Some(n) = copies.as_mut() {
                 ui.separator();
                 ui.label("Copies");

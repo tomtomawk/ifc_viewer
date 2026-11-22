@@ -3,6 +3,11 @@ use glam::DVec2;
 use moteur2d::dao::{self as d2, Accroche};
 use noyau::forme2d::{Geom};
 
+/// Axes et perpendiculaires passant par la position initiale de la poignée.
+pub(crate) fn axes_poignee(origine: DVec2, direction: DVec2) -> impl Iterator<Item = (DVec2, DVec2)> {
+    direction.try_normalize().into_iter().flat_map(move |d| [(origine, d), (origine, d.perp())])
+}
+
 /// Directions des éléments passant par un point de référence, pour leurs guides.
 pub(crate) fn directions_au_point(p: DVec2, geoms: &[Geom]) -> Vec<DVec2> {
     geoms.iter().filter_map(|g| match g {
@@ -86,7 +91,7 @@ impl Reperage {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn calculer(&mut self, c: DVec2, tol: f64, geoms: &[Geom], droites: &[(DVec2, DVec2)], precedent: Option<DVec2>, maj: bool, temps: f64, delai: f64, angle_axes: f64, trace_actif: bool) -> Option<(DVec2, Accroche)> {
+    pub fn calculer(&mut self, c: DVec2, tol: f64, geoms: &[Geom], droites: &[(DVec2, DVec2)], precedent: Option<DVec2>, maj: bool, temps: f64, delai: f64, angle_axes: f64, trace_actif: bool, guides_locaux: &[(DVec2, DVec2)]) -> Option<(DVec2, Accroche)> {
         self.guides.clear();
         self.cercle = (!maj).then(|| cercle_survole(c, tol, geoms)).flatten();
         let accroche = (!maj).then(|| crate::saisie::moteur_accrochage::accrocher_points(c, tol, geoms, droites, precedent)).flatten();
@@ -142,7 +147,7 @@ impl Reperage {
             let th = angle_axes;
             let u = DVec2::from_angle(th);
             let v = DVec2::new(-u.y, u.x);
-            let mut lignes = Vec::new();
+            let mut lignes = guides_locaux.to_vec();
             if trace_actif
                 && let Some(p) = precedent { lignes.extend([(p, u), (p, v)]); }
             if let Some(p) = self.reference {
@@ -197,6 +202,23 @@ impl Reperage {
 mod tests {
     use super::*;
 
+    #[test]
+    fn guides_de_poignee_passent_par_son_origine_sur_un_axe_oblique() {
+        let origine = DVec2::new(120.0, 80.0);
+        let direction = DVec2::new(3.0, 4.0).normalize();
+        let guides: Vec<_> = axes_poignee(origine, direction).collect();
+        for d in [direction, direction.perp()] {
+            let attendu = origine + d * 85.0;
+            let mut repere = Reperage::default();
+            let (p, genre) = repere.calculer(
+                attendu + d.perp() * 1.0, 2.0, &[], &[], None, false, 0.0, 0.5, 0.0, false, &guides,
+            ).unwrap();
+            assert_eq!(genre, Accroche::Ortho);
+            assert!(p.distance(attendu) < 1e-9);
+            assert_eq!(repere.guides[0].0, origine);
+        }
+    }
+
     /// N° 23 : un segment survolé devient une droite de guidage prolongée, sans point
     /// verrouillé ; on s'accroche à son intersection avec un autre guide, pas en un point
     /// quelconque de la droite.
@@ -205,19 +227,19 @@ mod tests {
         let mut repere = Reperage::default();
         let geoms = [Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 0.0)])];
         let p = DVec2::new(30.0, 0.2);
-        repere.calculer(p, 2.0, &geoms, &[], None, false, 1.0, 0.8, 0.0, true);
+        repere.calculer(p, 2.0, &geoms, &[], None, false, 1.0, 0.8, 0.0, true, &[]);
         assert!(repere.droites.is_empty());
-        repere.calculer(p, 2.0, &geoms, &[], None, false, 1.81, 0.8, 0.0, true);
+        repere.calculer(p, 2.0, &geoms, &[], None, false, 1.81, 0.8, 0.0, true, &[]);
         assert!(repere.reference.is_none(), "aucun point verrouillé");
         assert_eq!(repere.droites, vec![(DVec2::ZERO, DVec2::X)]);
         // prolongement de la droite, loin du segment : affichée mais pas accrochée seule
-        assert!(repere.calculer(DVec2::new(300.0, 0.5), 2.0, &geoms, &[], None, false, 2.0, 0.8, 0.0, true).is_none());
+        assert!(repere.calculer(DVec2::new(300.0, 0.5), 2.0, &geoms, &[], None, false, 2.0, 0.8, 0.0, true, &[]).is_none());
         assert!(repere.guides.contains(&(DVec2::ZERO, DVec2::X)));
         // intersection avec la verticale du point précédent : accrochée
-        let (point, genre) = repere.calculer(DVec2::new(250.5, 0.8), 2.0, &geoms, &[], Some(DVec2::new(250.0, 80.0)), false, 2.1, 0.8, 0.0, true).unwrap();
+        let (point, genre) = repere.calculer(DVec2::new(250.5, 0.8), 2.0, &geoms, &[], Some(DVec2::new(250.0, 80.0)), false, 2.1, 0.8, 0.0, true, &[]).unwrap();
         assert_eq!((point, genre), (DVec2::new(250.0, 0.0), Accroche::Intersection));
         // Maj : aucun guide
-        assert!(repere.calculer(DVec2::new(250.5, 0.8), 2.0, &geoms, &[], None, true, 2.2, 0.8, 0.0, true).is_none());
+        assert!(repere.calculer(DVec2::new(250.5, 0.8), 2.0, &geoms, &[], None, true, 2.2, 0.8, 0.0, true, &[]).is_none());
         assert!(repere.guides.is_empty());
         repere.oublier();
         assert!(repere.droites.is_empty());
@@ -230,10 +252,10 @@ mod tests {
         let mut repere = Reperage::default();
         let geoms = [Geom::Segment([DVec2::ZERO, DVec2::new(100.0, 0.0)])];
         // survol prolongé de l'extrémité : référence acquise
-        repere.calculer(DVec2::new(100.5, 0.5), 2.0, &geoms, &[], None, false, 0.0, 0.5, 0.0, true);
-        repere.calculer(DVec2::new(100.5, 0.5), 2.0, &geoms, &[], None, false, 1.0, 0.5, 0.0, true);
+        repere.calculer(DVec2::new(100.5, 0.5), 2.0, &geoms, &[], None, false, 0.0, 0.5, 0.0, true, &[]);
+        repere.calculer(DVec2::new(100.5, 0.5), 2.0, &geoms, &[], None, false, 1.0, 0.5, 0.0, true, &[]);
         assert_eq!(repere.reference, Some(DVec2::new(100.0, 0.0)));
-        let (point, _) = repere.calculer(DVec2::new(100.6, 40.0), 2.0, &geoms, &[], None, false, 1.1, 0.5, 0.0, true).unwrap();
+        let (point, _) = repere.calculer(DVec2::new(100.6, 40.0), 2.0, &geoms, &[], None, false, 1.1, 0.5, 0.0, true, &[]).unwrap();
         assert_eq!(repere.depart_saisie(point), Some(DVec2::new(100.0, 0.0)));
         let depart = repere.depart_saisie(point).unwrap();
         assert_eq!(moteur2d::dao::lire_saisie("25", Some(depart), Some(point - depart), 1.0).unwrap(), DVec2::new(100.0, 25.0));
@@ -255,7 +277,7 @@ mod tests_cercle {
         assert_eq!(cercle_survole(survol, 20.0, &geoms), Some((DVec2::ZERO, 5000.0)));
         assert_eq!(cercle_survole(DVec2::from_angle(3.0) * 5000.0, 20.0, &geoms), None);
         let mut r = Reperage::default();
-        r.calculer(survol, 20.0, &geoms, &[], None, false, 0.0, 1.0, 0.0, false);
+        r.calculer(survol, 20.0, &geoms, &[], None, false, 0.0, 1.0, 0.0, false, &[]);
         assert_eq!(r.cercle, Some((DVec2::ZERO, 5000.0)));
     }
 }

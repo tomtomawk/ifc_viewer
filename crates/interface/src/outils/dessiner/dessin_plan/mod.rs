@@ -12,6 +12,8 @@ mod commandes_contour;
 mod courbures;
 mod suivre_trait;
 mod palettes;
+mod poignees_contour;
+mod visee;
 use crate::*;
 use moteur2d::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
@@ -122,7 +124,7 @@ pub(crate) struct EtatDessin2D {
     pub(crate) curseur: Option<DVec2>,
     pub(crate) point: Option<(DVec2, Accroche)>,
     geoms: Option<(u64, String, Vec<Geom>)>,
-    reperage: crate::saisie::reperage::Reperage,
+    pub(crate) reperage: crate::saisie::reperage::Reperage,
     pub message: Option<String>,
     information: Option<String>,
     /// Contours fermés de l'élément horizontal en cours : parties et trémies, créés à la
@@ -203,7 +205,7 @@ enum PoigneeTerrain {
 
 #[derive(Clone, Copy)]
 enum GlisseContour {
-    Sommet(usize, usize),
+    Sommet { contour: usize, sommet: usize, origine: DVec2, directions: [DVec2; 2] },
     Segment { contour: usize, segment: usize, origine: DVec2, a: DVec2, b: DVec2 },
 }
 
@@ -895,11 +897,11 @@ impl Application {
             let (_,z)=self.natif.as_ref()?.0.trajectoire_justification(id)?;
             return Some((DVec3::new(0.,0.,z),DVec3::X,DVec3::Y));
         }
-        if self.poignee_axe.is_some() {
+        if self.poignee_axe.is_some() || self.glisse_milieu.is_some() {
             let (_,_,_,z,_)=self.axe_selection()?;
             return Some((DVec3::new(0.0,0.0,z),DVec3::X,DVec3::Y));
         }
-        match self.usage_dessin().map(|u| u.0).or_else(|| (self.texte_annotation_actif() || self.niveau_vue_actif()).then_some(Usage::Annotation))? {
+        match self.usage_dessin().map(|u| u.0).or_else(|| (self.texte_annotation_actif() || self.niveau_vue_actif() || self.id_poignee_annotation().is_some()).then_some(Usage::Annotation))? {
             Usage::Mur | Usage::Surface | Usage::Escalier | Usage::GardeCorps | Usage::Poutre | Usage::Terrain | Usage::LimitePropriete | Usage::Cadrage => Some((DVec3::new(0.0, 0.0, self.altitude_trace()), DVec3::X, DVec3::Y)),
             Usage::Annotation => {
                 let id = self.vue_native_id()?;
@@ -949,10 +951,10 @@ impl Application {
     }
 
     fn geoms_dessin_avec_mode(&mut self, selection: bool) -> Vec<Geom> {
-        let Some((usage, _)) = self.usage_dessin().or_else(||(self.poignee_axe.is_some() || self.dessin2d.arc_glisse.is_some()).then_some((Usage::Mur,OutilDessin::Ligne))).or_else(|| (self.texte_annotation_actif() || self.niveau_vue_actif()).then_some((Usage::Annotation, OutilDessin::Polyligne))) else { return Vec::new() };
+        let Some((usage, _)) = self.usage_dessin().or_else(||(self.poignee_axe.is_some() || self.glisse_milieu.is_some() || self.dessin2d.arc_glisse.is_some()).then_some((Usage::Mur,OutilDessin::Ligne))).or_else(|| (self.texte_annotation_actif() || self.niveau_vue_actif() || self.id_poignee_annotation().is_some()).then_some((Usage::Annotation, OutilDessin::Polyligne))) else { return Vec::new() };
         let vue = self.vue_native_id();
-        let altitude = if let Some((id,_,_))=&self.dessin2d.arc_glisse {self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(id)).map_or(0.0,|a|a.1)} else if self.poignee_axe.is_some() {self.axe_selection().map_or(0.0,|a|a.3)} else {self.altitude_trace()};
-        let exclu=self.poignee_axe.as_ref().map(|a|a.0.as_str()).or_else(||self.dessin2d.arc_glisse.as_ref().map(|a|a.0.as_str()));
+        let altitude = if let Some((id,_,_))=&self.dessin2d.arc_glisse {self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(id)).map_or(0.0,|a|a.1)} else if self.poignee_axe.is_some() || self.glisse_milieu.is_some() {self.axe_selection().map_or(0.0,|a|a.3)} else {self.altitude_trace()};
+        let exclu=self.poignee_axe.as_ref().map(|a|a.0.as_str()).or_else(||self.glisse_milieu.as_ref().map(|a|a.0.as_str())).or_else(||self.dessin2d.arc_glisse.as_ref().map(|a|a.0.as_str())).or_else(||self.id_poignee_annotation()).or_else(||self.dessin2d.edition_contour.as_ref().map(|e|e.id.as_str()));
         let visibilite = if selection {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -965,7 +967,7 @@ impl Application {
         let niveau_poutre = if usage == Usage::Poutre {
             self.bim.poutre.niveau.clone().or_else(|| self.niveau_trace())
         } else {
-            self.poignee_axe.as_ref().and_then(|(id, ..)| self.natif.as_ref()?.0.barres.iter().find(|b| b.id == *id).map(|b| b.niveau.clone()))
+            exclu.and_then(|id| self.natif.as_ref()?.0.barres.iter().find(|b| b.id == id).map(|b| b.niveau.clone()))
         };
         let cle = format!("{usage:?}|{}|{altitude}|{niveau_poutre:?}|{exclu:?}|{selection}|{visibilite}|{plan_coupe:?}|{orientation:?}", vue.as_deref().unwrap_or(""));
         if let Some((r, k, g)) = &self.dessin2d.geoms
@@ -981,7 +983,7 @@ impl Application {
         let mut g = if selection { Vec::new() } else { vec![Geom::Segment([DVec2::ZERO, DVec2::ZERO])] };
         // dessins de la vue : toujours pour une annotation, en plan pour un mur
         if !selection && let Some(vue) = vue.as_ref().filter(|_| usage == Usage::Annotation || plan.is_some()) {
-            for a in p.annotations.iter().filter(|a| &a.vue == vue && self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.id != a.id)) {
+            for a in p.annotations.iter().filter(|a| &a.vue == vue && exclu != Some(a.id.as_str()) && self.dessin2d.edition_contour.as_ref().is_none_or(|e| e.id != a.id)) {
                 if let Some(f) = a.forme.forme_2d() {
                     g.extend(f.geoms());
                 }
@@ -1041,13 +1043,13 @@ impl Application {
                     g.push(seg([b.debut[0], b.debut[1]], [b.fin[0], b.fin[1]]));
                 }
             }
-            for t in p.terrains.iter().filter(|t| visible("terrain", &t.id)) {
+            for t in p.terrains.iter().filter(|t| exclu != Some(t.id.as_str()) && visible("terrain", &t.id)) {
                 for i in 0..t.contour.len() {
                     let a = t.contour[i]; let b = t.contour[(i + 1) % t.contour.len()];
                     g.push(seg([a[0], a[1]], [b[0], b[1]]));
                 }
             }
-            for l in p.limites_propriete.iter().filter(|l| visible("limite_propriete", &l.id)) {
+            for l in p.limites_propriete.iter().filter(|l| exclu != Some(l.id.as_str()) && visible("limite_propriete", &l.id)) {
                 for i in 0..l.contour.len() { g.push(seg(l.contour[i], l.contour[(i + 1) % l.contour.len()])); }
             }
             for q in &p.quadrillages {
@@ -1094,20 +1096,6 @@ impl Application {
             }
         self.dessin2d.geoms = Some((self.bim.revision, cle, g.clone()));
         g
-    }
-
-    /// Extrémité de mur glissée : accrochages et cote depuis l'extrémité fixe.
-    pub(crate) fn point_edition_axe(&mut self,ui:&egui::Ui,rect:egui::Rect,q:egui::Pos2,maj:bool,fixe:[f64;2],_origine:[f64;2])->Option<[f64;2]> {
-        let c=self.depuis_ecran(rect,q)?;
-        let fixe=DVec2::from_array(fixe);
-        let mut trace=Trace::new(OutilDessin::Ligne);
-        trace.points.push(fixe);
-        self.dessin2d.trace=Some(trace);
-        let point=self.point_dessin_depuis(rect,c,maj,ui.input(|i|i.time),Some(fixe));
-        self.dessin2d.curseur=Some(c);
-        self.dessin2d.point=Some(point);
-        if self.dessin2d.reperage.survol_accroche.is_some() {ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));}
-        Some(point.0.to_array())
     }
 
     pub(crate) fn terminer_edition_axe(&mut self) {

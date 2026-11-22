@@ -148,7 +148,7 @@ impl Application {
     /// les flèches d'inversion à côté retournent son sens. Rend vrai si la souris est prise.
     pub(crate) fn poignee_milieu(&mut self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, axe: &Option<crate::saisie::saisie_plan::AxeSelection>) -> bool {
         let Some((id, a, b, z, _)) = axe else {
-            self.glisse_milieu = None;
+            if self.glisse_milieu.take().is_some() { self.terminer_edition_axe(); }
             return false;
         };
         let m = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
@@ -181,11 +181,12 @@ impl Application {
         }
         if resp.drag_started_by(PointerButton::Primary) && ui.input(|i| i.pointer.press_origin()).is_some_and(|q| q.distance(me) <= 8.0) {
             self.glisse_milieu = Some((id.clone(), m, m));
+            self.dessin2d.saisie.clear();
         }
         if let Some(depart) = self.glisse_milieu.as_ref().map(|g| g.1) {
             if let Some(q) = resp.interact_pointer_pos().or(resp.hover_pos()) {
                 let shift = ui.input(|i| i.modifiers.shift);
-                let p = self.point_tracage(q, rect, shift, Some(depart), *z).map(|(p, _)| p);
+                let p = self.point_edition_axe(ui, rect, q, shift, depart, [depart, *a]);
                 if let (Some(p), Some(g)) = (p, self.glisse_milieu.as_mut()) {
                     g.2 = p;
                 }
@@ -197,11 +198,13 @@ impl Application {
             }
             if ui.input(|i| i.key_pressed(egui::Key::Escape)) || resp.clicked_by(PointerButton::Secondary) {
                 self.glisse_milieu = None;
+                self.terminer_edition_axe();
                 return true;
             }
             if resp.drag_stopped() {
                 let id = id.clone();
                 self.glisse_milieu = None;
+                self.terminer_edition_axe();
                 if d[0].hypot(d[1]) > 0.5 {
                     match self.executer_bim(Commande::Deplacer { ids: vec![id], delta: [d[0], d[1], 0.0] }) {
                         Ok(_) => self.status = format!("{} — Ctrl+Z pour annuler.", if poutre { "Poutre déplacée" } else { "Mur déplacé" }),

@@ -103,7 +103,7 @@ impl Application {
                 let fixe = if *fin { *a } else { *b };
                 let shift = ui.input(|i| i.modifiers.shift);
                 let origine = if *fin { *b } else { *a };
-                if let Some(p) = self.point_edition_axe(ui,rect,q,shift,fixe,origine)
+                if let Some(p) = self.point_edition_axe(ui,rect,q,shift,fixe,[origine,fixe])
                     && let Some(x) = &mut self.poignee_axe
                 {
                     x.2 = p;
@@ -619,7 +619,7 @@ impl Application {
             self.dessiner_aretes_pente(ui, rect, resp.hover_pos());
             self.editer_talus(ui, rect);
             self.dessiner_axe(ui, rect, resp.hover_pos());
-            if self.poignee_axe.is_some() {self.dessiner_dessin2d(ui,rect);}
+            if self.poignee_axe.is_some() || self.glisse_milieu.is_some() || self.dessin2d.arc_glisse.is_some() {self.dessiner_dessin2d(ui,rect);}
         }
         if self.alignement_plan || self.orientation_nord_en_cours {
             self.dessiner_arete_alignement(ui, rect);

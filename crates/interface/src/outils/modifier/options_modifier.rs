@@ -115,6 +115,7 @@ impl Application {
                 }
                 Some(Outil::Decaler) => {
                     ui.checkbox(&mut self.transfo.copie, "Copier").on_hover_text("Créer un mur décalé ; décocher pour déplacer le mur");
+                    self.champ_distance_decalage(ui);
                 }
                 Some(Outil::Scinder) if self.transfo.element.is_some() => { ui.label("Ligne de coupe"); }
                 Some(Outil::Scinder) => {
@@ -176,6 +177,17 @@ impl Application {
             && let Err(e) = self.garde_corps_escalier(&id, &cotes) {
                 self.error = Some(e);
             }
+    }
+
+    pub(crate) fn champ_distance_decalage(&mut self, ui: &mut egui::Ui) {
+        ui.label("Distance");
+        if ui.add(egui::DragValue::new(&mut self.transfo.distance_decalage)
+            .range(0.0..=f64::MAX).speed(10.0).dimensions())
+            .on_hover_text("Saisir la distance, puis cliquer du côté voulu. Zéro suit le curseur.")
+            .changed() {
+            self.transfo.saisie.clear();
+            self.dessin2d.saisie.clear();
+        }
     }
 
     /// Priorité de jonction, ouverte depuis le bouton Jonctions du ruban (Modifier).
