@@ -22,7 +22,7 @@ Dernière mise à jour : 20 novembre 2026.
 | `cargo test --workspace --release` | non relancé en entier ; `-p echanges --release` : 39 réussis, 0 échec | 17/11/2026 |
 | Chargement des 13 `samples/**/*.modele.json` (`bimedit --mesurer-scene <fichier> 0`) | 13 sur 13 | 17/11/2026 |
 | Interface graphique à l'écran | non essayée depuis le lot 11 (pas d'affichage) | — |
-| Collaboration sur NAS à deux machines | non faite (tâche C1) | — |
+| Collaboration sur NAS à deux machines | non faite (C1 abandonnée le 23/11/2026) | — |
 
 Mesures de reconstruction de la scène (build release, `BIMEDIT_CHRONO=1`, `bimedit --mesurer-scene <fichier> 3`, conteneur Linux partagé, 17/11/2026) :
 
@@ -41,6 +41,7 @@ Le plus récent en premier. Une tâche abandonnée n'est pas reprise sans nouvel
 
 | Date | Tâche | Raison ou décision |
 |---|---|---|
+| 23/11/2026 | C1 : qualification de la collaboration sur NAS à deux machines (9 étapes) | décision de l'utilisateur du 23/11/2026 : abandonnée au profit de E1 (styles d'objets globaux) ; la collaboration reste essayée sur un seul poste (NTFS local) |
 | 18/11/2026 | Configurateur de familles (lié à F8) | décision du 18/11/2026 ; F8 garde les escaliers et garde-corps paramétriques par famille |
 
 ## 3. Journal de ce qui est fait
@@ -49,6 +50,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 23/11/2026 | C1 abandonnée (qualification NAS à deux machines), passée de ROADMAP à « Abandonné ». | ce commit | Documents seulement. |
 | 23/11/2026 | S5 : un clic sur l'origine du projet (invisible, souvent au centre de la vue) ne la choisit plus que si rien d'autre n'est sous le curseur ; une annotation qui y passe est sélectionnée. T1 : catégories des éléments RVT en table construite une fois (`feuilles::categories`) au lieu d'un parcours des collections par élément coté ; champs de nomenclature RVT mémoïsés par élément (une valeur coupée par la détection de cycle n'est pas gardée). | ce commit | S5 : cas ajouté à `tools/test-vue-dessin.py`, en échec sans la correction (sélection vide), réussi avec. T1 : `cargo clippy -p formats --tests -- -D warnings`, `cargo test -p formats` (66 réussis) ; non vérifié sur une maquette RVT (fichiers d'essai absents, tests Revit sautés), pas de mesure de temps. |
 | 23/11/2026 | T2 : le test de clics des boutons de résolution de conflit vide les textures de chaque image egui (il paniquait sur « Dropped TexturesDelta »). T3 : `tools/test-pilote.py` attend pendant un conflit la version partagée à l'écran, comme le prévoit COLLABORATION.md depuis le 22/11 (`64bd3e2`), et non plus la proposition locale ; clippy à zéro avec clippy 1.99 (`as_chunks` au lieu de `chunks_exact` à pas fixe, emprunts inutiles, `if` réunis, filtre de visée simplifié, `build.rs` de `app` sans `expect`, test d'intégration `apercu_synchro` aligné sur la convention des autres). | ce commit | `cargo clippy --workspace --tests -- -D warnings` sans avertissement (Windows, clippy 1.99) ; `cargo test --workspace` (debug) : 614 réussis, 0 échec, 4 ignorés ; `tools/test-pilote.py` (159 requêtes) et `tools/test-feuilles.py` réussis. Suite `tools/essais_interface.py` complète et tests release non relancés. |
 | 23/11/2026 | Feuilles : plusieurs cartouches par feuille. Outil Annoter → Cartouche avec sélecteur de famille : chaque clic en pose un (centré, aimanté), l'outil reste actif. Chaque cartouche se choisit, se glisse, se supprime, change de famille et de position dans Propriétés ; double-clic : éditeur de sa famille, qui lui reste affectée. Plus de réglage du cartouche dans les Propriétés de la feuille. Format incompatible : `cartouches[]` (famille, position) remplace `cartouches_feuilles`, `position_cartouche` et `sans_cartouche`, sans conversion ; `samples/maison_native.bem` mis à jour ; import Revit : cartouche standard posé. Pilote : `"cartouche":i`, `outil cartouche`. | ce commit | `cargo check --workspace --tests` ; tests debug de modele, moteur2d, echanges, collaboration, commandes (réussis) et interface (103 réussis, T2 en échec, préexistant) ; `tools/test-feuilles.py` réussi (deux cartouches posés à la souris, glisser, Suppr, plus le parcours des annotations) ; capture de la vue : deux cartouches, aperçu de pose, sélecteur ; `--export-feuille samples/maison_native.bem A01` en SVG. Choix d'une autre famille dans le sélecteur et édition de famille depuis un cartouche non essayés à la souris. |

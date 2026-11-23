@@ -375,7 +375,7 @@ conditions d'exécution préexistantes du dépôt.
 
 ## Qualification NAS à deux machines
 
-État de cette qualification : [ROADMAP.md](ROADMAP.md), tâche C1 ; essais faits : [SUIVI.md](SUIVI.md).
+Qualification abandonnée le 23/11/2026 (tâche C1, [SUIVI.md](SUIVI.md) « Abandonné ») ; la procédure reste décrite pour une reprise.
 
 Utiliser un dossier de qualification dédié et enregistrer modèle NAS, firmware,
 version SMB, options de cache, fichiers hors connexion désactivés et antivirus.
