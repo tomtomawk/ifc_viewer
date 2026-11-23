@@ -514,6 +514,7 @@ impl Application {
     /// Clavier : chiffres, virgule, signe moins, Retour arrière et Entrée pour une valeur
     /// tapée. Lu avant les raccourcis, uniquement quand l'étape attend une valeur.
     pub(crate) fn clavier_transformation(&mut self, ctx: &egui::Context) {
+        if self.clavier_motif_surface(ctx) { return; }
         self.suivre_transformation();
         let Some(outil) = self.transfo.outil else { return };
         if outil == Outil::Scinder && self.transfo.element.is_some() && !self.saisie_active && !ctx.egui_wants_keyboard_input()

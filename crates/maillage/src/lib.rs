@@ -10,6 +10,7 @@ use ifc_base::step::{Entity, StepFile, Value};
 use std::path::Path;
 
 mod aretes;
+mod placement_surface;
 pub mod liens;
 mod materiaux;
 pub mod textures_gabarit;
@@ -521,7 +522,9 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     }
     scene.couches_coupe.extend(couches_coupe);
     scene.unsupported.extend(ignores_liens);
+    scene.definitions_surface = table_motifs.iter().filter_map(|(nom, _, _)| projet.definition_motif(&modele::MotifCoupe::hachures(nom))).collect();
     (scene.table_motifs, scene.familles_motifs) = materiaux::table_gpu(table_motifs);
+    placement_surface::appliquer(&mut scene, projet);
     // textures en chemin relatif : depuis le dossier du projet
     let dossier = path.parent().map(|d| d.to_path_buf()).unwrap_or_default();
     scene.apparences = table_apparences

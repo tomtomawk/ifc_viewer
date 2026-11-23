@@ -163,6 +163,7 @@ impl ExecutionModifier for Projet {
                     });
                 self.priorites_jonction.retain(|id, _| !set.contains(id));
                 self.implantations.retain(|id, _| !set.contains(id));
+                self.placements_surface.retain(|id, _| !set.contains(id));
                 self.contextes.retain(|id, _| !set.contains(id));
                 self.annotations
                     .retain(|x| !set.contains(&x.id) && !set.contains(&x.vue));

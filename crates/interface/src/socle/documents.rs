@@ -190,7 +190,7 @@ impl Application {
     }
     pub(crate) fn installer_scene_courante(&mut self, scene: Scene) {
         if let Some(r) = self.renderer.as_mut() {
-            r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface);
+            r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface, &scene.placements_surface);
             r.upload_apparences(&scene.apparences);
         }
         self.status = format!(
@@ -633,7 +633,7 @@ impl Application {
             (self.categories, self.categorie_objet, self.cle_objet) = categories(s);
             self.visible = vec![true; s.objects.len()];
             if let Some(r) = self.renderer.as_mut() {
-                r.upload_vertices(&s.vertices, &s.couleurs_rendu, &s.motifs_surface);
+                r.upload_vertices(&s.vertices, &s.couleurs_rendu, &s.motifs_surface, &s.placements_surface);
                 r.upload_apparences(&s.apparences);
             }
         }
@@ -673,7 +673,7 @@ impl Application {
         self.historique=Default::default();
         self.poignee_axe=None;
         if let Some(r)=self.renderer.as_mut() {
-            r.upload_vertices(&[],&[],&[]);
+            r.upload_vertices(&[],&[],&[],&[]);
             r.upload_coupe(&[],&[]);
             r.upload_passes(&[]);
         }

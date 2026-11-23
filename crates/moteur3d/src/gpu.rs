@@ -433,13 +433,13 @@ impl Renderer {
 
         let attributs_sommet = wgpu::vertex_attr_array![0 => Float32x3, 1 => Snorm8x4, 2 => Unorm8x4, 3 => Uint32];
         let attribut_rendu = wgpu::vertex_attr_array![4 => Unorm8x4];
-        let attribut_motif = wgpu::vertex_attr_array![5 => Unorm8x4];
+        let attribut_motif = wgpu::vertex_attr_array![5 => Unorm8x4, 10 => Float32x4];
         let attribut_position = wgpu::vertex_attr_array![0 => Float32x3];
         let pas_sommet = size_of::<Vertex>() as u64;
         let tampons_scene = [
             Some(wgpu::VertexBufferLayout { array_stride: pas_sommet, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attributs_sommet }),
             Some(wgpu::VertexBufferLayout { array_stride: 4, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_rendu }),
-            Some(wgpu::VertexBufferLayout { array_stride: 4, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_motif }),
+            Some(wgpu::VertexBufferLayout { array_stride: 20, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_motif }),
         ];
         let tampons_profondeur = [Some(wgpu::VertexBufferLayout { array_stride: pas_sommet, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attribut_position })];
 
@@ -863,14 +863,15 @@ impl Renderer {
         false
     }
 
-    pub fn upload_vertices(&mut self, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]]) {
-        let (v, rendu, motifs) = if self.tient("Volumes 3D", size_of_val(v)) { (v, rendu, motifs) } else { (&[][..], &[][..], &[][..]) };
+    pub fn upload_vertices(&mut self, v: &[Vertex], rendu: &[[u8; 4]], motifs: &[[u8; 4]], placements: &[[f32; 4]]) {
+        let (v, rendu, motifs) = if self.tient("Volumes 3D", size_of_val(v).max(20 * motifs.len())) { (v, rendu, motifs) } else { (&[][..], &[][..], &[][..]) };
         self.rangs_sommets = rendu.iter().map(|c| if (128..255).contains(&c[3]) { c[3] - 128 } else { 255 }).collect();
         self.style_sommets = motifs.iter().map(|m| if m[0] == 0 { m[3] } else { 0 }).collect();
         let usage = wgpu::BufferUsages::VERTEX;
         self.sommets = Self::tampon(&self.device, "sommets", as_bytes(v), usage);
         self.rendu = Self::tampon(&self.device, "couleurs de rendu", as_bytes(rendu), usage);
-        self.motifs = Self::tampon(&self.device, "motifs", as_bytes(motifs), usage);
+        let donnees = crate::placement_surface::sommets(motifs, placements);
+        self.motifs = Self::tampon(&self.device, "motifs", as_bytes(&donnees), usage);
         self.sommets_cpu = v.to_vec();
         self.n_opaque = 0;
         self.n_transp = 0;
@@ -953,7 +954,7 @@ impl Renderer {
     pub fn upload_coupe(&mut self, tris: &[Vertex], traits: &[Vertex]) {
         let tout: Vec<Vertex> = tris.iter().chain(traits).copied().collect();
         self.sommets_coupe = Self::tampon(&self.device, "coupe", as_bytes(&tout), wgpu::BufferUsages::VERTEX);
-        self.nul_coupe = Self::tampon(&self.device, "coupe sans rendu", &vec![0u8; 4 * tout.len()], wgpu::BufferUsages::VERTEX);
+        self.nul_coupe = Self::tampon(&self.device, "coupe sans rendu", &vec![0u8; 20 * tout.len()], wgpu::BufferUsages::VERTEX);
         self.n_coupe = [tris.len() as u32, traits.len() as u32];
     }
 

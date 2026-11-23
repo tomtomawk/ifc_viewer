@@ -268,6 +268,10 @@ pub struct Scene {
     pub couleurs_rendu: Vec<[u8; 4]>,
     /// Motif de surface de chaque sommet : [premier plan | arrière-plan << 4, r, g, b].
     pub motifs_surface: Vec<[u8; 4]>,
+    /// Origine projetée (mètres), cosinus et sinus par sommet des faces placées.
+    pub placements_surface: Vec<[f32; 4]>,
+    /// Définitions des motifs de surface, dans le même ordre que table_motifs.
+    pub definitions_surface: Vec<modele::DefinitionMotif>,
     /// Masque de visibilité de chaque sommet par niveau de détail et type de vue
     /// (`VisibiliteElement::masque`, éléments des familles) ; vide : tout visible.
     pub visibilite: Vec<u8>,
@@ -469,7 +473,7 @@ mod tests {
             objects.push(SceneObject { id: k as Id + 1, class: "IFCSLAB".into(), storey: None, opaque: Range { start: debut, count: 6 }, transparent: vide, lines: vide, aretes: vide, min: Vec3::new(0., 0., z), max: Vec3::new(10., 10., z) });
         }
         Scene {
-            model, vertices, couleurs_rendu: Vec::new(), motifs_surface: Vec::new(), visibilite: Vec::new(), table_motifs: Vec::new(), familles_motifs: Vec::new(), apparences: Vec::new(),
+            model, vertices, couleurs_rendu: Vec::new(), motifs_surface: Vec::new(), placements_surface: Vec::new(), definitions_surface: Vec::new(), visibilite: Vec::new(), table_motifs: Vec::new(), familles_motifs: Vec::new(), apparences: Vec::new(),
             objects, object_of: IdMap::default(), origin: DVec3::ZERO, min: Vec3::ZERO, max: Vec3::new(10., 10., 3.), triangles: 4, unsupported: Vec::new(),
             load_ms: 0, file_name: String::new(), navigateur: None, partage: None, couches_coupe: IdMap::default(),
         }

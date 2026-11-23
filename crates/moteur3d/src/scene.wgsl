@@ -26,6 +26,7 @@ struct Sommet {
     @location(3) obj: u32,
     @location(4) rendu: vec4f,
     @location(5) motif: vec4f,
+    @location(10) placement: vec4f,
 }
 
 struct Varie {
@@ -39,6 +40,24 @@ struct Varie {
     @location(6) @interpolate(flat) annot: u32,
     // trait : point du segment (centre de la bande) au même endroit, repère de découpe
     @location(7) centre: vec4f,
+    @location(8) @interpolate(flat) placement: vec4f,
+}
+
+fn uv_place(uv: vec2f, p: vec4f) -> vec2f {
+    if p.z == 0.0 && p.w == 0.0 {
+        return uv;
+    }
+    let d = uv - p.xy;
+    return vec2f(dot(d, p.zw), dot(d, vec2f(-p.w, p.z)));
+}
+
+fn normale_projection(e: Varie) -> vec3f {
+    let normale = normalize(e.n);
+    let face = cross(dpdx(e.pos), dpdy(e.pos));
+    if any(e.placement.zw != vec2f(0.0)) && dot(face, face) > 1e-24 {
+        return normalize(select(-face, face, dot(face, normale) >= 0.0));
+    }
+    return normale;
 }
 
 struct Segment {
@@ -91,6 +110,7 @@ fn vs_main(s: Sommet) -> Varie {
     o.pos = s.pos;
     o.rendu = s.rendu;
     o.motif = s.motif;
+    o.placement = s.placement;
     o.n = s.normale.xyz;
     // annotations (4ᵉ composante de la normale) : ni découpées ni blanchies en mode dessin
     o.annot = select(0u, 1u, s.normale.w > 0.5);
@@ -404,16 +424,17 @@ fn vs_ombre_decoupe(s: Sommet) -> Varie {
     o.pos = s.pos;
     o.n = s.normale.xyz;
     o.rendu = s.rendu;
+    o.placement = s.placement;
     o.clip = passe.mvp * vec4f(s.pos, 1.0);
     return o;
 }
 
 @fragment
 fn fs_ombre_decoupe(e: Varie) {
-    let n = normalize(e.n);
+    let n = normale_projection(e);
     let an = abs(n);
     let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-n.y, n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, an.z > 0.7);
-    let uv = uvm * 1000.0;
+    let uv = uv_place(uvm, e.placement) * 1000.0;
     let dx = dpdx(uv);
     let dy = dpdy(uv);
     let rang = i32(e.rendu.a * 255.0 + 0.5) - 128;
@@ -886,11 +907,12 @@ struct Projection {
 
 // Projection plane sur la face : repère de la face (le même que celui des motifs de
 // surface).
-fn projection_face(n0: vec3f, uvm: vec2f, dxm: vec2f, dym: vec2f) -> Projection {
+fn projection_face(n0: vec3f, uvm: vec2f, dxm: vec2f, dym: vec2f, placement: vec4f) -> Projection {
     let vert = abs(n0.z) <= 0.7;
     let u = select(vec3f(1.0, 0.0, 0.0), normalize(vec3f(-n0.y, n0.x, 0.0) + vec3f(1e-6, 0.0, 0.0)), vert);
     let v = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), vert);
-    return Projection(uvm, dxm, dym, u, v);
+    let rot = select(placement.zw, vec2f(1.0, 0.0), all(placement.zw == vec2f(0.0)));
+    return Projection(uvm, dxm, dym, u * rot.x + v * rot.y, v * rot.x - u * rot.y);
 }
 
 // Projection sur un plan vertical d'axe horizontal `u` (dérivées exactes : `u` constant).
@@ -1036,8 +1058,9 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
     let n0 = n;
     // motif de surface : traits dans le plan de la face, épaisseur d'un pixel (dérivées
     // calculées avant toute branche)
-    let an = abs(n);
-    let uvm = select(vec2f(dot(e.pos, normalize(vec3f(-n.y, n.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, an.z > 0.7);
+    let n_uv = normale_projection(e);
+    let an = abs(n_uv);
+    let uvm = uv_place(select(vec2f(dot(e.pos, normalize(vec3f(-n_uv.y, n_uv.x, 0.0) + vec3f(1e-6, 0.0, 0.0))), e.pos.z), e.pos.xy, an.z > 0.7), e.placement);
     let dxm = dpdx(uvm);
     let dym = dpdy(uvm);
     // face verticale courbe (normale qui tourne de plus de 0,2 rad par mètre : rayon de
@@ -1045,7 +1068,7 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
     let dpx = dpdx(e.pos);
     let dpy = dpdy(e.pos);
     let courbure = max(length(dpdx(n)), length(dpdy(n))) / max(max(length(dpx), length(dpy)), 1e-6);
-    let courbe = an.z <= 0.7 && courbure > 0.2;
+    let courbe = an.z <= 0.7 && courbure > 0.2 && all(e.placement.zw == vec2f(0.0));
     if retire(e) {
         discard;
     }
@@ -1115,7 +1138,7 @@ fn fs_main(e: Varie) -> @location(0) vec4f {
             if courbe {
                 fx = effet_courbe(rang, e.pos, dpx, dpy, n0, n, base, vd);
             } else {
-                fx = effet_apparence(rang, projection_face(n0, uvm, dxm, dym), n0, n, base, vd);
+                fx = effet_apparence(rang, projection_face(n_uv, uvm, dxm, dym, e.placement), n0, n, base, vd);
             }
             if fx.coupe {
                 discard;

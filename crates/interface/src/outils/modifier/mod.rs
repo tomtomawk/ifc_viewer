@@ -7,3 +7,4 @@ pub(crate) mod ajuster;
 pub(crate) mod options_modifier;
 pub(crate) mod poignees;
 pub(crate) mod aligner;
+pub(crate) mod placement_surface;

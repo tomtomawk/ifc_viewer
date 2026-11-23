@@ -49,6 +49,7 @@ Le plus récent en premier. Les numéros « n° » sont ceux de la feuille de ro
 
 | Date | Fait | Commit | Vérification |
 |---|---|---|---|
+| 23/11/2026 | F13, placement explicite : Alt + clic sélectionne un trait du motif de modèle sur une face plane. Déplacer, Tourner et Aligner appliquent le même repère aux traits et aux textures. Les plafonds du rendu des motifs et les exports restent dans F13. | ce commit | `cargo check --workspace --tests`, tests release de maillage, moteur3d et interface, dont le placement de la face seule, l’alignement et la validation WGSL. Non essayé en fenêtre native. |
 | 22/11/2026 | Motifs du gabarit éditables dans la vue de dessin avec les traits existants. Enregistrement du carré répété après modification graphique et conservation de la définition si le dessin est intact. | ce commit | `cargo check --workspace --tests` et `cargo test -p interface --release`, dont la mise en dessin des motifs du gabarit et leur conversion en tuile. Non essayé en fenêtre native. |
 | 22/11/2026 | Motifs du gabarit : accès à la modification des familles de traits par double-clic ou menu Modifier, sans ouvrir une vue de dessin vide. | ce commit | `cargo check --workspace --tests` et `cargo test -p interface --release` (102 tests). Non essayé en fenêtre native. |
 | 22/11/2026 | Murs superposés de même type sans matériau : suppression des arêtes à leur jonction en 3D. | ce commit | `cargo check --workspace --tests`, `cargo test -p maillage --release` (21 tests réussis, 1 ignoré), dont deux murs empilés. Non essayé en fenêtre native. |

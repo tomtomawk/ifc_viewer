@@ -11,6 +11,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `scene`, `for
 | `lib.rs` | `depuis_natif`, `depuis_natif_verifie` : objets de scène, `IfcModel` et `StepFile` minimaux (schéma « Modèle natif v0 »), traits |
 | `aretes.rs` | arêtes vives, silhouettes, terrain (`aretes_jointes`, `aretes_silhouette`) |
 | `materiaux.rs` | `rendu_materiau`, `coupe_materiau`, `motif_surface`, `opacite` |
+| `placement_surface.rs` | transmet le placement des faces planes aux sommets de rendu |
 | `navigateur.rs` | `navigateur` : arborescence du projet pour la scène |
 | `textures_gabarit.rs` | textures livrées avec le gabarit (`gabarits/textures`, embarquées) : chemin `gabarit:textures/…` → fichier écrit dans le dossier temporaire |
 | `liens.rs` | liens IFC : `charger` (lecture et cache par chemin, date, taille), placement dans la scène, rattachement aux niveaux ; arêtes calculées une fois par fichier |

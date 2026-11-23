@@ -262,6 +262,8 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         vertices,
         couleurs_rendu,
         motifs_surface,
+        placements_surface: Vec::new(),
+        definitions_surface: Vec::new(),
         visibilite,
         table_motifs: Vec::new(),
         familles_motifs: Vec::new(),

@@ -2,6 +2,15 @@
 use crate::*;
 impl Projet {
     pub fn verifier(&self) -> Result<(), String> {
+        for face in self.placements_surface.values().flatten() {
+            if !face.distance.is_finite() || !face.angle.is_finite()
+                || !face.origine.iter().all(|v| v.is_finite())
+                || (glam::DVec3::from_array(face.normale).length_squared() - 1.0).abs() > 1e-6
+                || !face.normale.iter().all(|v| v.is_finite())
+            {
+                return Err("Placement de motif de surface invalide.".into());
+            }
+        }
         let mut gabarits = std::collections::HashSet::new();
         for g in &self.gabarits_vues {
             if g.id.is_empty() || !gabarits.insert(g.id.as_str()) { return Err("Identifiant de gabarit de vue vide ou dupliqué.".into()); }

@@ -118,5 +118,6 @@ pub fn carte_objet(nom: &str) -> bool {
             | "priorites_jonction"
             | "attaches_toitures"
             | "cartouches_feuilles"
+            | "placements_surface"
     )
 }

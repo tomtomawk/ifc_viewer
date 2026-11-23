@@ -78,8 +78,8 @@ impl Application {
         if !quadrillage { self.bim.depart_quadrillage = None; }
         // Déplacer, Copier, Tourner, Aligner : socle commun (transformer.rs)
         self.suivre_transformation();
-        let deplacement = self.transfo.outil;
-        let mode_trace = mode_attache || mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || texte_annotation || etiquette_annotation || quadrillage || niveau_vue || deplacement.is_some() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
+        let deplacement = self.transfo.outil.filter(|_| !self.outil_motif_surface_actif());
+        let mode_trace = mode_attache || mode_ajuster || mode_mur || dalle.is_some() || outil_coupe.is_some() || structure.is_some() || placement.is_some() || texte_annotation || etiquette_annotation || quadrillage || niveau_vue || deplacement.is_some() || self.outil_motif_surface_actif() || self.outil_dessin().is_some() || self.dessin2d.edition_contour.is_some() || self.alignement_plan || self.orientation_nord_en_cours;
         // axe du mur sélectionné : une extrémité saisie se déplace (accrochages du tracé)
         let edition_arc=self.souris_arc_mur(ui,rect,&resp,mode_trace);
         let axe = if mode_trace || edition_arc { None } else { self.axe_selection() };
@@ -221,6 +221,7 @@ impl Application {
                 if annuler { self.fenetre_selection = None; }
                 else if resp.drag_stopped_by(PointerButton::Primary)
                     && let Some(f) = self.fenetre_selection.take() { self.selectionner_rectangle(rect, f); }
+            } else if self.interaction_motif_surface(ui, rect, &resp) {
             } else if mode_ouverture {
                 ouverture_visee = self.interaction_ouverture(&resp, pick);
             } else if mode_attache {

@@ -10,6 +10,7 @@ Dépendances internes autorisées : `noyau` seul. Externes : `earcutr`, `geo-str
 |---|---|
 | `lib.rs` | `Projet` et types du modèle, `FORMAT`, `VERSION`, lecture/écriture JSON |
 | `importes.rs` | `DonneesImportees` (à plat dans `ElementImporte`, champ `donnees` de `Piece`) : propriétés, matériau et couleur lus dans la source, vérification |
+| `placement_surface.rs` | repère du motif de modèle et des textures sur une face plane |
 | `creation.rs` | `ParametresMur`, `ParametresDalle`, `Implantation`, création des murs, dalles et vues |
 | `murs/`, `elements/` | assemblage et jonctions des murs ; escaliers, garde-corps, pièces, site, terre-pleins, composants ; végétation (`vegetation.rs` : familles d'arbres par défaut, références `Rendu` ; `generateur_vegetal.rs` : essences et géométrie de rendu générée ; `dessin_vegetal.rs` : houppier, tronc et symbole de plan des familles d'arbres) |
 | `volumes/` | `solides`, `geometrie` : volumes des éléments (consommés par `maillage`) ; `attache_toiture` : volume des murs sous plusieurs toitures et hors de leurs emprises, référence des toitures au-dessus à l’égout |

@@ -4,6 +4,7 @@ use crate::*;
 
 impl Application {
     pub(crate) fn select(&mut self, id: Option<Id>, reveal: bool) {
+        self.motif_face = None;
         self.famille_selectionnee = None;
         self.motif_selectionne = None;
         self.cote_axe = None;

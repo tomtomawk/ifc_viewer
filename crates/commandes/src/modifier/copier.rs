@@ -254,6 +254,10 @@ impl ExecutionCopier for Projet {
                 self.priorites_jonction.extend(priorites);
                 let implantations: Vec<_> = self.implantations.iter().filter(|(id, _)| map.contains_key(*id)).map(|(id, r)| (map[id].clone(), *r)).collect();
                 self.implantations.extend(implantations);
+                let placements: Vec<_> = map.iter().filter_map(|(a, b)| {
+                    Some((b.clone(), self.placements_surface.get(a)?.clone()))
+                }).collect();
+                self.placements_surface.extend(placements);
                 self.transformer(&map.values().cloned().collect(), delta, [0.0; 2], 0.0)?;
                 Ok(ids.iter().map(|id| map[id].clone()).collect())
             }

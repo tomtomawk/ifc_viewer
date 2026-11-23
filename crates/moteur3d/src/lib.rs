@@ -8,3 +8,4 @@ pub mod orientation_plan;
 pub mod profondeur;
 mod profondeur_faces;
 pub mod selection_rectangle;
+mod placement_surface;

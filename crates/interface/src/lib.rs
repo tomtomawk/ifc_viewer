@@ -679,6 +679,7 @@ pub struct Application {
     objets_masques: HashSet<u32>,
     /// Commande de transformation en cours (Déplacer, Copier, Tourner, Aligner).
     transfo: crate::outils::modifier::transformer::Transformation,
+    motif_face: Option<crate::outils::modifier::placement_surface::SelectionMotif>,
     /// Dernière commande de modification utilisée : Entrée ou clic droit la relance.
     derniere_commande: Option<crate::zones::ruban::Outil>,
     /// Poignée du milieu du mur en cours de glissement : mur, départ, position courante.
@@ -871,6 +872,7 @@ impl Application {
             afficher_masques: false,
             objets_masques: HashSet::new(),
             transfo: Default::default(),
+            motif_face: None,
             derniere_commande: None,
             glisse_milieu: None,
             captures_en_attente: Default::default(),

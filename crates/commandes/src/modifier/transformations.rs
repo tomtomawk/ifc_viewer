@@ -1,6 +1,7 @@
 //! Transformations géométriques des commandes : déplacer, copier, pivoter, symétrie,
 //! mise à l'échelle. Toutes passent par une transformation affine du plan.
 use super::*;
+use glam::DVec3;
 
 /// Transformation affine du plan : `p' = m·p + t` (millimètres).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -116,6 +117,20 @@ impl Transformation for Projet {
             }
         }
         let miroir = f.est_miroir();
+        if f.conserve_longueurs() && !miroir {
+            self.placements_surface.iter_mut().filter(|(id, _)| set.contains(*id)).for_each(|(_, faces)| {
+                for face in faces {
+                    let origine = face.dans_face(DVec2::from_array(face.origine));
+                    let direction = face.dans_face(face.depuis_motif(DVec2::X)) - origine;
+                    let rotation = |v: DVec3| DVec2::from_array(f.direction(v.truncate().to_array())).extend(v.z);
+                    let n = rotation(DVec3::from_array(face.normale));
+                    let p = DVec2::from_array(f.point(origine.truncate().to_array())).extend(origine.z + dz);
+                    let d = modele::placement_surface::PlacementSurface::projeter(n, rotation(direction));
+                    *face = modele::placement_surface::PlacementSurface::de_face(n, p);
+                    face.angle = d.y.atan2(d.x);
+                }
+            });
+        }
         let point = |p: [f64; 2]| f.point(p);
         let mesh = |m: &mut Maillage| {
             for p in &mut m.sommets {

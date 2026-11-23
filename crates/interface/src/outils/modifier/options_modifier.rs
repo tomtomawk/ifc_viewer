@@ -8,6 +8,7 @@ impl Application {
     /// (jonctions, mise à jour depuis le type, trémie). Propriétés ne garde que les
     /// informations de la sélection.
     pub(crate) fn options_modifier(&mut self, ui: &mut egui::Ui, selection_seule: bool) {
+        if !selection_seule && self.outil_motif_surface_actif() { return; }
         use commandes::Commande;
         use crate::zones::ruban::Outil;
         let outil = self.ruban_edition.outil();

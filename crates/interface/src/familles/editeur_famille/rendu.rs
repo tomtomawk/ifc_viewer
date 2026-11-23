@@ -161,7 +161,7 @@ impl Application {
         params.mm = mm;
         let renderer = self.renderer_famille.as_mut()?;
         let n = scene.vertices.len();
-        renderer.upload_vertices(&scene.vertices, &vec![[0; 4]; n], &vec![[0; 4]; n]);
+        renderer.upload_vertices(&scene.vertices, &vec![[0; 4]; n], &vec![[0; 4]; n], &[]);
         renderer.upload_indices(&scene.opaque, &[], &[], &scene.aretes);
         renderer.upload_coupe(coupe.0, coupe.1);
         renderer.upload_passes(&[]);

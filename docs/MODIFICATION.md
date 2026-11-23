@@ -72,6 +72,13 @@ Contrôle de chaque fonction : un script `tools/test-*.py` la joue par le pilote
 
 **Aligner en plan** suit les segments du dessin, notamment les arêtes visibles, les contours de coupe, les quadrillages et les traits d’annotation. **Aligner en 3D** utilise le plan du triangle touché. Une rotation autour de l’axe vertical et une translation amènent le segment ou la face sur le support de référence. Deux faces d’inclinaisons différentes demandent une bascule hors du plan horizontal et sont refusées. Un élément IFC lié peut servir de référence. Un clic déplace l’élément du projet qui porte la géométrie visée en une seule opération annulable.
 
+En 3D, **Alt + clic** sur un trait de motif de modèle sélectionne le motif de la
+face plane. **Déplacer**, **Tourner** et **Aligner** modifient son placement et celui
+des cartes de texture du matériau. Pour tourner, cliquer le centre puis deux
+directions, ou saisir l’angle après le centre. Pour aligner, cliquer le trait de
+motif ou l’arête de référence. Les dimensions de répétition se règlent dans le
+motif et dans l’apparence du matériau.
+
 ## 3. Visibilité
 
 Deux portées distinctes, à ne pas confondre :

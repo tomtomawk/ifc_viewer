@@ -19,6 +19,7 @@ pub mod identifiants;
 pub mod importes;
 pub mod liens;
 pub mod motif_tuile;
+pub mod placement_surface;
 pub mod murs;
 pub mod soleil;
 pub mod unite;
@@ -82,6 +83,8 @@ pub struct Projet {
     /// de base du code).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub motifs: Vec<DefinitionMotif>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub placements_surface: BTreeMap<String, Vec<placement_surface::PlacementSurface>>,
     /// Familles de matériaux (mots du nom -> couleur, motifs, apparence), copiées du
     /// gabarit à la création : apparence d'un matériau nommé absent du projet.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
