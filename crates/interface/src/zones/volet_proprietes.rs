@@ -13,6 +13,11 @@ impl Application {
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if self.proprietes_famille_selectionnee(ui) { return; }
         if self.proprietes_motif_selectionne(ui) { return; }
+        // jeu de feuilles : palette de l'outil du ruban actif (texte, trait, cartouche),
+        // sinon propriétés du jeu et de sa sélection
+        if self.jeu_actif().is_some() && self.ruban_edition.outil().is_some_and(|o| o.sur_feuille()) && self.palette_creation(ui) {
+            return;
+        }
         if let Some(jeu) = self.jeu_actif() {
             egui::ScrollArea::vertical().show(ui, |ui| self.proprietes_jeu(ui, &jeu));
             return;

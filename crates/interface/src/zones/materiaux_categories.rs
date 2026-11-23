@@ -1,4 +1,4 @@
-//! Fenêtre « Matériaux par catégorie » (E1) : matériau par défaut de chaque catégorie
+//! Fenêtre « Styles d'objets » (Sortie → Graphisme, E1) : matériau par défaut de chaque catégorie
 //! d'élément ; un élément sans matériau propre prend celui de sa catégorie (couleur,
 //! motif de coupe, motif de surface).
 use crate::*;
@@ -26,7 +26,7 @@ impl Application {
         };
         let noms: Vec<String> = projet.materiaux.iter().map(|m| m.nom.clone()).collect();
         let (mut ouvert, mut fermer, mut appliquer) = (true, false, false);
-        egui::Window::new("Matériaux par catégorie").id(cle()).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
+        egui::Window::new("Styles d'objets").id(cle()).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
             ui.label(RichText::new("Un élément sans matériau propre prend celui de sa catégorie : couleur, motif de coupe et motif de surface.").small().weak());
             ui.add_space(4.0);
             egui::Grid::new("grille_materiaux_categories").num_columns(3).spacing([12.0, 4.0]).striped(true).show(ui, |ui| {
@@ -68,7 +68,7 @@ impl Application {
             match self.appliquer_projet(p) {
                 Ok(()) => {
                     self.coupe_dirty = true;
-                    self.status = "Matériaux par catégorie appliqués — Ctrl+Z pour annuler.".into();
+                    self.status = "Styles d'objets appliqués — Ctrl+Z pour annuler.".into();
                 }
                 Err(e) => self.error = Some(e),
             }

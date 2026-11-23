@@ -1,5 +1,5 @@
-"""Feuilles : annotations tracées à la souris (ligne, texte saisi en place), glisser d'une
-annotation et du cartouche, suppression par Suppr, annulation."""
+"""Feuilles : outils du ruban Documenter sur le papier (polyligne, texte saisi en place,
+cartouches), glisser d'une annotation et d'un cartouche, Suppr, annulation."""
 import argparse
 import json
 import os
@@ -74,13 +74,14 @@ def run(exe):
                 fid = feuille()["id"]
                 commande("selection_feuille", {"jeu": "Plans", "feuille": fid})
                 time.sleep(0.5)
-                # ligne : deux clics
-                commande("outil", "ligne")
+                # polyligne de deux sommets (outil du ruban Documenter), Entrée pour finir
+                commande("outil", "polyligne")
                 clic(60, 60)
                 clic(160, 60)
+                saisie([{"action": "touche", "touche": "Enter"}])
                 a = feuille()["annotations"]
-                assert len(a) == 1 and a[0]["forme"] == "ligne", a
-                assert all(abs(u - v) < 1.0 for u, v in zip(a[0]["debut"] + a[0]["fin"], [60, 60, 160, 60])), a
+                assert len(a) == 1 and a[0]["forme"] == "polyligne", a
+                assert all(abs(u - v) < 1.0 for u, v in zip(a[0]["points"][0] + a[0]["points"][1], [60, 60, 160, 60])), a
                 # texte : clic, frappe en place, Entrée
                 commande("outil", "texte")
                 clic(60, 120)
@@ -93,8 +94,8 @@ def run(exe):
                 saisie([{"action": "touche", "touche": "Escape"}])
                 glisser((110, 60), (110, 90))
                 a = feuille()["annotations"]
-                assert abs(a[0]["debut"][1] - 90) < 1.5 and abs(a[0]["fin"][1] - 90) < 1.5, a
-                assert abs(a[0]["debut"][0] - 60) < 1.5, a
+                assert abs(a[0]["points"][0][1] - 90) < 1.5 and abs(a[0]["points"][1][1] - 90) < 1.5, a
+                assert abs(a[0]["points"][0][0] - 60) < 1.5, a
                 # cartouches : deux posés par l'outil (centrés sur le clic, 180 × 40 mm), l'outil
                 # reste actif ; Échap, puis le second glissé de 30 mm vers le bas
                 assert not feuille().get("cartouches")

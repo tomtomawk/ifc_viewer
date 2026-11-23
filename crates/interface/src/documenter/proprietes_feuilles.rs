@@ -162,15 +162,6 @@ impl Application {
             && let Err(e) = self.appliquer_projet(q) {
                 self.error = Some(e);
             }
-        // cartouche ou annotation retirés depuis Propriétés : la feuille reste choisie
-        if let Some(Commande::Feuille { feuille: g }) = &commande {
-            let retire = match &selection {
-                SelectionFeuille::Cartouche(_, i) => *i >= g.cartouches.len(),
-                SelectionFeuille::Annotation(_, i) => *i >= g.annotations.len(),
-                _ => false,
-            };
-            if retire { self.feuilles.selection = SelectionFeuille::Feuille(g.id.clone()); }
-        }
         if let Some(c) = commande
             && let Err(e) = self.executer_bim(c) {
                 self.error = Some(e);

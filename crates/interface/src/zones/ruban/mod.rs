@@ -92,6 +92,8 @@ pub(crate) enum Outil {
     VueDessin,
     VueCoupe,
     Feuilles,
+    /// Pose d'un cartouche sur une feuille du jeu ouvert (famille dans Propriétés).
+    Cartouche,
     Nomenclatures,
     LienIfc,
 }
@@ -165,6 +167,7 @@ impl Outil {
         Self::VueCoupe,
         Self::VueDessin,
         Self::Feuilles,
+        Self::Cartouche,
         Self::Nomenclatures,
         Self::LienIfc,
     ];
@@ -240,9 +243,16 @@ impl Outil {
             Self::VueDessin => "Vue de dessin",
             Self::VueCoupe => "Coupe / élévation",
             Self::Feuilles => "Feuilles",
+            Self::Cartouche => "Cartouche",
             Self::Nomenclatures => "Nomenclatures",
             Self::LienIfc => "Lien IFC",
         }
+    }
+
+    /// Outil utilisable dans un jeu de feuilles ouvert : dessin sur la feuille (texte,
+    /// polyligne, cercle), cartouche, suppression, création de vues et documents.
+    pub(crate) fn sur_feuille(self) -> bool {
+        matches!(self, Self::Texte | Self::Polyligne | Self::Cercle | Self::Cartouche | Self::Supprimer | Self::Feuilles | Self::Nomenclatures | Self::VuePlan | Self::VueCoupe | Self::VueDessin)
     }
 
     /// Fréquence présumée d'usage : seul le premier rang gagne un grand bouton.
@@ -458,7 +468,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
             // les régions remplies sont des polylignes fermées (Remplissage dans Propriétés)
             DESSIN_2D,
             ("Bibliothèque", &[Symbole, Legende]),
-            ("Documents", &[Feuilles, Nomenclatures]),
+            ("Documents", &[Feuilles, Cartouche, Nomenclatures]),
         ],
     }
 }
@@ -559,6 +569,8 @@ pub struct RubanEdition {
     pub trace_sans_copie: Option<&'static str>,
     /// Commande de Modifier en cours sur le tracé : son bouton reste enfoncé.
     pub commande_trace: Option<Outil>,
+    /// Un jeu de feuilles est ouvert : seuls les outils `sur_feuille` sont disponibles.
+    pub feuille_active: bool,
     /// Bouton Jonctions de cette image : le menu s'ancre dessus.
     pub bouton_jonctions: Option<egui::Response>,
     pub type_garde_corps: Option<String>,
@@ -658,7 +670,7 @@ fn champs(o: Outil) -> Vec<Champ> {
     use Champ::*;
     use Outil::*;
     match o {
-        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Nomenclatures | LienIfc | VueDessin => vec![],
+        Surfaces | Niveau | Terrain | LimitePropriete | ModifierContour | CopierNiveau | Jonctions | AttacherToiture | CreerIdentique | Supprimer | Cadrer | Isoler | Masquer | MasquerVue | Afficher | Verrouiller | Deverrouiller | Feuilles | Cartouche | Nomenclatures | LienIfc | VueDessin => vec![],
         Quadrillage => vec![Saisie("Repère", "A")],
         Mur => vec![
             Choix(
@@ -1067,6 +1079,8 @@ pub enum Icone {
     Importer,
     Fiche,
     Options,
+    /// Styles d'objets : trois pastilles de matériau.
+    Styles,
     Nord,
     /// Origine et cote NGF : repère X, Y, Z.
     Coordonnees,

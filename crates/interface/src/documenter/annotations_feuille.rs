@@ -1,7 +1,10 @@
-//! Annotations des feuilles : outils de dessin sur le papier (texte, ligne, polyligne,
-//! rectangle, cercle), pose de cartouches, accrochage, aperçu et saisie du texte en place. Coordonnées en mm
-//! du papier, origine en bas à gauche de la feuille.
+//! Annotations des feuilles : les outils du ruban (Documenter → Texte, Polyligne, Cercle,
+//! Cartouche) appliqués au papier quand un jeu est ouvert ; leurs réglages sont ceux de
+//! la palette de création (hauteur de texte, type de trait, famille de cartouche).
+//! Accrochage, aperçu et saisie du texte en place. Coordonnées en mm du papier, origine
+//! en bas à gauche de la feuille.
 use crate::*;
+use crate::zones::ruban::Outil;
 use modele::documentation as doc;
 use modele::documentation::AnnotationForme;
 
@@ -10,55 +13,34 @@ pub(crate) enum OutilFeuille {
     #[default]
     Selection,
     Texte,
-    Ligne,
     Polyligne,
-    Rectangle,
     Cercle,
     /// Pose d'un cartouche de la famille choisie, autant de fois que voulu.
     Cartouche,
 }
 
 impl OutilFeuille {
-    pub(crate) const TOUS: [OutilFeuille; 7] = [Self::Selection, Self::Texte, Self::Ligne, Self::Polyligne, Self::Rectangle, Self::Cercle, Self::Cartouche];
-
-    pub(crate) fn libelle(self) -> &'static str {
-        match self {
-            Self::Selection => "Sélection",
-            Self::Texte => "Texte",
-            Self::Ligne => "Ligne",
-            Self::Polyligne => "Polyligne",
-            Self::Rectangle => "Rectangle",
-            Self::Cercle => "Cercle",
-            Self::Cartouche => "Cartouche",
+    /// Outil de feuille de l'outil actif du ruban (sélection pour les autres).
+    pub(crate) fn du_ruban(outil: Option<Outil>) -> Self {
+        match outil {
+            Some(Outil::Texte) => Self::Texte,
+            Some(Outil::Polyligne) => Self::Polyligne,
+            Some(Outil::Cercle) => Self::Cercle,
+            Some(Outil::Cartouche) => Self::Cartouche,
+            _ => Self::Selection,
         }
     }
 
     pub(crate) fn consigne(self, points: usize) -> &'static str {
         match (self, points) {
-            (Self::Texte, _) => "Texte : cliquer sur la feuille, taper, Entrée pour valider · Échap pour revenir à la sélection",
-            (Self::Ligne, 0) | (Self::Rectangle, 0) => "Cliquer le premier point · Maj : orthogonal · Échap pour revenir à la sélection",
-            (Self::Ligne, _) => "Cliquer le second point · Maj : orthogonal · Échap pour annuler",
-            (Self::Rectangle, _) => "Cliquer le coin opposé · Échap pour annuler",
-            (Self::Polyligne, 0) => "Cliquer le premier sommet · Échap pour revenir à la sélection",
+            (Self::Texte, _) => "Texte : cliquer sur la feuille, taper, Entrée pour valider · Échap pour terminer",
+            (Self::Polyligne, 0) => "Polyligne : cliquer le premier sommet · Maj : orthogonal · Échap pour terminer",
             (Self::Polyligne, _) => "Cliquer les sommets · Entrée ou double-clic pour finir · clic sur le premier sommet pour fermer · Échap pour annuler",
-            (Self::Cercle, 0) => "Cliquer le centre · Échap pour revenir à la sélection",
+            (Self::Cercle, 0) => "Cercle : cliquer le centre · Échap pour terminer",
             (Self::Cercle, _) => "Cliquer un point du cercle · Échap pour annuler",
-            (Self::Cartouche, _) => "Cartouche : choisir la famille, cliquer pour le poser (aimanté aux marges), autant de fois que voulu · Échap pour revenir à la sélection",
+            (Self::Cartouche, _) => "Cartouche : famille dans Propriétés, clic pour le poser (aimanté aux marges), autant de fois que voulu · Échap pour terminer",
             (Self::Selection, _) => "",
         }
-    }
-}
-
-/// Nom de l'outil pour le pilote (`outil <nom>` quand un jeu est ouvert).
-pub(crate) fn nom_pilote(o: OutilFeuille) -> &'static str {
-    match o {
-        OutilFeuille::Selection => "selection",
-        OutilFeuille::Texte => "texte",
-        OutilFeuille::Ligne => "ligne",
-        OutilFeuille::Polyligne => "polyligne",
-        OutilFeuille::Rectangle => "rectangle",
-        OutilFeuille::Cercle => "cercle",
-        OutilFeuille::Cartouche => "cartouche",
     }
 }
 
@@ -80,8 +62,10 @@ pub(crate) struct TraceFeuille {
     pub feuille: Option<String>,
     pub points: Vec<[f64; 2]>,
     pub texte: Option<TexteFeuille>,
-    /// Hauteur des nouveaux textes (mm du papier).
+    /// Hauteur des nouveaux textes (mm du papier) : réglage de l'outil Texte.
     pub hauteur_texte: f64,
+    /// Type de trait des polylignes et cercles : réglage du dessin 2D.
+    pub type_trait: String,
     /// Famille des cartouches posés (nom ; vide : cartouche standard).
     pub famille_cartouche: String,
 }
@@ -104,25 +88,16 @@ impl TraceFeuille {
         }
         self.feuille = Some(feuille.to_string());
         let hauteur = self.hauteur();
-        let fin = |forme| Some(doc::AnnotationFeuille { hauteur, forme });
         match (self.outil, self.points.first().copied()) {
             (OutilFeuille::Selection | OutilFeuille::Cartouche, _) => None,
             (OutilFeuille::Texte, _) => {
                 self.texte = Some(TexteFeuille { feuille: feuille.into(), rang: None, point: q, contenu: String::new(), hauteur, focus: true });
                 None
             }
-            (OutilFeuille::Ligne, Some(a)) => {
-                self.points.clear();
-                (a != q).then_some(()).and_then(|_| fin(AnnotationForme::Ligne { debut: a, fin: q }))
-            }
-            (OutilFeuille::Rectangle, Some(a)) => {
-                self.points.clear();
-                (a[0] != q[0] && a[1] != q[1]).then_some(()).and_then(|_| fin(AnnotationForme::Polyligne { points: vec![a, [q[0], a[1]], q, [a[0], q[1]]], fermee: true, courbures: Vec::new(), remplissage: None, traits: Vec::new() }))
-            }
             (OutilFeuille::Cercle, Some(c)) => {
                 self.points.clear();
                 let rayon = ((q[0] - c[0]).powi(2) + (q[1] - c[1]).powi(2)).sqrt();
-                (rayon > 0.0).then_some(()).and_then(|_| fin(AnnotationForme::Cercle { centre: c, rayon, type_trait: String::new() }))
+                (rayon > 0.0).then(|| doc::AnnotationFeuille { hauteur, forme: AnnotationForme::Cercle { centre: c, rayon, type_trait: self.type_trait.clone() } })
             }
             (OutilFeuille::Polyligne, Some(a)) if self.points.len() >= 3 && q == a => self.terminer(true),
             (_, _) => {
@@ -136,7 +111,10 @@ impl TraceFeuille {
     pub(crate) fn terminer(&mut self, fermee: bool) -> Option<doc::AnnotationFeuille> {
         if self.outil != OutilFeuille::Polyligne { return None; }
         let points = std::mem::take(&mut self.points);
-        (points.len() >= 2).then(|| doc::AnnotationFeuille { hauteur: self.hauteur(), forme: AnnotationForme::Polyligne { points, fermee, courbures: Vec::new(), remplissage: None, traits: Vec::new() } })
+        if points.len() < 2 { return None; }
+        let segments = if fermee { points.len() } else { points.len() - 1 };
+        let traits = if self.type_trait.is_empty() { Vec::new() } else { vec![self.type_trait.clone(); segments] };
+        Some(doc::AnnotationFeuille { hauteur: self.hauteur(), forme: AnnotationForme::Polyligne { points, fermee, courbures: Vec::new(), remplissage: None, traits } })
     }
 
     /// Point visé : accroché aux sommets proches (`candidats`, à `tol` mm), sinon
@@ -154,8 +132,6 @@ impl TraceFeuille {
     pub(crate) fn apercu(&self, vise: [f64; 2]) -> Vec<Vec<[f64; 2]>> {
         let Some(a) = self.points.first().copied() else { return Vec::new() };
         match self.outil {
-            OutilFeuille::Ligne => vec![vec![a, vise]],
-            OutilFeuille::Rectangle => vec![vec![a, [vise[0], a[1]], vise, [a[0], vise[1]], a]],
             OutilFeuille::Cercle => {
                 let r = (vise[0] - a[0]).hypot(vise[1] - a[1]);
                 vec![(0..=48).map(|k| { let t = k as f64 / 48.0 * std::f64::consts::TAU; [a[0] + r * t.cos(), a[1] + r * t.sin()] }).collect(), vec![a, vise]]
@@ -166,7 +142,7 @@ impl TraceFeuille {
     }
 }
 
-/// Sommets d'accrochage d'une feuille : coins du papier et des marges, du cartouche et
+/// Sommets d'accrochage d'une feuille : coins du papier et des marges, des cartouches et
 /// sommets des annotations.
 pub(crate) fn sommets_feuille(p: &modele::Projet, f: &doc::Feuille) -> Vec<[f64; 2]> {
     let (l, h, m) = (f.largeur, f.hauteur, doc::MARGE);
@@ -182,43 +158,32 @@ pub(crate) fn sommets_feuille(p: &modele::Projet, f: &doc::Feuille) -> Vec<[f64;
     v
 }
 
-/// Barre des outils de la feuille, en bas à gauche de la vue (le haut porte les
-/// consignes et les messages).
-pub(crate) fn barre_outils(ui: &mut egui::Ui, rect: egui::Rect, trace: &mut TraceFeuille, familles: &[String]) {
-    let cadre = egui::Rect::from_min_size(egui::pos2(rect.min.x + 8.0, rect.max.y - 34.0), egui::vec2(rect.width() - 16.0, 26.0));
-    ui.scope_builder(egui::UiBuilder::new().max_rect(cadre), |ui| {
-        egui::Frame::NONE.fill(Color32::from_white_alpha(235)).stroke(egui::Stroke::new(1.0, Color32::from_gray(170))).corner_radius(4.0).inner_margin(egui::Margin::symmetric(4, 2)).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Annoter").small().weak());
-                for o in OutilFeuille::TOUS {
-                    if ui.selectable_label(trace.outil == o, o.libelle()).clicked() {
-                        trace.choisir(o);
-                    }
-                }
-                if trace.outil == OutilFeuille::Texte {
-                    let mut h = trace.hauteur();
-                    ui.add(egui::DragValue::new(&mut h).speed(0.1).range(1.0..=50.0).max_decimals(1).suffix(" mm")).on_hover_text("Hauteur des nouveaux textes (papier)");
-                    trace.hauteur_texte = h;
-                }
-                if trace.outil == OutilFeuille::Cartouche {
-                    if !trace.famille_cartouche.is_empty() && !familles.contains(&trace.famille_cartouche) {
-                        trace.famille_cartouche.clear();
-                    }
-                    let nom = if trace.famille_cartouche.is_empty() { doc::NOM_CARTOUCHE_STANDARD } else { trace.famille_cartouche.as_str() };
-                    egui::ComboBox::from_id_salt("famille_cartouche_pose").selected_text(nom).show_ui(ui, |ui| {
-                        if ui.selectable_label(trace.famille_cartouche.is_empty(), doc::NOM_CARTOUCHE_STANDARD).clicked() {
-                            trace.famille_cartouche.clear();
-                        }
-                        for f in familles.iter().filter(|f| f.as_str() != doc::NOM_CARTOUCHE_STANDARD) {
-                            if ui.selectable_label(trace.famille_cartouche == *f, f).clicked() {
-                                trace.famille_cartouche = f.clone();
-                            }
-                        }
-                    });
-                }
-            });
+impl Application {
+    /// Palette de l'outil Cartouche (Propriétés) : famille des cartouches à poser.
+    pub(crate) fn selecteur_cartouche_pose(&mut self, ui: &mut egui::Ui) {
+        use crate::zones::ruban::selecteur;
+        let Some((p, _)) = &self.natif else { return };
+        let choisie = &mut self.feuilles.trace.famille_cartouche;
+        if !choisie.is_empty() && !p.familles_cartouches.iter().any(|f| &f.nom == choisie) {
+            choisie.clear();
+        }
+        let actuel = if choisie.is_empty() { doc::NOM_CARTOUCHE_STANDARD.to_string() } else { choisie.clone() };
+        let titre = format!("Cartouche · {actuel}");
+        let bouton = selecteur::entete(ui, &titre, None, &format!("{titre}\nFamille des cartouches posés par clic sur la feuille."), None);
+        let largeur = selecteur::largeur_liste(ui, p.familles_cartouches.iter().map(|f| f.nom.as_str()).chain([doc::NOM_CARTOUCHE_STANDARD]), 0.0, 0, 0.0);
+        let mut choix: Option<String> = None;
+        selecteur::liste(&bouton, largeur, 0.0, |ui| {
+            let l = selecteur::Ligne { nom: doc::NOM_CARTOUCHE_STANDARD, courant: actuel == doc::NOM_CARTOUCHE_STANDARD, etiquette: None, sous_titre: None, detail: None, actions: &[] };
+            if selecteur::ligne(ui, &l, None).choisi { choix = Some(String::new()); }
+            for f in p.familles_cartouches.iter().filter(|f| f.nom != doc::NOM_CARTOUCHE_STANDARD) {
+                let l = selecteur::Ligne { nom: &f.nom, courant: actuel == f.nom, etiquette: None, sous_titre: None, detail: None, actions: &[] };
+                if selecteur::ligne(ui, &l, None).choisi { choix = Some(f.nom.clone()); }
+            }
         });
-    });
+        if let Some(c) = choix {
+            self.feuilles.trace.famille_cartouche = c;
+        }
+    }
 }
 
 /// Champ du texte saisi en place, coin bas gauche en `e` (écran), à la taille du texte

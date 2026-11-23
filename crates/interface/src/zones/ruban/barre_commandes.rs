@@ -190,6 +190,14 @@ pub(super) fn icone_commande(p: &egui::Painter, r: egui::Rect, i: Icone, c: Colo
             seg((0.5, 0.08), (0.5, 0.66));
             p.add(egui::Shape::line(vec![pt(0.32, 0.48), pt(0.5, 0.66), pt(0.68, 0.48)], t));
         }
+        Icone::Styles => {
+            // trois pastilles : un matériau par catégorie
+            for (x, y, a) in [(0.3, 0.32, 0.35), (0.68, 0.32, 0.6), (0.49, 0.68, 0.9)] {
+                let ci = pt(x, y);
+                p.circle_filled(ci, r.width() * 0.17, c.gamma_multiply(a));
+                p.circle_stroke(ci, r.width() * 0.17, t);
+            }
+        }
         Icone::Fiche => {
             document();
             for y in [0.44, 0.6, 0.76] {

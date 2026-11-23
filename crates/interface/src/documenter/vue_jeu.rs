@@ -1,8 +1,8 @@
 //! Vue du jeu ouvert : feuilles l'une sous l'autre. Molette : zoom ; glisser le fond :
 //! défiler ; glisser une vue placée, une nomenclature, un cartouche ou une annotation :
-//! le déplacer (aimanté) ; déposer une vue de l'arborescence : la placer ; outils
-//! d'annotation (barre en haut à gauche) ; dernière page en pointillés : ajouter une
-//! feuille.
+//! le déplacer (aimanté) ; déposer une vue de l'arborescence : la placer ; outils du
+//! ruban Documenter (Texte, Polyligne, Cercle, Cartouche) sur le papier ; dernière page
+//! en pointillés : ajouter une feuille.
 use crate::*;
 use crate::documenter::annotations_feuille::{self as annot, OutilFeuille};
 use crate::documenter::feuilles::{rendu, table_zero, NomenclatureGlissee, ObjetFeuille, Rendu, SelectionFeuille, VueGlissee, ECART, HAUT_FEUILLES};
@@ -40,6 +40,12 @@ impl Application {
     pub(crate) fn vue_jeu(&mut self, ui: &mut egui::Ui) {
         let Some(jeu) = self.jeu_actif() else { return };
         let mut etat = std::mem::take(&mut self.feuilles);
+        // outil du ruban et ses réglages de création (hauteur de texte, type de trait)
+        let outil_ruban = annot::OutilFeuille::du_ruban(self.ruban_edition.outil());
+        if outil_ruban != etat.trace.outil { etat.trace.choisir(outil_ruban); }
+        etat.trace.hauteur_texte = self.ruban_edition.nombre_option(crate::zones::ruban::Outil::Texte, 0);
+        etat.trace.type_trait = self.dessin2d.trait_creation.clone();
+        let mut terminer_outil = false;
         let mut commandes: Vec<Commande> = Vec::new();
         // feuille à déplacer : (feuille, feuille devant laquelle la mettre ; None : à la fin)
         let mut deplacement: Option<(String, Option<String>)> = None;
@@ -388,7 +394,7 @@ impl Application {
                         commandes.push(Commande::Feuille { feuille: f });
                     }
                 if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-                    if etat.trace.points.is_empty() { etat.trace.choisir(OutilFeuille::Selection); } else { etat.trace.points.clear(); }
+                    if etat.trace.points.is_empty() { terminer_outil = true; } else { etat.trace.points.clear(); }
                 }
             }
             // vue déposée depuis l'arborescence : placée, centrée sur le curseur
@@ -545,17 +551,13 @@ impl Application {
             let r = page_ajout;
             painter.add(egui::Shape::dashed_line(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], egui::Stroke::new(1.5, gris), 8.0, 6.0));
             painter.text(r.center(), egui::Align2::CENTER_CENTER, "+ Ajouter une feuille", egui::FontId::proportional(16.0), gris);
-            if !feuilles.is_empty() {
-                let familles: Vec<String> = p.familles_cartouches.iter().map(|f| f.nom.clone()).collect();
-                annot::barre_outils(ui, rect, &mut etat.trace, &familles);
-            }
             if self.error.is_none() {
                 let aide = if feuilles.is_empty() {
                     "Cliquer sur la page en pointillés pour ajouter une feuille."
                 } else if en_trace {
                     etat.trace.outil.consigne(etat.trace.points.len())
                 } else {
-                    "Déposer une vue ou une nomenclature · Annoter → Cartouche pour en poser · Glisser un objet, un cartouche ou le titre pour le déplacer · Suppr pour retirer · Double-clic : ouvrir la vue, modifier la famille du cartouche ou le texte · Molette pour zoomer"
+                    "Déposer une vue ou une nomenclature · Documenter : Texte, Polyligne, Cercle, Cartouche pour dessiner sur la feuille · Glisser un objet, un cartouche ou le titre pour le déplacer · Suppr pour retirer · Double-clic : ouvrir la vue, modifier la famille du cartouche ou le texte · Molette pour zoomer"
                 };
                 crate::socle::messages::consigne_vue(ui, rect, 0.0, aide);
             }
@@ -577,6 +579,9 @@ impl Application {
             ui.centered_and_justified(|ui| ui.label("Les feuilles demandent un projet natif."));
         }
         self.feuilles = etat;
+        if terminer_outil {
+            self.ruban_edition.annuler();
+        }
         if let Some((id, avant)) = deplacement {
             self.deplacer_feuille(&id, &jeu, avant.as_deref());
         }

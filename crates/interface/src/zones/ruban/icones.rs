@@ -92,6 +92,7 @@ pub(super) fn bouton_outil(
         Outil::Verrouiller => "Verrouiller la sélection (CD) ; déjà verrouillée : la déverrouiller. Un élément verrouillé n'est ni déplacé, ni modifié, ni supprimé",
         Outil::Deverrouiller => "Déverrouiller la sélection (DC) ; ou clic sur un cadenas dans la vue",
         Outil::Feuilles => "Feuilles : mise en page des vues, cartouche, export SVG/PDF",
+        Outil::Cartouche => "Cartouche : choisir la famille dans Propriétés, puis cliquer sur la feuille pour en poser un, autant de fois que voulu",
         Outil::Nomenclatures => "Nomenclatures : quantités par catégorie et par type, export CSV",
         Outil::VueDessin => "Vue de dessin : nouvelle vue 2D sans le modèle (détails, légendes), avec les outils de dessin et de modification",
         Outil::LienIfc => "Lien IFC : maquette d'un autre intervenant (structure, fluides, existant), affichée en lecture seule en 3D, en plan et en coupe. Réglages dans l'arborescence > Liens. Glisser un fichier IFC dans la fenêtre fait de même",
@@ -690,6 +691,13 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             cadre(0.12, 0.08, 0.76, 0.84);
             cadre(0.5, 0.68, 0.38, 0.24);
             cadre(0.22, 0.18, 0.5, 0.4);
+        }
+        Cartouche => {
+            // cartouche : cadre, lignes, case du numéro
+            cadre(0.08, 0.3, 0.84, 0.4);
+            seg((0.62, 0.3), (0.62, 0.7));
+            seg((0.08, 0.5), (0.62, 0.5));
+            face(&[(0.62, 0.3), (0.92, 0.3), (0.92, 0.7), (0.62, 0.7)], 0.3);
         }
         Nomenclatures => {
             // tableau : en-tête et lignes

@@ -1,11 +1,11 @@
-//! Propriétés d'un cartouche posé (position, ancrage, suppression) et de ses
-//! annotations (texte, hauteur, points, type de trait).
+//! Propriétés d'un cartouche posé (position) et des annotations d'une feuille (texte,
+//! hauteur, points, type de trait). Pas de commande ici : la suppression passe par Suppr
+//! ou Modifier → Supprimer.
 use crate::*;
 use commandes::Commande;
 use modele::documentation as doc;
 
-/// Cartouche posé `i` : position du coin bas gauche, ancrage aux coins des marges,
-/// suppression.
+/// Cartouche posé `i` : position du coin bas gauche, taille de sa famille.
 pub(crate) fn reglages_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc::Feuille, i: usize) -> Option<Commande> {
     let mut g = f.clone();
     let c = &mut g.cartouches[i];
@@ -22,20 +22,6 @@ pub(crate) fn reglages_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc:
         ui.end_row();
     });
     ui.label(RichText::new("Coin bas gauche du cartouche, depuis le coin bas gauche du papier").small().weak());
-    let m = doc::MARGE;
-    let coins = [("Haut gauche", [m, f.hauteur - m - h]), ("Haut droite", [f.largeur - m - l, f.hauteur - m - h]), ("Bas gauche", [m, m]), ("Bas droite", [f.largeur - m - l, m])];
-    ui.horizontal_wrapped(|ui| {
-        ui.label("Ancrer");
-        for (nom, coin) in coins {
-            if ui.small_button(nom).on_hover_text("Dans ce coin, contre la marge du papier").clicked() {
-                c.position = coin;
-            }
-        }
-    });
-    if ui.button("Supprimer le cartouche").on_hover_text("Le retire de cette feuille (Suppr)").clicked() {
-        g.cartouches.remove(i);
-    }
-    ui.label(RichText::new("Glisser le cartouche pour le déplacer · double-clic pour modifier sa famille · Annoter → Cartouche pour en poser d'autres").small().weak());
     (g.cartouches != f.cartouches).then_some(Commande::Feuille { feuille: g })
 }
 
@@ -128,9 +114,6 @@ pub(crate) fn reglages_annotation(ui: &mut egui::Ui, p: &modele::Projet, f: &doc
     });
     if matches!(a.forme, F::Texte { .. }) {
         ui.label(RichText::new("Champs : {projet}, {feuille}, {numero} · double-clic sur la feuille pour modifier en place").small().weak());
-    }
-    if ui.button("Supprimer l'annotation").clicked() {
-        g.annotations.remove(i);
     }
     (g.annotations != f.annotations).then_some(Commande::Feuille { feuille: g })
 }

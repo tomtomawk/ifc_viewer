@@ -75,6 +75,7 @@ pub(crate) fn definition(outil: Outil) -> Definition {
         VueCoupe => palette(ANNOTER, selecteur_coupe, None, Propres(parametres_coupe), true),
         VuePlan => palette(ANNOTER, selecteur_plan, None, Propres(parametres_plan), true),
         Texte => palette(ANNOTER, selecteur_texte, None, Propres(Application::parametres_texte), true),
+        Cartouche => palette(ANNOTER, Application::selecteur_cartouche_pose, None, Aucun, true),
         Etiquette => palette(ANNOTER, selecteur_etiquette, None, Propres(Application::parametres_etiquette), true),
         Polyligne => palette(ANNOTER, Application::selecteur_trait_creation, None, Aucun, true),
         Spline => palette(ANNOTER, Application::selecteur_trait_creation, None, Aucun, true),

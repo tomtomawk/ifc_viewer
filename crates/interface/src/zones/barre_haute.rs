@@ -201,6 +201,7 @@ impl Application {
             self.ruban_edition.selection_elements = !ids.is_empty() || self.selection_traces_active();
             self.ruban_edition.selection_murs = self.natif.as_ref().is_some_and(|(p, _)| ids.iter().any(|id| p.murs.iter().any(|m| &m.id == id) || p.assemblage(id).is_some()));
             self.ruban_edition.bouton_jonctions = None;
+            self.ruban_edition.feuille_active = self.jeu_actif().is_some();
             let outil_avant = self.ruban_edition.outil();
             let action = self.ruban_edition.afficher(ui, menu, self.natif.as_ref().map(|n| &n.0));
             if menu == crate::zones::ruban::Menu::Modeliser && action.is_some_and(|o| o != crate::zones::ruban::Outil::LienIfc) {
@@ -321,12 +322,15 @@ impl Application {
                     C::new("ifc", "IFC4", I::Exporter("IFC"), "Exporter le projet natif en IFC4", self.natif.is_some()),
                     C::new("jeu_pdf", "Jeu de feuilles", I::Exporter("JEU"), "Exporter le jeu de feuilles ouvert (sinon le premier) : PDF (groupé ou un par feuille), DWG, DXF, IFC", self.natif.as_ref().is_some_and(|(p, _)| !p.feuilles.is_empty())),
                 ];
+                let graphisme = vec![
+                    C::new("styles", "Styles d'objets", I::Styles, "Matériau par défaut de chaque catégorie d'élément : couleur, motif de coupe et motif de surface des éléments sans matériau propre", self.natif.is_some()),
+                ];
                 let partage_disponible=self.collaboration.as_ref().is_some_and(|c|!c.synchronisation_en_cours())&&self.loading.is_none()&&!self.saisie_active&&self.avant_saisie.is_none();
                 let collaboration=vec![
                     C::new("synchro","Synchro",I::Synchro,"Publier les modifications locales et recevoir celles des collègues",partage_disponible),
                     C::new("gerer_collaboration","Gérer",I::Collaborer,"Réservations, reprise explicite, instantané et textes récupérables",self.collaboration.is_some()),
                 ];
-                for (cle, r) in crate::zones::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Collaboration", collaboration), ("Exporter", exporter)]) {
+                for (cle, r) in crate::zones::ruban::bandeau(ui, &[("Enregistrer", enregistrer), ("Collaboration", collaboration), ("Exporter", exporter), ("Graphisme", graphisme)]) {
                     if cle=="gerer_collaboration"{
                         egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui|self.menu_collaboration(ui));continue;
                     }
@@ -335,6 +339,7 @@ impl Application {
                     }
                     match cle {
                         "synchro" => self.demander_synchro(),
+                        "styles" => self.ouvrir_materiaux_categories(&ctx),
                         "enregistrer" => self.enregistrer_projet_arriere_plan(&ctx),
                         "enregistrer_sous" => self.enregistrer_sous(),
                         "svg" => self.exporter_svg_dialogue(&ctx),

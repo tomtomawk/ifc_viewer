@@ -212,8 +212,8 @@ Raccourcis existants :
   `selection_feuille` : `{"jeu":"Plans","feuille":"id"}`, plus `"vue":i` (vue placée ou
   nomenclature posée), `"annotation":i` ou `"cartouche":i` ; `proprietes_feuille`
   rend le cartouche choisi (famille, position, cadre) ou l'annotation choisie. Jeu
-  ouvert : `outil selection|texte|ligne|polyligne|rectangle|cercle|cartouche` choisit l'outil
-  d'annotation de la feuille, `ecran <x> <y>` donne la position écran d'un point du
+  ouvert : `outil texte|polyligne|cercle|cartouche` active l'outil du ruban Documenter
+  sur le papier (`outil selection` le termine), `ecran <x> <y>` donne la position écran d'un point du
   papier (mm) de la feuille choisie, la première sinon, pour y saisir à la souris.
 - `camera dessus|face|iso|cadrer|ortho|perspective|deux_points` (deux_points : perspective à verticales droites, enregistrée avec la vue 3D) ou `camera lacet tangage [distance]` ; `zoom facteur`.
 - `zone on|off|ajuster` ou `zone xmin ymin zmin xmax ymax zmax`.

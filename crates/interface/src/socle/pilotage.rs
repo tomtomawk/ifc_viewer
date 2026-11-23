@@ -535,13 +535,15 @@ impl Application {
             return Ok(json!({}));
         }
         self.pilote_disponible()?;
-        // jeu de feuilles ouvert : outils d'annotation de la feuille
-        if self.jeu_actif().is_some() {
-            use crate::documenter::annotations_feuille::OutilFeuille as F;
-            let outil = F::TOUS.into_iter().find(|o| crate::documenter::annotations_feuille::nom_pilote(*o) == nom)
-                .ok_or("Outils d'une feuille : selection, texte, ligne, polyligne, rectangle, cercle")?;
-            self.feuilles.trace.choisir(outil);
-            return Ok(json!({"outil_feuille": nom}));
+        // jeu de feuilles ouvert : outils du ruban applicables au papier
+        if self.jeu_actif().is_some() && matches!(nom, "selection" | "cartouche") {
+            if nom == "selection" {
+                self.ruban_edition.annuler();
+            } else {
+                self.onglet_ruban = OngletRuban::Annoter;
+                self.ruban_edition.activer_outil(crate::zones::ruban::Outil::Cartouche);
+            }
+            return Ok(json!({}));
         }
         self.activer_outil_interface(nom)
     }

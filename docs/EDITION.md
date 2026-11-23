@@ -196,7 +196,7 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Toiture) ; Modifier, Dupliquer et « + Nouveau type… » ouvrent l'éditeur des types de
   murs (couches du dessus vers le dessous, fonction, matériau, épaisseur, plume,
   ossature). Les éléments du type suivent ses couches.
-  **Matériaux par catégorie** (Paramètres → Graphisme → « Matériaux par catégorie… ») :
+  **Styles d'objets** (Sortie → Graphisme) :
   chaque catégorie (murs, dalles, sols, plafonds, toitures, terre-pleins, portes,
   fenêtres, poteaux, poutres, escaliers, garde-corps, composants, terrain) désigne un
   matériau du projet. Un élément sans matériau propre (couche, type, paramètre de
@@ -608,29 +608,29 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   réglages sont dans Propriétés, sans boîte de dialogue : nom du jeu (Entrée pour
   renommer) lorsque rien n'est sélectionné ; feuille (numéro, nom, format A0 à A4,
   paysage/portrait, dimensions) ; vue placée (échelle et position).
-  **Cartouches** : une feuille en porte autant que voulu, aucun possible. Annoter →
-  **Cartouche**, choisir la famille dans le sélecteur de la barre, puis chaque clic en
-  pose un, centré sur le curseur et aimanté aux marges, aux vues, aux tableaux et aux
-  autres cartouches (cadre en tirets sous le curseur) ; l'outil reste actif, Échap
-  revient à la sélection. Un cartouche se choisit d'un clic, se glisse à la souris et
-  se règle dans Propriétés : famille, position du coin bas gauche (mm du papier),
-  ancrage dans un coin contre la marge. Suppr, le menu contextuel ou « Supprimer le
-  cartouche » le retire. Double-clic : éditeur de sa famille ; la famille enregistrée
-  reste affectée à ce cartouche, un renommage suit sur tous les cartouches posés. Une
-  nouvelle feuille reprend les cartouches de la dernière feuille du jeu ; la première
-  feuille d'un jeu reçoit le cartouche standard en bas à droite.
-  **Annoter la feuille** : barre en bas à gauche de la vue (Sélection, Texte, Ligne,
-  Polyligne, Rectangle, Cercle, Cartouche), en mm du papier. Texte : clic, frappe en place, Entrée
-  valide, Maj+Entrée passe à la ligne, Échap abandonne ; champs `{projet}`,
-  `{feuille}`, `{numero}`. Ligne, rectangle, cercle : deux clics ; polyligne : un clic
-  par sommet, Entrée ou double-clic pour finir, clic sur le premier sommet pour la
-  fermer. Les points s'accrochent aux coins du papier, des marges, des cartouches et aux
-  sommets des annotations ; Maj contraint à l'horizontale ou à la verticale. Échap
-  annule le tracé, puis revient à la sélection. En sélection, une annotation se choisit
-  par son trait (un texte par son cadre), se glisse, se retire par Suppr ; double-clic
-  sur un texte le modifie en place. Propriétés : texte, hauteur, points, type de trait
-  (cercle, polyligne), fermeture d'une polyligne. Annotations et cartouches sont dans
-  les exports PDF, SVG, DXF et DWG de la feuille.
+  **Dessiner sur une feuille** : avec un jeu ouvert, les outils du ruban Documenter
+  s'appliquent au papier (mm, origine en bas à gauche) ; ceux qui ne s'y appliquent pas
+  sont grisés. Leurs réglages sont dans la palette de Propriétés, comme ailleurs.
+  **Texte** : clic, frappe en place, Entrée valide, Maj+Entrée passe à la ligne, Échap
+  abandonne ; hauteur réglée dans la palette ; champs `{projet}`, `{feuille}`,
+  `{numero}`. **Polyligne** : un clic par sommet, Entrée ou double-clic pour finir, clic
+  sur le premier sommet pour la fermer. **Cercle** : centre puis un point. Polylignes et
+  cercles prennent le type de trait de la palette. Les points s'accrochent aux coins du
+  papier, des marges, des cartouches et aux sommets des annotations ; Maj contraint à
+  l'horizontale ou à la verticale. Échap annule le tracé, puis termine l'outil.
+  **Cartouche** (groupe Documents) : famille choisie dans la palette, puis chaque clic
+  en pose un, centré sur le curseur et aimanté aux marges, aux vues, aux tableaux et aux
+  autres cartouches (cadre en tirets sous le curseur) ; l'outil reste actif. Une feuille
+  porte autant de cartouches que voulu, aucun possible. Une nouvelle feuille reprend
+  les cartouches de la dernière feuille du jeu ; la première feuille d'un jeu reçoit le
+  cartouche standard en bas à droite.
+  En sélection, un cartouche ou une annotation se choisit d'un clic (une annotation par
+  son trait, un texte par son cadre), se glisse à la souris, se retire par Suppr ou
+  Modifier → Supprimer. Propriétés ne porte que des propriétés : cartouche (famille,
+  position du coin bas gauche), annotation (texte, hauteur, points, type de trait,
+  fermeture). Double-clic : éditeur de la famille du cartouche (elle lui reste affectée,
+  un renommage suit sur tous les cartouches posés), modification d'un texte en place.
+  Annotations et cartouches sont dans les exports PDF, SVG, DXF et DWG de la feuille.
   L'arborescence liste tous les jeux, toutes
   leurs feuilles et, sous chaque feuille, ses vues placées (clic : ouvrir la vue) ; clic
   sur une feuille pour l'amener à l'écran. La recherche garde un jeu entier si son nom
