@@ -306,18 +306,26 @@ pub(crate) fn apercu_motif(p: &egui::Painter, r: egui::Rect, d: &modele::Definit
 
 pub(crate) fn apercu_motif_colore(p: &egui::Painter, r: egui::Rect, d: &modele::DefinitionMotif, px_mm: f32, couleur: Color32) {
     use noyau::motif::{hachures_plan, GrilleMotif, Motif};
+    let (w, h) = ((r.width() / px_mm) as f64, (r.height() / px_mm) as f64);
+    let p = p.with_clip_rect(r);
+    let tracer = |[a, b]: [[f64; 2]; 2]| {
+        let q = |x: [f64; 2]| egui::pos2(r.left() + x[0] as f32 * px_mm, r.bottom() - x[1] as f32 * px_mm);
+        p.line_segment([q(a), q(b)], egui::Stroke::new(1.0, couleur));
+    };
+    if let Some(tuile) = &d.tuile {
+        use glam::DVec2;
+        for trait_ in tuile.traits_dans(DVec2::ZERO, DVec2::new(w, h)).take(4_000) {
+            tracer(trait_.map(|p| p.to_array()));
+        }
+        return;
+    }
     let m = Motif {
         nom: d.nom.clone(),
         modele: false,
         grilles: d.lignes.iter().map(|l| GrilleMotif { angle: l.angle.to_radians(), origine: l.origine, glissement: l.glissement, decalage: l.pas, tirets: l.tirets.iter().map(|t| t.abs()).collect() }).collect(),
     };
-    let (w, h) = ((r.width() / px_mm) as f64, (r.height() / px_mm) as f64);
     let tris = [[[0.0, 0.0], [w, 0.0], [w, h]], [[0.0, 0.0], [w, h], [0.0, h]]];
-    let p = p.with_clip_rect(r);
-    for [a, b] in hachures_plan(&tris, &m, 1.0, 4_000) {
-        let q = |x: [f64; 2]| egui::pos2(r.left() + x[0] as f32 * px_mm, r.bottom() - x[1] as f32 * px_mm);
-        p.line_segment([q(a), q(b)], egui::Stroke::new(1.0, couleur));
-    }
+    hachures_plan(&tris, &m, 1.0, 4_000).into_iter().for_each(tracer);
 }
 
 /// Cadenas fermé (verrouillé) ou ouvert, dans `r` ; `survol` : surligné (clic = déverrouiller).

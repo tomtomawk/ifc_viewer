@@ -14,6 +14,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene` (`maillage` en de
 | `profondeur.rs` | matrices des passes pour wgpu : profondeur inversée de la vue (1 proche, 0 loin), directe des cartes d'ombres |
 | `profondeur_faces.rs` | copie de la profondeur des faces opaques (multiéchantillonnée) dans une texture lue par les traits et les reflets du verre |
 | `apparences.rs` | images des apparences envoyées au GPU (`couches_images`) |
+| `tuiles_motifs.rs` | masques périodiques des segments dessinés, en couches indexées par code de motif |
 | `placement_surface.rs` | attributs GPU du placement partagé entre le motif de surface et l’apparence du matériau |
 | `fond.rs` | couleur de fond des vues (seule source : projet, familles, captures) |
 | `orientation_plan.rs` | repère d'orientation des plans (egui) |

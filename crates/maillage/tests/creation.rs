@@ -191,4 +191,17 @@ fn motif_de_modele_marque_pour_le_rendu() {
     assert_eq!(sans_genre.genre, GenreMotif::Dessin);
     let scene = maillage::depuis_natif(&relu, std::path::Path::new("test.json")).unwrap();
     assert!(scene.table_motifs.iter().any(|t| t[2] == 1.0), "{:?}", scene.table_motifs);
+
+    let tuile = modele::motif_tuile::TuileMotif {
+        cote: 600.0,
+        divisions: 24,
+        segments: (0..24).map(|y| [[0, y], [24, y]]).collect(),
+    };
+    let carrelage = p.motifs.iter_mut().find(|d| d.nom == "Carrelage").unwrap();
+    carrelage.lignes = tuile.lignes();
+    carrelage.tuile = Some(tuile.clone());
+    let scene = maillage::depuis_natif(&p, std::path::Path::new("test.json")).unwrap();
+    let rang = scene.definitions_surface.iter().position(|d| d.nom == "Carrelage").unwrap();
+    assert_eq!(scene.definitions_surface[rang].tuile.as_ref(), Some(&tuile));
+    assert_eq!(scene.table_motifs[rang][1..], [0.0, 1.0, 600.0]);
 }

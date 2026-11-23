@@ -1,13 +1,12 @@
 //! Motifs de hachures dans l'arborescence du projet, comme les matériaux : liste avec
 //! aperçu, clic pour les propriétés, double-clic pour modifier, menu
-//! (Redessiner, Dupliquer, Supprimer ou Rétablir), Nouveau. Propriétés du motif choisi :
-//! nom (renommer met à jour les matériaux), familles de traits (angle, pas, glissement,
-//! origine, tirets en mm du papier) et aperçu. Un motif de base modifié est copié dans le
-//! projet.
+//! (Redessiner, Dupliquer, Supprimer ou Rétablir) et création dans la vue de dessin.
+//! Propriétés du motif choisi : nom (renommer met à jour les matériaux), genre et aperçu.
+//! Un motif de base modifié est copié dans le projet.
 use crate::*;
 use crate::socle::aides::apercu_motif;
 use crate::documenter::editeur_hachure::libelle_genre;
-use modele::{DefinitionMotif, GenreMotif, LigneMotif, MotifCoupe};
+use modele::{DefinitionMotif, GenreMotif, MotifCoupe};
 
 /// Rapport des mesures d'un motif de modèle (mm réels) à celles du même motif de dessin
 /// (mm du papier) : l'aspect au 1:100 est gardé quand le genre change.
@@ -38,7 +37,6 @@ enum ActionMotif {
     Choisir(String),
     Redessiner(String),
     Dessiner,
-    Nouveau,
     Dupliquer(String),
     Supprimer(String),
 }
@@ -94,10 +92,7 @@ impl Application {
                 });
             });
         }
-        ui.horizontal(|ui| {
-            if ui.small_button("Dessiner un motif…").on_hover_text("Nouveau motif tracé sur un carré répété (vue de dessin)").clicked() { action = Some(ActionMotif::Dessiner); }
-            if ui.small_button("Nouveau").on_hover_text("Nouveau motif à familles de traits").clicked() { action = Some(ActionMotif::Nouveau); }
-        });
+        if ui.small_button("Dessiner un motif…").clicked() { action = Some(ActionMotif::Dessiner); }
         if let Some(a) = action { self.action_motif(a); }
     }
 
@@ -112,12 +107,6 @@ impl Application {
             }
             ActionMotif::Redessiner(n) => { self.ouvrir_editeur_hachure(Some(&n)); return; }
             ActionMotif::Dessiner => { self.ouvrir_editeur_hachure(None); return; }
-            ActionMotif::Nouveau => {
-                let n = nom_libre(&p, "Motif");
-                p.motifs.push(DefinitionMotif { id: noyau::uuid::uuid(), nom: n.clone(), genre: modele::GenreMotif::Dessin, lignes: vec![LigneMotif { angle: 45.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() }], tuile: None });
-                self.select(None, false);
-                self.motif_selectionne = Some(n);
-            }
             ActionMotif::Dupliquer(n) => {
                 let Some(d) = p.definition_motif(&MotifCoupe::hachures(&n)) else { return };
                 let copie = nom_libre(&p, &format!("{n} (copie)"));
@@ -142,8 +131,8 @@ impl Application {
             return false;
         };
         let avant = d.clone();
-        if self.tirets_saisis.0 != choisi {
-            self.tirets_saisis = (choisi.clone(), d.lignes.iter().map(|l| l.tirets.iter().map(|t| noyau::nombres::format_real(*t)).collect::<Vec<_>>().join(" ")).collect());
+        if self.motif_proprietes != choisi {
+            self.motif_proprietes = choisi.clone();
             self.nom_motif_saisi = choisi.clone();
         }
         let mut renommer = false;
@@ -168,55 +157,9 @@ impl Application {
                         self.error = Some(format!("« {choisi} » sert de motif de coupe : seul un motif de dessin y est admis."));
                     } else {
                         changer_genre(&mut d, g);
-                        self.tirets_saisis.0.clear();
                     }
                 }
             });
-            if d.tuile.is_some() {
-                ui.label(RichText::new("Motif dessiné : modifier ses familles à la main abandonne son dessin.").small().weak());
-            }
-            let mut retirer = None;
-            for (k, l) in d.lignes.iter_mut().enumerate() {
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Famille {}", k + 1)).strong());
-                    if ui.add_enabled(k > 0, egui::Button::new("Retirer").small()).on_hover_text("Retirer la famille").clicked() {
-                        retirer = Some(k);
-                    }
-                });
-                egui::Grid::new(("famille_motif", k)).num_columns(2).spacing([8.0, 3.0]).show(ui, |ui| {
-                    ui.label("Angle");
-                    ui.add(egui::DragValue::new(&mut l.angle).speed(1.0).range(-180.0..=180.0).suffix(" °"));
-                    ui.end_row();
-                    ui.label("Pas");
-                    ui.add(egui::DragValue::new(&mut l.pas).speed(0.05).range(0.01..=100_000.0).max_decimals(3).suffix(" mm"));
-                    ui.end_row();
-                    ui.label("Glissement");
-                    ui.add(egui::DragValue::new(&mut l.glissement).speed(0.05).max_decimals(3).suffix(" mm"));
-                    ui.end_row();
-                    ui.label("Origine");
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut l.origine[0]).speed(0.05).max_decimals(3));
-                        ui.add(egui::DragValue::new(&mut l.origine[1]).speed(0.05).max_decimals(3));
-                    });
-                    ui.end_row();
-                    ui.label("Tirets");
-                    if let Some(texte) = self.tirets_saisis.1.get_mut(k)
-                        && ui.add(egui::TextEdit::singleline(texte).desired_width(120.0).hint_text("continu")).on_hover_text("Trait, blanc, trait… en mm du papier (blancs négatifs)").changed() {
-                            let v: Option<Vec<f64>> = texte.replace(',', ".").split_whitespace().map(|x| x.parse::<f64>().ok().filter(|x| x.is_finite() && *x != 0.0)).collect();
-                            if let Some(v) = v { l.tirets = v; }
-                        }
-                    ui.end_row();
-                });
-            }
-            if let Some(k) = retirer {
-                d.lignes.remove(k);
-                self.tirets_saisis.1.remove(k);
-            }
-            if ui.button("+ Famille de traits").clicked() {
-                d.lignes.push(LigneMotif { angle: 0.0, pas: 2.0, glissement: 0.0, origine: [0.0, 0.0], tirets: Vec::new() });
-                self.tirets_saisis.1.push(String::new());
-            }
             ui.add_space(6.0);
             let modele = d.genre == GenreMotif::Modele;
             ui.label(RichText::new(if modele { "Aperçu (3 × 3 m réels)" } else { "Aperçu (3 × 3 cm du papier)" }).small().weak());
@@ -252,8 +195,6 @@ impl Application {
             }
             self.motif_selectionne = Some(n);
         } else if d != avant {
-            // familles de traits modifiées à la main : le dessin d'origine ne vaut plus
-            if d.lignes != avant.lignes { d.tuile = None; }
             match p.motifs.iter_mut().find(|x| x.nom == choisi) {
                 Some(x) => *x = d,
                 None => {

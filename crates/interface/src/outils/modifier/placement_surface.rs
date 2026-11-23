@@ -100,12 +100,19 @@ impl Application {
                     scene.table_motifs.get(i)?[1] as usize,
                 ))
             })
-            .find(|(d, n)| d.genre == GenreMotif::Modele && *n != 0)?;
+            .find(|(d, n)| d.genre == GenreMotif::Modele && (d.tuile.is_some() || *n != 0))?;
         let projeter = |p| face.vers_motif(PlacementSurface::projeter(normale, p));
         let coord = projeter(point);
         let ecran = |p| self.ecran_3d(rect, face.dans_face(face.depuis_motif(p)));
         let pixels = ecran(coord + DVec2::X * 1000.0)?.distance(q) as f64;
         let marge = (12_000.0 / pixels.max(0.01)).max(0.01);
+        if let Some(tuile) = &def.tuile {
+            let trait_motif = tuile.traits_pres(coord, marge)
+                .filter_map(|s| Some((distance_segment(q, [ecran(s[0])?, ecran(s[1])?]), s)))
+                .filter(|(distance, _)| *distance <= 8.0)
+                .min_by(|a, b| a.0.total_cmp(&b.0))?.1;
+            return Some((id, face, trait_motif));
+        }
         let [x, y] = coord.to_array();
         let [a, b, c, d] = [
             [x - marge, y - marge],

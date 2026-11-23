@@ -9,3 +9,4 @@ pub mod profondeur;
 mod profondeur_faces;
 pub mod selection_rectangle;
 mod placement_surface;
+mod tuiles_motifs;

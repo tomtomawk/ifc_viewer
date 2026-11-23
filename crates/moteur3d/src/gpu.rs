@@ -193,6 +193,8 @@ pub struct Renderer {
     /// Apparences : images en couches, échantillonneur répété, réglages par rang ; images
     /// chargées (chemin, date) et couches envoyées.
     vue_apparences: wgpu::TextureView,
+    vue_tuiles: wgpu::TextureView,
+    tuiles: Vec<Option<modele::motif_tuile::TuileMotif>>,
     echantillonneur_apparences: wgpu::Sampler,
     uniformes_apparences: wgpu::Buffer,
     /// Ciel physique : tables, échantillonneur (azimut répété) et passe du fond.
@@ -400,6 +402,7 @@ impl Renderer {
                     count: None,
                 },
                 texture(10, flottant, wgpu::ShaderStages::FRAGMENT),
+                crate::tuiles_motifs::liaison(),
                 wgpu::BindGroupLayoutEntry {
                     binding: 7,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -642,6 +645,8 @@ impl Renderer {
             herbe_rangs: Vec::new(),
             indices_opaques: Vec::new(),
             vue_apparences,
+            vue_tuiles: crate::tuiles_motifs::creer(&device, &rs.queue, &[]),
+            tuiles: Vec::new(),
             echantillonneur_apparences,
             uniformes_apparences,
             images_apparences: Default::default(),
@@ -806,7 +811,11 @@ impl Renderer {
 
     /// Apparences de la scène : réglages par rang et images (couches renvoyées seulement
     /// si leur liste ou un fichier a changé).
-    pub fn upload_apparences(&mut self, apparences: &[modele::Apparence]) {
+    pub fn upload_apparences(&mut self, apparences: &[modele::Apparence], motifs: &[modele::DefinitionMotif]) {
+        if self.tuiles.iter().ne(motifs.iter().map(|m| &m.tuile)) {
+            self.vue_tuiles = crate::tuiles_motifs::creer(&self.device, &self.queue, motifs);
+            self.tuiles = motifs.iter().map(|m| m.tuile.clone()).collect();
+        }
         use modele::CarteTexture;
         let mut u = vec![[0.0f32; 4]; MAX_APPARENCES * 22];
         let mut couches: Vec<(String, Option<std::time::SystemTime>)> = Vec::new();
@@ -912,6 +921,7 @@ impl Renderer {
                 wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.echantillonneur_ciel) },
                 wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(copie) },
                 wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(profondeur) },
+                wgpu::BindGroupEntry { binding: 11, resource: wgpu::BindingResource::TextureView(&self.vue_tuiles) },
             ],
         })
     }

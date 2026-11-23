@@ -39,7 +39,7 @@ pub(crate) fn rendu_materiau(m: &modele::Materiau, couleur: [f32; 4], table: &mu
     [r, g, b, 128.0 + rang as f32]
 }
 
-/// Familles de traits d'un motif de surface au plus (rendu 3D).
+/// Familles de traits d'un motif paramétrique au plus (rendu 3D).
 pub const FAMILLES_PAR_MOTIF: usize = 16;
 
 /// Motifs de surface de la scène en construction : nom, familles encodées
@@ -50,6 +50,7 @@ pub(crate) type TableMotifs = Vec<(String, Vec<[f32; 4]>, bool)>;
 /// glissement, 0), (origine x, origine y, période des tirets, 0), (trait, blanc, trait,
 /// blanc) ; mm du papier ; période nulle : trait continu. Deux paires de tirets au plus.
 pub(crate) fn familles_gpu(d: &modele::DefinitionMotif) -> Vec<[f32; 4]> {
+    if d.tuile.is_some() { return Vec::new(); }
     d.lignes.iter().take(FAMILLES_PAR_MOTIF).flat_map(|l| {
         let t: Vec<f32> = l.tirets.iter().map(|x| x.abs() as f32).collect();
         let tirets = [0, 1, 2, 3].map(|k| t.get(k).copied().unwrap_or(0.0));

@@ -852,16 +852,20 @@ tracent avec les outils ordinaires (Documenter › Ligne de dessin, Polyligne : 
 de dessin n'apparaît qu'avec l'outil lancé) et se modifient par le ruban Modifier
 (déplacer, copier, supprimer…). Les points s'accrochent au cadre (coins, milieux des
 bords, sur un bord), au centre du carré et aux traits déjà tracés ; pas de grille.
-Pour un motif défini par des familles de traits, la vue charge un échantillon carré du
+Pour un motif paramétrique, la vue charge un échantillon carré du
 motif. Les modifications du dessin sont enregistrées sous forme de tuile répétée.
-Si le dessin, le genre et le côté sont conservés, **Terminer** garde les familles d’origine.
+Si le dessin, le genre et le côté sont conservés, **Terminer** garde la définition d’origine.
 Propriétés de la vue : nom, genre (Dessin ou Modèle), côté du carré (mm du papier, ou mm réels pour un motif de modèle), **Terminer** et **Annuler**.
 Terminer ramène les extrémités au 1/240 du carré, redresse un trait dont la direction
 serait trop fine pour être dessinée vers la direction exacte la plus proche (le message
-le dit), déduit les familles de traits, ajoute ou remplace le motif (matériaux suivis s'il
+le dit), ajoute ou remplace le motif (matériaux suivis s'il
 est renommé) et retire la vue ; Annuler retire la vue sans rien enregistrer. Un trait posé
 sur un bord est partagé avec le carré voisin : le tracer aussi sur le bord opposé ne
 l'ajoute pas deux fois. Un trait peut déborder du carré : ses répétitions se recouvrent.
 Seuls les traits droits sont admis (pas d'arc ni de texte). Un seul motif à la fois :
 rappeler l'éditeur rouvre la vue du motif en cours. Défaire après Terminer remet la vue,
 qui n'est plus alors qu'une vue de dessin ordinaire.
+
+L’aperçu et le rendu de surface 3D répètent les segments de la tuile. Sur une face plane,
+Alt + clic sélectionne un trait de motif de modèle. Déplacer, Tourner et Aligner utilisent
+le même placement pour la tuile et la texture du matériau.

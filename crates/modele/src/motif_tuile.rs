@@ -68,6 +68,29 @@ impl TuileMotif {
         self.segments.iter().map(|s| s.map(|q| q.map(|c| c as f64 * pas - TAILLE_VUE / 2.0))).collect()
     }
 
+    /// Segments répétés près d'un point dans le repère du motif (mm).
+    pub fn traits_pres(&self, point: glam::DVec2, rayon: f64) -> impl Iterator<Item = [glam::DVec2; 2]> + '_ {
+        let rayon = rayon.min(self.cote);
+        self.traits_dans(point - rayon, point + rayon)
+    }
+
+    /// Segments répétés dont la boîte rencontre le rectangle donné (mm).
+    pub fn traits_dans(&self, bas: glam::DVec2, haut: glam::DVec2) -> impl Iterator<Item = [glam::DVec2; 2]> + '_ {
+        use glam::DVec2;
+        let pas = self.cote / f64::from(self.divisions.max(1));
+        self.segments.iter().flat_map(move |segment| {
+            let segment = segment.map(|xy| DVec2::new(f64::from(xy[0]), f64::from(xy[1])) * pas);
+            let min = segment[0].min(segment[1]);
+            let max = segment[0].max(segment[1]);
+            let bas = ((bas - max) / self.cote).ceil().as_i64vec2();
+            let haut = ((haut - min) / self.cote).floor().as_i64vec2();
+            (bas.x..=haut.x).take_while(move |_| bas.y <= haut.y).flat_map(move |i| (bas.y..=haut.y).map(move |j| {
+                let translation = DVec2::new(i as f64, j as f64) * self.cote;
+                segment.map(|p| p + translation)
+            }))
+        })
+    }
+
     /// Tuile tirée des traits de la vue du motif, sur [`DIVISIONS_VUE`] divisions :
     /// extrémités arrondies au 1/240 du carré, direction ramenée au besoin dans
     /// [`DIRECTION_MAX`] ; un trait et ses répétitions (décalé d'un nombre entier de carrés,

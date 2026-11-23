@@ -649,7 +649,7 @@ pub struct Application {
     pub(crate) rendu_ouverture: Option<(String, modele::soleil::RenduVue)>,
     motif_selectionne: Option<String>,
     nom_motif_saisi: String,
-    tirets_saisis: (String, Vec<String>),
+    motif_proprietes: String,
     /// Catégories de visibilité de la scène, et pour chaque objet sa catégorie et sa clé
     /// de masquage (voir [`Categorie`]).
     categories: Vec<Categorie>,
@@ -846,7 +846,7 @@ impl Application {
             rendu_ouverture: None,
             motif_selectionne: None,
             nom_motif_saisi: String::new(),
-            tirets_saisis: (String::new(), Vec::new()),
+            motif_proprietes: String::new(),
             poignee_axe: None,
             poignee_annotation: None,
             cote_axe: None,

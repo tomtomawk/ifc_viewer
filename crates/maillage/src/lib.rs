@@ -524,6 +524,9 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     scene.unsupported.extend(ignores_liens);
     scene.definitions_surface = table_motifs.iter().filter_map(|(nom, _, _)| projet.definition_motif(&modele::MotifCoupe::hachures(nom))).collect();
     (scene.table_motifs, scene.familles_motifs) = materiaux::table_gpu(table_motifs);
+    for (entete, motif) in scene.table_motifs.iter_mut().zip(&scene.definitions_surface) {
+        if let Some(tuile) = &motif.tuile { entete[3] = tuile.cote as f32; }
+    }
     placement_surface::appliquer(&mut scene, projet);
     // textures en chemin relatif : depuis le dossier du projet
     let dossier = path.parent().map(|d| d.to_path_buf()).unwrap_or_default();

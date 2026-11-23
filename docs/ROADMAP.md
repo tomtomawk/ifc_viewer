@@ -81,7 +81,7 @@ Objectif : une famille a un document, un éditeur et un format communs quelle qu
 | F10 | Outils communs projet / familles, reste à relever (état non vérifié le 20/11/2026) : texte et libellés (placement, poignées, contenu, hauteur, champs dynamiques et aperçu ; ouvrir au projet les fonctions propres aux familles) ; inventaire des lignes, cercles, splines, rectangles et cotations avant de retirer les variantes, sans confondre gestes graphiques et règles métier | P2 | `crates/interface/src/familles/editeur_famille/`, `crates/interface/src/outils/` |
 | F6 | Formes guidées, reste : chemin tracé hors du plan de la vue (D), raccordement sur chemin fermé, outil « Tracer le chemin » non essayé à l'écran | P3 | `docs/EDITION.md`, `docs/MODELE.md` |
 | F11 | Maillages de famille : import d'un maillage (OBJ, IFC) dans l'éditeur de familles ; écriture compacte des maillages enregistrés | P3 | `crates/modele/src/famille/modelee/maillage.rs` |
-| F13 | Motifs de modèle, reste : ancrage par défaut à la face avant le premier placement explicite ; motifs de surface dans les exports SVG/PDF/DWG ; rendu des tuiles complexes au-delà du plafond de familles de traits du GPU ; lecture du genre des .pat à l'import (`;%TYPE=MODEL`) | P2 | `crates/moteur3d/src/scene.wgsl`, `crates/maillage/src/materiaux.rs`, `crates/moteur2d/` |
+| F13 | Motifs de modèle, reste : ancrage par défaut à la face avant le premier placement explicite ; motifs de surface dans les exports SVG/PDF/DWG ; lecture du genre des .pat à l'import (`;%TYPE=MODEL`) | P2 | `crates/moteur3d/src/scene.wgsl`, `crates/maillage/src/materiaux.rs`, `crates/moteur2d/` |
 | F8 | Escaliers et garde-corps paramétriques par famille | P3 | `docs/EDITION.md` |
 
 ## 6. Structure du code

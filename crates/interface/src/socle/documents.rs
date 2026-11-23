@@ -191,7 +191,7 @@ impl Application {
     pub(crate) fn installer_scene_courante(&mut self, scene: Scene) {
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface, &scene.placements_surface);
-            r.upload_apparences(&scene.apparences);
+            r.upload_apparences(&scene.apparences, &scene.definitions_surface);
         }
         self.status = format!(
             "{} — {} — {} entités, {} objets 3D, {} triangles — {:.2} s",
@@ -634,7 +634,7 @@ impl Application {
             self.visible = vec![true; s.objects.len()];
             if let Some(r) = self.renderer.as_mut() {
                 r.upload_vertices(&s.vertices, &s.couleurs_rendu, &s.motifs_surface, &s.placements_surface);
-                r.upload_apparences(&s.apparences);
+                r.upload_apparences(&s.apparences, &s.definitions_surface);
             }
         }
         self.restaurer_vue(self.vue_active);

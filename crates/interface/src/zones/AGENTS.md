@@ -20,7 +20,7 @@ Rôle : zones d'écran autour de la vue.
 | `menu_vue.rs` | clic droit dans la vue, poignée de milieu de mur |
 | `vue_native.rs`, `vue_revit.rs` | propriétés des vues natives et sélecteur de gabarit ; vues Revit, nomenclatures |
 | `graphismes.rs` | fenêtres matériau, plumes |
-| `motifs.rs` | motifs de hachures : branche de l'arborescence et propriétés du motif choisi |
+| `motifs.rs` | motifs de hachures : arborescence, propriétés du motif et ouverture de la vue de dessin |
 
 Dépendances typiques : `socle/`, `outils/` (barres d'options), `familles/` (sélection des familles), `documenter/` (feuilles).
 

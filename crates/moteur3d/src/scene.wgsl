@@ -18,6 +18,7 @@ const MAX_APPARENCES: i32 = 32;
 // reflets calculés à l'écran (verre) : image des surfaces opaques et leur profondeur
 @group(1) @binding(9) var t_copie: texture_2d<f32>;
 @group(1) @binding(10) var t_profondeur_lue: texture_2d<f32>;
+@group(1) @binding(11) var t_tuiles_motifs: texture_2d_array<f32>;
 
 struct Sommet {
     @location(0) pos: vec3f,
@@ -544,6 +545,10 @@ fn traits_motif(code: i32, uv: vec2f, dx: vec2f, dy: vec2f) -> f32 {
     let n = i32(t.y + 0.5);
     // motif de modèle : mm réels (scène en mètres) ; de dessin : mm du papier
     let mm = select(g.divers.x, 0.001, t.z > 0.5);
+    if t.w > 0.0 {
+        let cote = t.w * mm;
+        return textureSampleGrad(t_tuiles_motifs, s_apparences, uv / cote, code - 1, dx / cote, dy / cote).r;
+    }
     var c = 0.0;
     for (var k = 0; k < n; k++) {
         c = max(c, famille(uv, dx, dy, debut + k, mm));
