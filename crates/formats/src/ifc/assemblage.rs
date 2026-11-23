@@ -280,5 +280,7 @@ pub fn assemble_avec(model: IfcModel, geoms: Vec<ProductGeom>, file_name: String
         navigateur: None,
         partage: None,
         couches_coupe: IdMap::default(),
+        traits_coupe: IdMap::default(),
+        traits_vus: IdMap::default(),
     }
 }

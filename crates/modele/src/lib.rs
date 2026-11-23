@@ -9,7 +9,7 @@
 
 pub mod contextes;
 pub mod categories;
-pub use categories::CategorieMateriau;
+pub use categories::{CategorieMateriau, StyleCategorie};
 mod types_surfaces;
 pub mod creation;
 pub mod documentation;
@@ -91,10 +91,10 @@ pub struct Projet {
     /// gabarit à la création : apparence d'un matériau nommé absent du projet.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub familles_materiaux: Vec<crate::gabarit::FamilleMateriau>,
-    /// Matériau par défaut de chaque catégorie (nom d'un matériau du projet), copié du
-    /// gabarit à la création : élément sans matériau propre.
+    /// Styles d'objets : par catégorie, matériau par défaut, plumes de coupe et de
+    /// projection, type de trait ; copiés du gabarit à la création.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub materiaux_categories: BTreeMap<CategorieMateriau, String>,
+    pub styles_categories: BTreeMap<CategorieMateriau, StyleCategorie>,
     /// Types de coupe et d'élévation (échelle, profondeur), copiés du gabarit à la
     /// création ; vide : `gabarit::TypeVue::par_defaut`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1270,7 +1270,7 @@ impl Projet {
         p.plumes = g.plumes.clone();
         p.motifs = g.motifs.iter().cloned().map(|mut m| { m.id = identifiant("motif", &format!("gabarit:{}", m.nom)); m }).collect();
         p.familles_materiaux = g.materiaux.clone();
-        p.materiaux_categories = g.materiaux_categories.clone();
+        p.styles_categories = g.styles_categories.clone();
         p.types_vues = g.types_vues.clone();
         p.completer_materiaux();
         p

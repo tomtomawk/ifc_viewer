@@ -155,7 +155,7 @@ pub(crate) struct Tables<'a> {
 /// Élément d'un seul matériau (poteau, poutre, escalier) : couleur, poché de coupe,
 /// rendu et motif de surface du matériau ; sans matériau, couleur `defaut` et poché
 /// générique.
-pub(crate) fn objet_materiau(projet: &Projet, id: u64, tris: Vec<noyau::csg::Tri>, m: Option<&modele::Materiau>, defaut: [f32; 4], t: &mut Tables) -> formats::ifc::geom::ProductGeom {
+pub(crate) fn objet_materiau(projet: &Projet, id: u64, tris: Vec<noyau::csg::Tri>, m: Option<&modele::Materiau>, defaut: [f32; 4], trait_mm: f64, t: &mut Tables) -> formats::ifc::geom::ProductGeom {
     use formats::ifc::geom::{Part, ProductGeom};
     let Some(m) = m else {
         t.materiaux_parts.push(vec![None]);
@@ -164,7 +164,7 @@ pub(crate) fn objet_materiau(projet: &Projet, id: u64, tris: Vec<noyau::csg::Tri
     let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0);
     let couleur = opacite(Some(m), [r, g, b, 1.0]);
     let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-    t.couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
+    t.couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], trait_mm)));
     t.materiaux_parts.push(vec![Some(m.nom.clone())]);
     ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(m, couleur, t.apparences))], motifs: vec![motif_surface(projet, m, t.motifs)] }
 }

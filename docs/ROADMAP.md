@@ -64,7 +64,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M15 | Toitures concaves à pentes différentes par arête (aujourd'hui refusées) | P3 | `docs/EDITION.md` |
 | M16 | Poutres inclinées ; sections circulaires de poteau | P2 | `docs/EDITION.md` |
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
-| M18 | Épaisseurs de trait par catégorie (les matériaux par catégorie donnent couleur et motifs, pas l'épaisseur) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
 | U11 | Réglages retirés car jamais lus (U3, 20/11/2026), à réaliser s'ils sont voulus : Texte (ligne de repère avec flèche, alignement gauche / centre / droite), Étiquette (contenu : type, repère, matériau), Cote (mode orthogonal, décalage papier), Zone (motif, pas), Quadrillage en arc, Déplacer contraint horizontal / vertical (Maj contraint déjà aux axes) | P3 | `zones/ruban/mod.rs` (`champs`) ; question au §9 |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
@@ -105,7 +104,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| E1b | Matériaux par catégorie, reste : poché de coupe des ouvertures et des composants (la couleur suit le matériau de la catégorie, le poché reste générique) ; éléments importés (couleur de la source) ; bibliothèque partagée entre projets si elle reste voulue (aujourd'hui : table du projet amorcée par le gabarit) | P3 | `crates/maillage/src/lib.rs`, `crates/modele/src/categories.rs` |
+| E1b | Styles d'objets, reste : à l'écran, lignes vues tracées à un pixel sans tirets (GPU : `moteur3d/src/scene.wgsl`, `LARGEUR_TRAIT`) ; poché de coupe des ouvertures et des composants par leur matériau (couleur seule aujourd'hui) ; éléments importés et liens IFC sans style de catégorie ; tirets de projection repris à chaque arête (pas de phase continue le long d'un contour) ; bibliothèque partagée entre projets si elle reste voulue | P3 | `crates/maillage/src/styles.rs`, `crates/moteur2d/src/vue.rs`, `crates/moteur3d/` |
 | E2 | Vérification multiplateforme : essai manuel sur chaque système, cache macOS (demande n° 4) | P2 | §10 |
 | E3 | Version navigateur en lecture seule (demande n° 3) | P3 | §10 |
 

@@ -87,8 +87,11 @@ impl Projet {
             }
             if t.materiau.as_ref().is_some_and(|m| self.materiau(m).is_none()) { return Err(format!("{} : matériau introuvable.", t.nom)); }
         }
-        for (c, m) in &self.materiaux_categories {
-            if self.materiau(m).is_none() { return Err(format!("Matériau par défaut des {} : « {m} » introuvable.", c.libelle().to_lowercase())); }
+        for (c, s) in &self.styles_categories {
+            let nom = c.libelle().to_lowercase();
+            if let Some(m) = s.materiau.as_ref().filter(|m| self.materiau(m).is_none()) { return Err(format!("Style des {nom} : matériau « {m} » introuvable.")); }
+            if [s.plume_coupe, s.plume_projection].iter().flatten().any(|p| !(1..=12).contains(p)) { return Err(format!("Style des {nom} : plume hors de 1 à 12.")); }
+            if let Some(t) = s.type_trait.as_ref().filter(|t| !self.types_traits.iter().any(|x| &x.id == *t)) { return Err(format!("Style des {nom} : type de trait « {t} » introuvable.")); }
         }
         for t in &self.terrains {
             t.triangles()?;

@@ -161,7 +161,7 @@ impl Application {
         if let Some(p) = coupe {
             primitives.extend(moteur2d::coupe(s, &self.visible, self.affichage(), p, self.echelle, self.poche_style()));
         }
-        primitives.extend(moteur2d::vu(s, &self.visible, self.affichage(), droite, haut, -f, coupe, 4096));
+        primitives.extend(moteur2d::styler_vus(moteur2d::vu(s, &self.visible, self.affichage(), droite, haut, -f, coupe, 4096), s, droite, haut, self.echelle));
         primitives = moteur2d::cadrer_primitives(primitives, &self.cadrage_vue(), -f);
         // éléments 2D de la vue Revit ouverte, s'ils sont affichés (repère du fichier →
         // repère de la scène)

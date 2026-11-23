@@ -919,7 +919,7 @@ fn relations_de_tous_les_objets_sont_independantes_par_identite() {
         "demolitions",
         "priorites_jonction",
         "attaches_toitures",
-        "materiaux_categories",
+        "styles_categories",
     ] {
         let cle = format!("@/{nom}");
         let mut o = Objets::new();

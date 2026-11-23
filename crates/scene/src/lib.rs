@@ -300,6 +300,18 @@ pub struct Scene {
     pub partage: Option<ReperePartage>,
     /// Bandes de composition dont la position dans un mur droit est vérifiée.
     pub couches_coupe: IdMap<Vec<CoucheCoupe>>,
+    /// Styles d'objets : épaisseur du contour coupé (mm du papier) des objets sans bande.
+    pub traits_coupe: IdMap<f64>,
+    /// Styles d'objets : lignes vues de l'objet (épaisseur et tirets).
+    pub traits_vus: IdMap<TraitVu>,
+}
+
+/// Lignes vues d'un objet : épaisseur (mm du papier ; 0 : trait par défaut) et tirets
+/// (longueurs alternées trait, blanc… en mm du papier ; vide : continu).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TraitVu {
+    pub epaisseur: f64,
+    pub tirets: Vec<f64>,
 }
 
 #[derive(Clone)]
@@ -476,6 +488,7 @@ mod tests {
             model, vertices, couleurs_rendu: Vec::new(), motifs_surface: Vec::new(), placements_surface: Vec::new(), definitions_surface: Vec::new(), visibilite: Vec::new(), table_motifs: Vec::new(), familles_motifs: Vec::new(), apparences: Vec::new(),
             objects, object_of: IdMap::default(), origin: DVec3::ZERO, min: Vec3::ZERO, max: Vec3::new(10., 10., 3.), triangles: 4, unsupported: Vec::new(),
             load_ms: 0, file_name: String::new(), navigateur: None, partage: None, couches_coupe: IdMap::default(),
+            traits_coupe: IdMap::default(), traits_vus: IdMap::default(),
         }
     }
 

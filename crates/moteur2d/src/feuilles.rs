@@ -1,7 +1,7 @@
 //! Dessin d'une vue native et de ses feuilles : scène du projet coupée et projetée,
 //! mise en page sur feuille, export SVG et PDF.
 use super::plans::{aretes_plage_haute, dans_plage_haute, fond_plan, limite_haute_plan, pointilles_plage_haute};
-use super::{Poche, cadrer_primitives, coupe, vu};
+use super::{Poche, cadrer_primitives, coupe, styler_vus, vu};
 use modele::documentation::*;
 use maillage::depuis_natif;
 use modele::identifiants::{id_natif, numero_vue};
@@ -130,7 +130,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
             primitives.extend(pointilles_plage_haute(aretes, v.echelle, plan.w as f64));
         }
     }
-    primitives.extend(vu(
+    primitives.extend(styler_vus(vu(
         &s,
         &visible,
         affichage,
@@ -139,7 +139,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         oeil,
         actif.then_some(plan),
         4096,
-    ));
+    ), &s, u, h, v.echelle));
     if let Some(nav) = s.navigateur.as_ref().and_then(|n| n.vues.iter().find(|nv| nv.revit_id == numero_vue(id))) {
         let plans: Vec<_> = nav.cadrage.iter().map(|plan| {
             let n = plan.truncate();

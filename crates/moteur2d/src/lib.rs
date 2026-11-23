@@ -18,7 +18,7 @@ pub mod dao;
 mod coupe;
 pub use coupe::{coupe, coupe_avec_cache, CacheCoupe};
 mod vue;
-pub use vue::{cadrer_primitives, sommets, sommets_boite, vu};
+pub use vue::{cadrer_primitives, sommets, sommets_boite, styler_vus, vu};
 use noyau::motif::{GrilleMotif, Motif, hachures_plan};
 use scene::{Scene, Vertex};
 use modele::famille::modelee::Affichage;

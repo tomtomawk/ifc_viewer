@@ -221,7 +221,7 @@ fn materiau_par_defaut_de_la_categorie() {
     };
     let (avant, coupe) = couleur(&p);
     assert!(!coupe, "sans matériau : poché générique");
-    p.materiaux_categories.insert(CategorieMateriau::Poteaux, "Brique".into());
+    p.styles_categories.insert(CategorieMateriau::Poteaux, StyleCategorie { materiau: Some("Brique".into()), ..Default::default() });
     p.completer_materiaux();
     p.verifier().unwrap();
     let brique = p.materiau("Brique").unwrap().couleur;
@@ -229,4 +229,23 @@ fn materiau_par_defaut_de_la_categorie() {
     assert!(coupe, "matériau de la catégorie : bande de coupe");
     assert_ne!(avant, apres);
     assert!((0..3).all(|i| apres[i].abs_diff(brique[i]) <= 3), "{apres:?} / {brique:?}");
+}
+
+/// Styles d'objets : plume de coupe de la catégorie sur la bande du poteau, plume et
+/// tirets de projection dans la scène.
+#[test]
+fn plumes_et_trait_de_la_categorie_dans_la_scene() {
+    let mut p = Projet::nouveau("Plumes");
+    p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+    p.barres.push(Barre { id: "p".into(), nom: "Poteau".into(), genre: GenreBarre::Poteau, niveau: "n".into(), debut: [0.0, 0.0, 0.0], fin: [0.0, 0.0, 2500.0], largeur: 200.0, hauteur: 200.0, rotation: 0.0, pose: Default::default(), origine: None });
+    p.types_traits.push(documentation::TypeTrait { id: "tirets".into(), nom: "Tirets".into(), epaisseur: 0.25, tirets: vec![3.0, 1.5] });
+    p.styles_categories.insert(CategorieMateriau::Poteaux, StyleCategorie { materiau: Some("Béton".into()), plume_coupe: Some(8), plume_projection: Some(3), type_trait: Some("tirets".into()) });
+    p.completer_materiaux();
+    p.verifier().unwrap();
+    let s = maillage::depuis_natif(&p, std::path::Path::new("p.bem")).unwrap();
+    let id = modele::identifiants::id_natif("barre", "p");
+    let plumes = p.epaisseurs_plumes();
+    assert_eq!(s.couches_coupe[&id][0].trait_mm, plumes[7]);
+    assert_eq!(s.traits_coupe.get(&id), Some(&plumes[7]));
+    assert_eq!(s.traits_vus.get(&id), Some(&scene::TraitVu { epaisseur: plumes[2], tirets: vec![3.0, 1.5] }));
 }

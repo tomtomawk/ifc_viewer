@@ -196,16 +196,20 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Toiture) ; Modifier, Dupliquer et « + Nouveau type… » ouvrent l'éditeur des types de
   murs (couches du dessus vers le dessous, fonction, matériau, épaisseur, plume,
   ossature). Les éléments du type suivent ses couches.
-  **Styles d'objets** (Sortie → Graphisme) :
-  chaque catégorie (murs, dalles, sols, plafonds, toitures, terre-pleins, portes,
-  fenêtres, poteaux, poutres, escaliers, garde-corps, composants, terrain) désigne un
-  matériau du projet. Un élément sans matériau propre (couche, type, paramètre de
-  famille) prend celui de sa catégorie : couleur, motif de coupe et motif de surface ;
-  « Aucun » garde la couleur du logiciel. Un nouveau projet reçoit la table du gabarit
-  (béton pour les dalles, poteaux, poutres et escaliers, mur générique, chape, plâtre,
-  étanchéité, remblai, bois et aluminium de menuiserie, acier laqué, bois, terre
-  naturelle). Portes, fenêtres et composants en prennent la couleur ; leur poché de
-  coupe reste générique.
+  **Styles d'objets** (Sortie → Graphisme) : pour chaque catégorie (murs, dalles, sols,
+  plafonds, toitures, terre-pleins, portes, fenêtres, poteaux, poutres, escaliers,
+  garde-corps, composants, terrain), matériau par défaut, plume de coupe, plume de
+  projection et type de trait ; « Défaut » garde le réglage du logiciel. Un élément sans
+  matériau propre (couche, type, paramètre de famille) prend celui de sa catégorie :
+  couleur, motif de coupe et motif de surface. La plume de coupe donne l'épaisseur des
+  contours coupés (à l'écran et dans les exports), sauf pour une couche dont la plume est
+  réglée dans son type. Plume de projection et type de trait donnent l'épaisseur et les
+  tirets des lignes vues dans les dessins de vue, sur les feuilles et dans les exports ;
+  la vue à l'écran trace ses lignes vues à un pixel. Un nouveau projet reçoit les
+  matériaux du gabarit (béton pour les dalles, poteaux, poutres et escaliers, mur
+  générique, chape, plâtre, étanchéité, remblai, bois et aluminium de menuiserie, acier
+  laqué, bois, terre naturelle). Portes, fenêtres et composants prennent la couleur du
+  matériau ; leur poché de coupe reste générique.
   Pour les éléments horizontaux et les limites de propriété, **Sélectionner** dans le
   bandeau ou l'onglet **Modifier** interrompt le tracé et permet de choisir un
   sommet ou un segment. **Déplacer** utilise un point de départ et un point d'arrivée ;

@@ -272,6 +272,35 @@ pub(super) fn vu_limites(scene: &Scene, visible: &[bool], affichage: Affichage, 
         .collect()
 }
 
+/// Lignes vues stylées par objet (styles d'objets, `Scene::traits_vus`) : épaisseur et
+/// tirets en mm du papier à l'échelle `echelle` (dénominateur), tirets mesurés sur la
+/// projection de chaque arête dans le plan (`droite`, `haut`).
+pub fn styler_vus(mut prims: Vec<Primitive>, scene: &Scene, droite: DVec3, haut: DVec3, echelle: f64) -> Vec<Primitive> {
+    for p in prims.iter_mut().filter(|p| p.role == Role::Vu) {
+        let Some(t) = p.element.and_then(|e| scene.traits_vus.get(&e)) else { continue };
+        p.style.epaisseur = t.epaisseur;
+        let motif: Vec<f64> = t.tirets.iter().map(|x| x.max(0.0) * echelle / 1000.0).collect();
+        if motif.len() < 2 || motif.iter().sum::<f64>() <= 1e-9 { continue; }
+        let Forme::Segments(segments) = &p.forme else { continue };
+        let mut out = Vec::new();
+        for [a, b] in segments {
+            let d = *b - *a;
+            let l = d.dot(droite).hypot(d.dot(haut));
+            // arête vue de bout ou trop découpée : gardée entière
+            if l <= 1e-12 || l / motif.iter().sum::<f64>() > 10_000.0 { out.push([*a, *b]); continue; }
+            let (mut x, mut k) = (0.0, 0);
+            while x < l {
+                let fin = (x + motif[k % motif.len()]).min(l);
+                if k % 2 == 0 && fin > x { out.push([*a + d * (x / l), *a + d * (fin / l)]); }
+                x = fin;
+                k += 1;
+            }
+        }
+        p.forme = Forme::Segments(out);
+    }
+    prims
+}
+
 /// Cadrage vectoriel des arêtes et poches d'une coupe ou d'une élévation.
 pub fn cadrer_primitives(primitives: Vec<Primitive>, plans: &[Vec4], normale: DVec3) -> Vec<Primitive> {
     if plans.is_empty() { return primitives; }

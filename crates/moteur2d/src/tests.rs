@@ -484,3 +484,22 @@ fn coupe_avec_cache_identique_et_partielle() {
     super::coupe_avec_cache(&s, &vec![true; s.objects.len()], TOUT, plan, 50.0, Poche::Hachure, &mut cache);
     assert!(cache.recoupes >= 6);
 }
+
+/// Styles d'objets : lignes vues d'un objet à l'épaisseur de sa catégorie, en tirets
+/// mesurés en mm du papier à l'échelle de la vue ; les autres objets restent intacts.
+#[test]
+fn lignes_vues_stylees_par_objet() {
+    let mut s = scene_section(vec![[DVec3::ZERO, DVec3::X, DVec3::Y]]);
+    let id = s.objects[0].id;
+    let vu = |e: u64| Primitive { forme: Forme::Segments(vec![[DVec3::ZERO, DVec3::new(1.0, 0.0, 0.0)]]), style: noyau::trace2d::Style { couleur: [0, 0, 0, 255], epaisseur: 0.0 }, role: Role::Vu, element: Some(e) };
+    s.traits_vus.insert(id, scene::TraitVu { epaisseur: 0.35, tirets: vec![3.0, 2.0] });
+    // 1 m au 1:100 = 10 mm papier : tirets de 3 mm (0,3 m), blancs de 2 mm (0,2 m)
+    let p = super::styler_vus(vec![vu(id), vu(id + 1)], &s, DVec3::X, DVec3::Y, 100.0);
+    assert_eq!(p[0].style.epaisseur, 0.35);
+    let Forme::Segments(t) = &p[0].forme else { panic!() };
+    let longueurs: Vec<f64> = t.iter().map(|[a, b]| ((b.x - a.x) * 1000.0).round() / 1000.0).collect();
+    assert_eq!(longueurs, vec![0.3, 0.3]);
+    assert!((t[1][0].x - 0.5).abs() < 1e-9);
+    assert_eq!(p[1].style.epaisseur, 0.0);
+    assert!(matches!(&p[1].forme, Forme::Segments(v) if v.len() == 1));
+}

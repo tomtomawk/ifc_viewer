@@ -13,6 +13,7 @@ mod aretes;
 mod placement_surface;
 pub mod liens;
 mod materiaux;
+mod styles;
 pub mod textures_gabarit;
 mod navigateur;
 
@@ -165,7 +166,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let couleur = opacite(materiau.as_ref(), couleur);
         let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if let Some(x) = &materiau {
-            let mut bandes = coupe_materiau(projet, x, vec![neutre, neutre], type_mur.couches.first().map_or(noyau::aretes::TRAIT_FORT_MM, |c| projet.trait_couche(c)));
+            let mut bandes = coupe_materiau(projet, x, vec![neutre, neutre], projet.trait_coupe(type_mur.couches.first(), Cat::Murs));
             if let modele::Axe::Arc { centre, .. } = m.axe {
                 for bande in &mut bandes { bande.centre_isolation = Some([centre[0] * 0.001, centre[1] * 0.001]); }
             }
@@ -213,7 +214,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                 hachure_defaut: true,
                 isolation: false,
                 centre_isolation: None,
-                trait_mm: noyau::aretes::TRAIT_FORT_MM,
+                trait_mm: projet.trait_coupe(type_mur.couches.first(), Cat::Murs),
             }]));
         }
         let tris = solide.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
@@ -263,10 +264,10 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                         Some((membrure, cases)) => for case in cases {
                             let mut jeu = jeu.clone();
                             jeu.extend(case.plans.iter().map(|q| Vec4::new(q[0] as f32, q[1] as f32, q[2] as f32, (q[3] * 0.001) as f32)));
-                            let trait_mm = if case.membrure { projet.trait_couche(c) } else { projet.epaisseurs_plumes()[(c.ossature.as_ref().map_or(2, |o| o.plume_remplissage()) - 1) as usize] };
+                            let trait_mm = if case.membrure { projet.trait_coupe(Some(c), Cat::de_dalle(d.sorte)) } else { projet.epaisseurs_plumes()[(c.ossature.as_ref().map_or(2, |o| o.plume_remplissage()) - 1) as usize] };
                             bandes.extend(coupe_materiau(projet, if case.membrure { membrure } else { m }, jeu, trait_mm));
                         },
-                        None => bandes.extend(coupe_materiau(projet, m, jeu, projet.trait_couche(c))),
+                        None => bandes.extend(coupe_materiau(projet, m, jeu, projet.trait_coupe(Some(c), Cat::de_dalle(d.sorte)))),
                     }
                 }
             }
@@ -311,7 +312,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0);
             let couleur = opacite(Some(&m), [cr, cg, cb, 1.0]);
             let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-            couches_coupe.push((id, coupe_materiau(projet, &m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
+            couches_coupe.push((id, coupe_materiau(projet, &m, vec![neutre, neutre], projet.trait_coupe(None, Cat::TerrePleins))));
             materiaux_parts.push(vec![Some(m.nom.clone())]);
             geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: couleur, tris: r.tris.iter().map(|t| t.map(|v| v * 0.001)).collect() }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
         }
@@ -359,7 +360,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let propre = b.pose.type_poutre.as_ref().and_then(|t| projet.type_poutre(t)).and_then(|t| t.materiau.as_deref());
         let materiau = projet.materiau_resolu(propre, Cat::de_barre(b.genre));
         let mut t = Tables { couches_coupe: &mut couches_coupe, materiaux_parts: &mut materiaux_parts, apparences: &mut table_apparences, motifs: &mut table_motifs };
-        geoms.push(objet_materiau(projet, id, tris, materiau.as_ref(), [0.65, 0.68, 0.72, 1.0], &mut t));
+        geoms.push(objet_materiau(projet, id, tris, materiau.as_ref(), [0.65, 0.68, 0.72, 1.0], projet.trait_coupe(None, Cat::de_barre(b.genre)), &mut t));
     }
     for c in &projet.composants {
         let id = id_natif("composant", &c.id);
@@ -416,7 +417,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let tris = e.solide(projet)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
         let materiau = projet.materiau_resolu(None, Cat::Escaliers);
         let mut t = Tables { couches_coupe: &mut couches_coupe, materiaux_parts: &mut materiaux_parts, apparences: &mut table_apparences, motifs: &mut table_motifs };
-        geoms.push(objet_materiau(projet, id, tris, materiau.as_ref(), [0.74, 0.73, 0.70, 1.0], &mut t));
+        geoms.push(objet_materiau(projet, id, tris, materiau.as_ref(), [0.74, 0.73, 0.70, 1.0], projet.trait_coupe(None, Cat::Escaliers), &mut t));
     }
     for g in &projet.garde_corps {
         let id = id_natif("garde_corps", &g.id);
@@ -453,7 +454,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             let couleur = opacite(materiau, couleur);
             if k == 0 && let Some(m) = materiau {
                 let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-                couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
+                couches_coupe.push((id, coupe_materiau(projet, m, vec![neutre, neutre], projet.trait_coupe(None, Cat::Terrain))));
             }
             noms.push(materiau.map(|m| m.nom.clone()));
             rendu.push(materiau.map(|m| rendu_materiau(m, couleur, &mut table_apparences)));
@@ -517,6 +518,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         }
     }
     scene.couches_coupe.extend(couches_coupe);
+    (scene.traits_coupe, scene.traits_vus) = styles::traits(projet);
     scene.unsupported.extend(ignores_liens);
     scene.definitions_surface = table_motifs.iter().filter_map(|(nom, _, _)| projet.definition_motif(&modele::MotifCoupe::hachures(nom))).collect();
     (scene.table_motifs, scene.familles_motifs) = materiaux::table_gpu(table_motifs);

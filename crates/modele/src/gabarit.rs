@@ -28,9 +28,9 @@ pub struct Gabarit {
     /// Matériaux reconnus par un mot de leur nom (premier qui correspond).
     #[serde(default)]
     pub materiaux: Vec<FamilleMateriau>,
-    /// Matériau par défaut de chaque catégorie d'élément d'un nouveau projet.
+    /// Styles d'objets d'un nouveau projet, par catégorie d'élément.
     #[serde(default)]
-    pub materiaux_categories: std::collections::BTreeMap<crate::CategorieMateriau, String>,
+    pub styles_categories: std::collections::BTreeMap<crate::CategorieMateriau, crate::StyleCategorie>,
     /// Types de murs proposés en plus de ceux du projet.
     #[serde(default)]
     pub types_murs: Vec<TypeGabarit>,
