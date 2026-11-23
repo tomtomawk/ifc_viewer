@@ -22,9 +22,11 @@ fn feuilles_par_jeu_et_anciens_fichiers() {
     deplacer_feuille(&mut p, "f", "Détails", Some("g")).unwrap();
     assert_eq!(ordre(&p), "h:Plans f:Détails g:Détails");
     assert!(deplacer_feuille(&mut p, "x", "Plans", None).is_err());
-    // cadre et cartouche dans la feuille
-    let cadre = cadre_feuille(&p, &p.feuilles[0]);
-    assert!(cadre.len() > 4);
+    // cartouche posé sur la feuille
+    let mut f = p.feuilles[0].clone();
+    assert!(cadre_feuille(&p, &f).is_empty());
+    f.cartouches.push(cartouche_par_defaut(&p, &f, ""));
+    assert!(cadre_feuille(&p, &f).len() > 4);
 }
 
 #[test]
@@ -33,11 +35,11 @@ fn cartouche_standard_enregistre_est_partage_par_les_feuilles_sans_affectation()
     let standard = FamilleCartouche { largeur: 125.0, ..Default::default() };
     let autre = FamilleCartouche { nom: "Agence".into(), largeur: 80.0, ..Default::default() };
     p.familles_cartouches.extend([standard, autre]);
-    p.cartouches_feuilles.insert("personnalisee".into(), "Agence".into());
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
-    assert_eq!(famille_cartouche(&relu, "premiere").unwrap().largeur, 125.0);
-    assert_eq!(famille_cartouche(&relu, "seconde").unwrap().largeur, 125.0);
-    assert_eq!(famille_cartouche(&relu, "personnalisee").unwrap().largeur, 80.0);
+    assert_eq!(famille_cartouche(&relu, "").unwrap().largeur, 125.0);
+    assert_eq!(famille_cartouche(&relu, NOM_CARTOUCHE_STANDARD).unwrap().largeur, 125.0);
+    assert_eq!(famille_cartouche(&relu, "Agence").unwrap().largeur, 80.0);
+    assert_eq!(taille_cartouche(&relu, "Absente"), [180.0, 40.0]);
 }
 
 #[test]
@@ -163,40 +165,41 @@ fn type_de_trait_des_splines_et_cercles() {
 }
 
 #[test]
-fn cartouche_deplace_supprime_et_annotations_de_feuille() {
+fn cartouches_multiples_et_annotations_de_feuille() {
     let mut p = Projet::nouveau("Projet");
     let mut f: Feuille = serde_json::from_str(r#"{"id":"f","numero":"A01","nom":"Plan","largeur":420,"hauteur":297,"cartouche":"","vues":[]}"#).unwrap();
-    // place par défaut : en bas à droite, dans la marge
-    let [l, h] = taille_cartouche(&p, &f);
-    assert_eq!(cadre_cartouche(&p, &f), Some([420.0 - MARGE - l, MARGE, 420.0 - MARGE, MARGE + h]));
-    // déplacé : coin bas gauche choisi ; supprimé : plus de cadre ni de primitives
-    f.position_cartouche = Some([15.0, 240.0]);
-    assert_eq!(cadre_cartouche(&p, &f), Some([15.0, 240.0, 15.0 + l, 240.0 + h]));
-    assert!(!cartouche_feuille(&p, &f).is_empty());
-    f.sans_cartouche = true;
-    assert_eq!(cadre_cartouche(&p, &f), None);
-    assert!(cadre_feuille(&p, &f).is_empty());
+    // aucun cartouche par défaut ; plusieurs posés, de familles différentes
+    assert!(cartouche_feuille(&p, &f).is_empty());
+    p.familles_cartouches.push(FamilleCartouche { nom: "Cachet".into(), largeur: 60.0, hauteur: 30.0, ..Default::default() });
+    let defaut = cartouche_par_defaut(&p, &f, NOM_CARTOUCHE_STANDARD);
+    assert_eq!(defaut, CartouchePlace { famille: String::new(), position: [420.0 - MARGE - 180.0, MARGE] });
+    f.cartouches = vec![defaut, CartouchePlace { famille: "Cachet".into(), position: [15.0, 240.0] }, CartouchePlace { famille: "Cachet".into(), position: [100.0, 240.0] }];
+    assert_eq!(cadre_cartouche(&p, &f.cartouches[1]), [15.0, 240.0, 75.0, 270.0]);
+    let un = primitives_cartouche(&p, &f, &f.cartouches[0]).len();
+    assert!(un > 0 && cartouche_feuille(&p, &f).len() > un);
     // annotations : texte à champs et rectangle, dessinés, déplacés, repérés
     let texte = AnnotationFeuille { hauteur: 5.0, forme: AnnotationForme::Texte { point: [50.0, 50.0], texte: "{numero} {feuille}".into() } };
     let rect = AnnotationFeuille { hauteur: HAUTEUR_TEXTE_FEUILLE, forme: AnnotationForme::Polyligne { points: vec![[100.0, 100.0], [200.0, 100.0], [200.0, 150.0], [100.0, 150.0]], fermee: true, courbures: Vec::new(), remplissage: None, traits: Vec::new() } };
     f.annotations = vec![texte, rect];
     assert_eq!(contenu_texte_feuille(&p, &f, "{numero} {feuille}"), "A01 Plan");
-    assert_eq!(cadre_feuille(&p, &f).len(), 2);
+    assert_eq!(cadre_feuille(&p, &f).len(), 2 + cartouche_feuille(&p, &f).len());
     assert_eq!(f.annotations[0].distance(&f, &p, [51.0, 52.0]), 0.0);
     assert!((f.annotations[1].distance(&f, &p, [150.0, 98.0]) - 2.0).abs() < 1e-9);
     f.annotations[1].translater([10.0, -5.0]);
     assert_eq!(f.annotations[1].etendue(&f, &p), Some([110.0, 95.0, 210.0, 145.0]));
-    // écriture et relecture ; feuille sans ces champs : cartouche par défaut, rien d'annoté
+    // écriture et relecture ; listes vides omises
     p.feuilles.push(f.clone());
     p.verifier().unwrap();
     let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
     assert_eq!(relu.feuilles[0].annotations, f.annotations);
-    assert!(relu.feuilles[0].sans_cartouche);
-    assert_eq!(relu.feuilles[0].position_cartouche, Some([15.0, 240.0]));
-    let json = serde_json::to_string(&Feuille { annotations: Vec::new(), position_cartouche: None, sans_cartouche: false, ..f.clone() }).unwrap();
+    assert_eq!(relu.feuilles[0].cartouches, f.cartouches);
+    let json = serde_json::to_string(&Feuille { annotations: Vec::new(), cartouches: Vec::new(), ..f.clone() }).unwrap();
     assert!(!json.contains("\"annotations\""));
-    assert!(!json.contains("sans_cartouche") && !json.contains("position_cartouche"));
-    // validation : forme non admise ou point non fini refusés
+    assert!(!json.contains("cartouches"));
+    // validation : famille absente, forme non admise ou point non fini refusés
+    p.feuilles[0].cartouches.push(CartouchePlace { famille: "Absente".into(), position: [0.0, 0.0] });
+    assert!(p.verifier().is_err());
+    p.feuilles[0].cartouches.pop();
     p.feuilles[0].annotations.push(AnnotationFeuille { hauteur: 2.5, forme: AnnotationForme::Cote { debut: PointCote::Fixe { point: [0.0, 0.0] }, fin: PointCote::Fixe { point: [10.0, 0.0] }, decalage: 5.0 } });
     assert!(p.verifier().is_err());
     p.feuilles[0].annotations.pop();

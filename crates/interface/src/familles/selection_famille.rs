@@ -14,7 +14,8 @@ pub(crate) enum FamilleCatalogue {
 
 pub(crate) enum CibleFamille {
     Catalogue(FamilleCatalogue),
-    CartoucheFeuille(String),
+    /// Cartouche posé : feuille, rang.
+    CartoucheFeuille(String, usize),
     Ouverture(String),
     EtiquettePiece(String, String),
     GardeCorps(String),
@@ -166,8 +167,8 @@ impl Application {
             return Some(CibleFamille::Catalogue(famille));
         }
         if self.jeu_actif().is_some() {
-            if let crate::documenter::feuilles::SelectionFeuille::Cartouche(id) = &self.feuilles.selection {
-                return Some(CibleFamille::CartoucheFeuille(id.clone()));
+            if let crate::documenter::feuilles::SelectionFeuille::Cartouche(id, i) = &self.feuilles.selection {
+                return Some(CibleFamille::CartoucheFeuille(id.clone(), *i));
             }
             return None;
         }
@@ -196,7 +197,7 @@ impl Application {
             Some(C::Catalogue(F::Etiquette(id))) => self.editer_famille_etiquette(Some(id), None),
             Some(C::Catalogue(F::Cartouche(id))) => self.editer_cartouche_catalogue(&id),
             Some(C::Catalogue(F::GardeCorps(id))) => self.ouvrir_type_garde_corps(None, Some(&id), false),
-            Some(C::CartoucheFeuille(id)) => self.editer_cartouche_feuille(&id),
+            Some(C::CartoucheFeuille(id, i)) => self.editer_cartouche_feuille(&id, i),
             Some(C::Ouverture(id)) => self.ouvrir_editeur_famille(&id),
             Some(C::EtiquettePiece(famille, piece)) => self.editer_famille_etiquette(Some(famille), Some(piece)),
             Some(C::GardeCorps(id)) => self.ouvrir_type_garde_corps(Some(&id), None, false),

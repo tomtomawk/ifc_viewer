@@ -458,7 +458,7 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
             let position = [arrondi(q[0] - e[0]), arrondi(q[1] - e[1])];
             vues.push(VuePlacee { vue: id.clone(), position, echelle: (1.0 / echelle).round().max(1.0) });
         }
-        c.projet.feuilles.push(Feuille {
+        let mut feuille = Feuille {
             id: id_feuille(f.id),
             numero: f.numero.clone(),
             nom: f.nom.clone(),
@@ -468,10 +468,12 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
             cartouche: String::new(),
             vues,
             nomenclatures: Vec::new(),
-            position_cartouche: None,
-            sans_cartouche: false,
+            cartouches: Vec::new(),
             annotations: Vec::new(),
-        });
+        };
+        // cartouche natif standard en bas à droite (le cartouche Revit n'est pas repris)
+        feuille.cartouches.push(modele::documentation::cartouche_par_defaut(&c.projet, &feuille, ""));
+        c.projet.feuilles.push(feuille);
     }
     for (k, n) in ignorees {
         *c.projet.ignores.entry(k).or_default() += n;

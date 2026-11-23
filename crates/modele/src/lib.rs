@@ -188,8 +188,6 @@ pub struct Projet {
     /// polylignes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub types_traits: Vec<documentation::TypeTrait>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub cartouches_feuilles: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nomenclatures: Vec<documentation::Nomenclature>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

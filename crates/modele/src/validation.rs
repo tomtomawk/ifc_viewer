@@ -376,8 +376,10 @@ impl Projet {
                     return Err("Nomenclature placée non valide.".into());
                 }
             }
-            if f.position_cartouche.is_some_and(|q| q.iter().any(|x| !x.is_finite())) {
-                return Err("Position de cartouche non valide.".into());
+            for c in &f.cartouches {
+                if c.position.iter().any(|x| !x.is_finite()) || (!c.famille.is_empty() && c.famille != documentation::NOM_CARTOUCHE_STANDARD && documentation::famille_cartouche(self, &c.famille).is_none()) {
+                    return Err(format!("Cartouche de la feuille {} non valide (position ou famille absente).", f.numero));
+                }
             }
             for a in &f.annotations {
                 let mut b = a.clone();

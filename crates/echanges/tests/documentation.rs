@@ -153,8 +153,7 @@ fn documents_compatibles_v0_references_et_pdf() {
             echelle: 100.0,
         }],
         nomenclatures: Vec::new(),
-        position_cartouche: None,
-        sans_cartouche: false,
+        cartouches: Vec::new(),
         annotations: Vec::new(),
     };
     p.feuilles.push(f.clone());
@@ -243,7 +242,7 @@ fn nomenclature_csv_et_quantites_sans_double_compte() {
     let posee = NomenclaturePlacee { nomenclature: choisie.id.clone(), position: [20.0, 200.0] };
     let (prims, e) = nomenclature_placee(&q, &posee).unwrap();
     assert!(!prims.is_empty() && e[3] == 200.0 && e[1] < 200.0 - 6.0 * t.len() as f64 && e[2] > 20.0, "{e:?}");
-    let f = Feuille { id: "f".into(), numero: "A01".into(), nom: "Quantités".into(), jeu: JEU_DEFAUT.into(), largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: vec![posee], position_cartouche: None, sans_cartouche: false, annotations: Vec::new() };
+    let f = Feuille { id: "f".into(), numero: "A01".into(), nom: "Quantités".into(), jeu: JEU_DEFAUT.into(), largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: vec![posee], cartouches: Vec::new(), annotations: Vec::new() };
     q.feuilles.push(f.clone());
     q.verifier().unwrap();
     assert!(svg_feuille(&q, &f).unwrap().len() > svg_feuille(&q, &Feuille { nomenclatures: Vec::new(), ..f.clone() }).unwrap().len());

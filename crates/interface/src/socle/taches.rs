@@ -179,7 +179,7 @@ impl Application {
             Some(jeu) => match &self.feuilles.selection {
                 crate::documenter::feuilles::SelectionFeuille::Feuille(id)
                 | crate::documenter::feuilles::SelectionFeuille::Vue(id, _)
-                | crate::documenter::feuilles::SelectionFeuille::Cartouche(id)
+                | crate::documenter::feuilles::SelectionFeuille::Cartouche(id, _)
                     if projet.feuilles.iter().any(|f| &f.id == id && f.jeu == jeu) => SourcePdf::Feuille(id.clone()),
                 _ => SourcePdf::Jeu(jeu),
             },

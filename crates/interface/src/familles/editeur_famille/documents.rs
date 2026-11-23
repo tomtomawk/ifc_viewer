@@ -227,6 +227,7 @@ impl Application {
             document_famille: crate::familles::document_famille::DocumentFamille::nouveau(ordre, self.document_actif, self.natif.is_none(), None, FichierFamille { format: String::new(), nom: String::new(), largeur: 0.0, hauteur: 0.0, profondeur: 300.0, famille: FamilleModelee::gabarit_fenetre() }),
             ouverture,
             cible_feuille: None,
+            cible_cartouche: None,
             cible_piece: None,
             type_id: t.map(|t| t.id.clone()),
             nom: t.map_or_else(|| format!("{prefixe} {} × {}", u.afficher(largeur), u.afficher(hauteur)), |t| t.nom.clone()),
@@ -331,8 +332,8 @@ impl Application {
             let id = id.unwrap_or_else(noyau::uuid::uuid);
             let fichier = ed.fichier();
             let cartouche = FamilleCartouche { id: id.clone(), nom: ed.nom.trim().into(), largeur: ed.largeur, hauteur: ed.hauteur, document_famille: Box::new(fichier) };
-            let feuille = ed.cible_feuille.clone();
-            self.enregistrer_cartouche(&cartouche, feuille.as_deref(), &original)?;
+            let cible = ed.cible_feuille.clone().zip(ed.cible_cartouche);
+            self.enregistrer_cartouche(&cartouche, cible.as_ref().map(|(f, i)| (f.as_str(), *i)), &original)?;
             if let Some(ed) = self.famille.as_mut() {
                 ed.type_id = Some(id.clone());
                 ed.document_famille.document = self.document_actif;

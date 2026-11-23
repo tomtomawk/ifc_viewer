@@ -4,11 +4,14 @@ use crate::*;
 use modele::documentation as doc;
 
 impl Application {
-    pub(crate) fn editer_cartouche_feuille(&mut self, id: &str) {
+    /// Ouvre la famille du cartouche `rang` de la feuille `id` ; elle lui reste
+    /// affectée à l'enregistrement (même renommée ou enregistrée sous un autre nom).
+    pub(crate) fn editer_cartouche_feuille(&mut self, id: &str, rang: usize) {
         let Some((p, _)) = &self.natif else { return };
-        if !p.feuilles.iter().any(|f| f.id == id) { return; }
-        let source = Some(doc::famille_cartouche(p, id).cloned().unwrap_or_default());
+        let Some(c) = p.feuilles.iter().find(|f| f.id == id).and_then(|f| f.cartouches.get(rang)) else { return };
+        let source = Some(doc::famille_cartouche(p, &c.famille).cloned().unwrap_or_default());
         self.editer_cartouche(source, Some(id.to_string()));
+        if let Some(ed) = self.famille.as_mut() { ed.cible_cartouche = Some(rang); }
     }
 
     pub(crate) fn editer_cartouche_catalogue(&mut self, id: &str) {
@@ -75,7 +78,9 @@ impl Application {
         Ok(id)
     }
 
-    pub(crate) fn enregistrer_cartouche(&mut self, famille: &doc::FamilleCartouche, feuille: Option<&str>, original: &str) -> Result<(), String> {
+    /// Enregistre une famille de cartouche ; un renommage suit sur les cartouches posés,
+    /// et le cartouche `cible` (feuille, rang) prend cette famille.
+    pub(crate) fn enregistrer_cartouche(&mut self, famille: &doc::FamilleCartouche, cible: Option<(&str, usize)>, original: &str) -> Result<(), String> {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let nom = &famille.nom;
         if nom.is_empty() || (nom == doc::NOM_CARTOUCHE_STANDARD && original != doc::NOM_CARTOUCHE_STANDARD)
@@ -89,14 +94,16 @@ impl Application {
         } else {
             let f = q.familles_cartouches.iter_mut().find(|f| f.id == famille.id).ok_or("Famille de cartouche absente.")?;
             let ancien = std::mem::replace(f, famille.clone()).nom;
-            for valeur in q.cartouches_feuilles.values_mut().filter(|v| **v == ancien) {
-                *valeur = nom.clone();
+            if ancien != *nom {
+                for c in q.feuilles.iter_mut().flat_map(|f| f.cartouches.iter_mut()).filter(|c| c.famille == ancien) {
+                    c.famille = nom.clone();
+                }
             }
         }
-        if let Some(id) = feuille.filter(|id| q.feuilles.iter().any(|f| f.id == *id)) {
-            if nom == doc::NOM_CARTOUCHE_STANDARD { q.cartouches_feuilles.remove(id); }
-            else { q.cartouches_feuilles.insert(id.into(), nom.clone()); }
-        }
+        if let Some((id, rang)) = cible
+            && let Some(c) = q.feuilles.iter_mut().find(|f| f.id == id).and_then(|f| f.cartouches.get_mut(rang)) {
+                c.famille = if nom == doc::NOM_CARTOUCHE_STANDARD { String::new() } else { nom.clone() };
+            }
         self.appliquer_projet(q)
     }
 }

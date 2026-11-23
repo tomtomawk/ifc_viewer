@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn apercu_emploie_le_contexte_associe_et_conserve_les_champs_inconnus() {
         let mut projet = modele::Projet::nouveau("Agence");
-        projet.feuilles.push(modele::documentation::Feuille { id: "f".into(), numero: "A01".into(), nom: "Plan".into(), jeu: "Plans".into(), largeur: 420.0, hauteur: 297.0, cartouche: "Titre".into(), vues: vec![], nomenclatures: vec![], position_cartouche: None, sans_cartouche: false, annotations: Vec::new() });
+        projet.feuilles.push(modele::documentation::Feuille { id: "f".into(), numero: "A01".into(), nom: "Plan".into(), jeu: "Plans".into(), largeur: 420.0, hauteur: 297.0, cartouche: "Titre".into(), vues: vec![], nomenclatures: vec![], cartouches: Vec::new(), annotations: Vec::new() });
         let texte = "{projet} - {numero} - {feuille}";
         assert_eq!(apercu_famille(texte, &projet, "Plan", C::Cartouche, Some("f"), None), "Agence - A01 - Plan");
         assert_eq!(apercu_famille(texte, &projet, "Plan", C::Cartouche, None, None), texte);

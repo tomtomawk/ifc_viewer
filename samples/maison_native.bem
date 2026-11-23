@@ -513,6 +513,14 @@
           ],
           "echelle": 100
         }
+      ],
+      "cartouches": [
+        {
+          "position": [
+            230,
+            10
+          ]
+        }
       ]
     }
   ],

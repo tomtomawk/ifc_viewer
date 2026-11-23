@@ -1,22 +1,21 @@
-//! Propriétés du cartouche d'une feuille (position, ancrage, suppression) et de ses
+//! Propriétés d'un cartouche posé (position, ancrage, suppression) et de ses
 //! annotations (texte, hauteur, points, type de trait).
 use crate::*;
 use commandes::Commande;
 use modele::documentation as doc;
 
-/// Position du cartouche : coin bas gauche, ancrage aux coins des marges, place par
-/// défaut, suppression.
-pub(crate) fn reglages_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc::Feuille) -> Option<Commande> {
+/// Cartouche posé `i` : position du coin bas gauche, ancrage aux coins des marges,
+/// suppression.
+pub(crate) fn reglages_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc::Feuille, i: usize) -> Option<Commande> {
     let mut g = f.clone();
-    let [l, h] = doc::taille_cartouche(p, f);
-    let mut pos = doc::cadre_cartouche(p, f).map_or_else(|| doc::position_cartouche_defaut(p, f), |c| [c[0], c[1]]);
-    let avant = pos;
+    let c = &mut g.cartouches[i];
+    let [l, h] = doc::taille_cartouche(p, &c.famille);
     egui::Grid::new("cartouche_place").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
         ui.label("Position X");
-        ui.add(egui::DragValue::new(&mut pos[0]).speed(1.0).max_decimals(1).suffix(" mm"));
+        ui.add(egui::DragValue::new(&mut c.position[0]).speed(1.0).max_decimals(1).suffix(" mm"));
         ui.end_row();
         ui.label("Position Y");
-        ui.add(egui::DragValue::new(&mut pos[1]).speed(1.0).max_decimals(1).suffix(" mm"));
+        ui.add(egui::DragValue::new(&mut c.position[1]).speed(1.0).max_decimals(1).suffix(" mm"));
         ui.end_row();
         ui.label("Taille");
         ui.label(format!("{l:.0} × {h:.0} mm"));
@@ -29,23 +28,15 @@ pub(crate) fn reglages_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc:
         ui.label("Ancrer");
         for (nom, coin) in coins {
             if ui.small_button(nom).on_hover_text("Dans ce coin, contre la marge du papier").clicked() {
-                pos = coin;
+                c.position = coin;
             }
         }
     });
-    if pos != avant {
-        g.position_cartouche = Some(pos);
+    if ui.button("Supprimer le cartouche").on_hover_text("Le retire de cette feuille (Suppr)").clicked() {
+        g.cartouches.remove(i);
     }
-    ui.horizontal(|ui| {
-        if ui.add_enabled(f.position_cartouche.is_some(), egui::Button::new("Place par défaut")).on_hover_text("En bas à droite, dans la marge").clicked() {
-            g.position_cartouche = None;
-        }
-        if ui.button("Supprimer le cartouche").on_hover_text("Le retire de cette feuille (Suppr) ; Propriétés de la feuille pour le remettre").clicked() {
-            g.sans_cartouche = true;
-        }
-    });
-    ui.label(RichText::new("Glisser le cartouche pour le déplacer · double-clic pour modifier sa famille").small().weak());
-    (g.position_cartouche != f.position_cartouche || g.sans_cartouche != f.sans_cartouche).then_some(Commande::Feuille { feuille: g })
+    ui.label(RichText::new("Glisser le cartouche pour le déplacer · double-clic pour modifier sa famille · Annoter → Cartouche pour en poser d'autres").small().weak());
+    (g.cartouches != f.cartouches).then_some(Commande::Feuille { feuille: g })
 }
 
 /// Type de trait choisi parmi ceux du projet (vide : continu fin).

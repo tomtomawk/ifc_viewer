@@ -95,18 +95,27 @@ def run(exe):
                 a = feuille()["annotations"]
                 assert abs(a[0]["debut"][1] - 90) < 1.5 and abs(a[0]["fin"][1] - 90) < 1.5, a
                 assert abs(a[0]["debut"][0] - 60) < 1.5, a
-                # cartouche : glissé de la place par défaut vers le haut
-                cadre = commande("selection_feuille", {"jeu": "Plans", "feuille": fid, "cartouche": True})["selection"]["cadre"]
-                centre = ((cadre[0] + cadre[2]) / 2, (cadre[1] + cadre[3]) / 2)
-                glisser(centre, (centre[0], centre[1] + 200))
-                f = feuille()
-                assert f.get("position_cartouche") and abs(f["position_cartouche"][1] - (cadre[1] + 200)) < 1.5, f
-                assert abs(f["position_cartouche"][0] - cadre[0]) < 1.5, f
-                # Suppr : le cartouche puis le texte ; Ctrl+Z remet le texte
-                clic(centre[0], centre[1] + 200)
-                assert commande("proprietes_feuille")["selection"]["type"] == "cartouche"
+                # cartouches : deux posés par l'outil (centrés sur le clic, 180 × 40 mm), l'outil
+                # reste actif ; Échap, puis le second glissé de 30 mm vers le bas
+                assert not feuille().get("cartouches")
+                commande("outil", "cartouche")
+                clic(300, 150)
+                clic(120, 230)
+                c = feuille()["cartouches"]
+                assert len(c) == 2, c
+                assert abs(c[0]["position"][0] - 210) < 1.5 and abs(c[0]["position"][1] - 130) < 1.5, c
+                assert abs(c[1]["position"][0] - 30) < 1.5 and abs(c[1]["position"][1] - 210) < 1.5, c
+                saisie([{"action": "touche", "touche": "Escape"}])
+                glisser((120, 230), (120, 200))
+                c = feuille()["cartouches"]
+                assert abs(c[1]["position"][1] - 180) < 1.5 and abs(c[1]["position"][0] - 30) < 1.5, c
+                # Suppr : le premier cartouche puis le texte ; Ctrl+Z remet le texte
+                clic(300, 150)
+                s = commande("proprietes_feuille")["selection"]
+                assert s["type"] == "cartouche" and s["indice"] == 0, s
                 saisie([{"action": "touche", "touche": "Delete"}])
-                assert feuille().get("sans_cartouche") is True
+                c = feuille()["cartouches"]
+                assert len(c) == 1 and abs(c[0]["position"][1] - 180) < 1.5, c
                 clic(62, 121)
                 assert commande("proprietes_feuille")["selection"]["type"] == "annotation"
                 saisie([{"action": "touche", "touche": "Delete"}])

@@ -292,7 +292,7 @@ format en v0).
 | Plans d'étage | niveau, hauteur du plan de coupe (plage de vue), nom, type, échelle | Orientation d'un plan pivoté non reprise (plan au nord du modèle, compté dans le rapport) |
 | Coupes, élévations verticales cadrées | ligne dans le plan proche du cadrage, sur sa largeur ; profondeur du cadrage (limite de vue), sinon 50 m ; même côté de regard | Coupes inclinées ou sans cadrage, vues 3D, plafonds, dessin, légendes, nomenclatures : ignorées (comptées) ; éléments 2D (cotes, textes) non repris |
 | Nomenclatures | nom, catégorie (Sols → Dalle, Toits → Toiture, Plafonds → Plafond, Poteaux, Ossature → Poutres, sinon le nom Revit), détail ou regroupement par type, champs que le modèle natif calcule (type, niveau, nombre, longueur, hauteur, largeur, épaisseur, surface, volume) | Autres champs (paramètres partagés, formules, marques…), filtres et tris : comptés non repris ; nomenclatures de clés ignorées |
-| Feuilles | numéro, nom, format (étendue du cartouche, sinon A1), vues placées converties à la même position et la même échelle, jeu « Plans » | Le cartouche Revit n'est pas repris (cartouche natif) ; une vue placée non convertie est comptée dans le rapport |
+| Feuilles | numéro, nom, format (étendue du cartouche, sinon A1), vues placées converties à la même position et la même échelle, jeu « Plans » | Le cartouche Revit n'est pas repris (cartouche natif standard posé en bas à droite) ; une vue placée non convertie est comptée dans le rapport |
 
 Dans un document de famille de fenêtre ou de porte, le mur hôte du gabarit est percé par le
 vide de la famille, pas par une instance : son écart de volume le laisse importé.
@@ -356,15 +356,20 @@ chaque `.rfa` du dossier.
 
 Une feuille porte aussi des nomenclatures posées (`nomenclatures[]` : `nomenclature`,
 `position` du coin haut gauche du tableau, mm du papier).
-Son cartouche se place par `position_cartouche` (coin bas gauche, mm du papier ;
-absent : en bas à droite, dans la marge) ; `sans_cartouche: true` le retire.
+Ses cartouches sont listés dans `cartouches[]` : `famille` (nom d'une famille de
+`familles_cartouches[]` ; absent ou vide : cartouche standard) et `position` du coin bas
+gauche (mm du papier) ; liste absente : aucun cartouche. Une famille inconnue ou une
+position non finie est refusée.
+**Changement incompatible (23/11/2026)** : la table `cartouches_feuilles` du projet et
+les champs `position_cartouche` et `sans_cartouche` des feuilles sont supprimés, sans
+conversion ; une feuille enregistrée avant n'a plus de cartouche, à reposer par Annoter
+→ Cartouche.
 `annotations[]` porte le dessin de la feuille en mm du papier (origine en bas à
 gauche) : `hauteur` des textes (3,5 mm par défaut) et une forme d'annotation
 (`forme` : `texte`, `ligne`, `polyligne`, `spline`, `cercle`, `arc`, `zone`, mêmes
 champs que les annotations de vue) ; les textes remplissent `{projet}`, `{feuille}`,
 `{numero}`. Les cotes et étiquettes sont refusées sur une feuille, comme un point non
-fini, un rayon nul ou une hauteur nulle. Les trois champs sont facultatifs : un projet
-antérieur se relit sans changement.
+fini, un rayon nul ou une hauteur nulle.
 Les feuilles appartiennent à un jeu (`jeu`, « Plans » par défaut, y compris pour les
 fichiers antérieurs) ; les feuilles d'un jeu se suivent dans l'ordre de `feuilles[]`.
 Les collections et tables facultatives de l'éditeur (annotations, quadrillages,

@@ -100,11 +100,14 @@ impl Application {
                     commande = Some(Commande::Feuille { feuille: g });
                 }
             }
-            (Some(f), SelectionFeuille::Cartouche(_)) => {
+            (Some(f), SelectionFeuille::Cartouche(_, i)) if *i < f.cartouches.len() => {
                 ui.heading("Cartouche");
-                projet_modifie = selecteur_cartouche(ui, p, f);
-                if projet_modifie.is_none() {
-                    commande = crate::documenter::reglages_feuille::reglages_cartouche(ui, p, f);
+                let mut g = f.clone();
+                if let Some(famille) = selecteur_cartouche(ui, p, &f.cartouches[*i].famille) {
+                    g.cartouches[*i].famille = famille;
+                    commande = Some(Commande::Feuille { feuille: g });
+                } else {
+                    commande = crate::documenter::reglages_feuille::reglages_cartouche(ui, p, f, *i);
                 }
             }
             (Some(f), SelectionFeuille::Annotation(_, i)) if *i < f.annotations.len() => {
@@ -145,11 +148,6 @@ impl Application {
                         ui.add(egui::DragValue::new(&mut g.hauteur).speed(1.0).range(50.0..=5000.0).suffix(" mm"));
                     });
                     ui.end_row();
-                    ui.label("Cartouche");
-                    let mut avec = !g.sans_cartouche;
-                    ui.checkbox(&mut avec, "Afficher").on_hover_text("Décocher retire le cartouche de cette feuille ; sa position est gardée.");
-                    g.sans_cartouche = !avec;
-                    ui.end_row();
                 });
                 ui.label(RichText::new(format!("{} vue(s) placée(s), {} nomenclature(s), {} annotation(s) · glisser une vue ou une nomenclature de l'arborescence sur la feuille", f.vues.len(), f.nomenclatures.len(), f.annotations.len())).small().weak());
                 if commande.is_none() && serde_json::to_string(&g).ok() != serde_json::to_string(f).ok() {
@@ -167,7 +165,7 @@ impl Application {
         // cartouche ou annotation retirés depuis Propriétés : la feuille reste choisie
         if let Some(Commande::Feuille { feuille: g }) = &commande {
             let retire = match &selection {
-                SelectionFeuille::Cartouche(_) => g.sans_cartouche,
+                SelectionFeuille::Cartouche(_, i) => *i >= g.cartouches.len(),
                 SelectionFeuille::Annotation(_, i) => *i >= g.annotations.len(),
                 _ => false,
             };
@@ -193,17 +191,17 @@ impl Application {
     }
 }
 
-fn selecteur_cartouche(ui: &mut egui::Ui, p: &modele::Projet, f: &doc::Feuille) -> Option<modele::Projet> {
-    let actuel = doc::famille_cartouche(p, &f.id).map(|f| f.nom.as_str()).filter(|nom| *nom != doc::NOM_CARTOUCHE_STANDARD);
+/// Famille d'un cartouche posé (nom ; vide : standard) ; Some(nouveau nom) si changée.
+fn selecteur_cartouche(ui: &mut egui::Ui, p: &modele::Projet, famille: &str) -> Option<String> {
+    let actuel = Some(famille).filter(|nom| !nom.is_empty() && *nom != doc::NOM_CARTOUCHE_STANDARD);
     let mut choix = actuel;
     {
         use crate::zones::ruban::selecteur;
         let titre = format!("Cartouche · {}", actuel.unwrap_or("Standard"));
-        let bouton = selecteur::entete(ui, &titre, None, &format!("{titre}
-Famille de cartouche de la feuille."), None);
-        let largeur = selecteur::largeur_liste(ui, p.familles_cartouches.iter().map(|f| f.nom.as_str()).chain(["Cartouche standard"]), 0.0, 0, 0.0);
+        let bouton = selecteur::entete(ui, &titre, None, &format!("{titre}\nFamille de ce cartouche."), None);
+        let largeur = selecteur::largeur_liste(ui, p.familles_cartouches.iter().map(|f| f.nom.as_str()).chain([doc::NOM_CARTOUCHE_STANDARD]), 0.0, 0, 0.0);
         selecteur::liste(&bouton, largeur, 0.0, |ui| {
-            let l = selecteur::Ligne { nom: "Cartouche standard", courant: actuel.is_none(), etiquette: None, sous_titre: None, detail: None, actions: &[] };
+            let l = selecteur::Ligne { nom: doc::NOM_CARTOUCHE_STANDARD, courant: actuel.is_none(), etiquette: None, sous_titre: None, detail: None, actions: &[] };
             if selecteur::ligne(ui, &l, None).choisi { choix = None; }
             for famille in p.familles_cartouches.iter().filter(|famille| famille.nom != doc::NOM_CARTOUCHE_STANDARD) {
                 let l = selecteur::Ligne { nom: &famille.nom, courant: actuel == Some(famille.nom.as_str()), etiquette: None, sous_titre: None, detail: None, actions: &[] };
@@ -211,12 +209,5 @@ Famille de cartouche de la feuille."), None);
             }
         });
     }
-    if choix == actuel { return None; }
-    let mut projet = p.clone();
-    if let Some(nom) = choix {
-        projet.cartouches_feuilles.insert(f.id.clone(), nom.to_string());
-    } else {
-        projet.cartouches_feuilles.remove(&f.id);
-    }
-    Some(projet)
+    (choix != actuel).then(|| choix.unwrap_or_default().to_string())
 }

@@ -24,7 +24,7 @@ pub(crate) enum SelectionFeuille {
     Aucune,
     Feuille(String),
     Vue(String, usize),
-    Cartouche(String),
+    Cartouche(String, usize),
     Annotation(String, usize),
 }
 
@@ -33,7 +33,7 @@ pub(crate) enum SelectionFeuille {
 pub(crate) enum ObjetFeuille {
     /// Vue placée puis nomenclature posée (rang commun).
     Place(usize),
-    Cartouche,
+    Cartouche(usize),
     Annotation(usize),
 }
 
@@ -41,7 +41,7 @@ impl SelectionFeuille {
     /// Feuille de la sélection.
     pub(crate) fn feuille(&self) -> Option<&str> {
         match self {
-            Self::Feuille(id) | Self::Vue(id, _) | Self::Cartouche(id) | Self::Annotation(id, _) => Some(id),
+            Self::Feuille(id) | Self::Vue(id, _) | Self::Cartouche(id, _) | Self::Annotation(id, _) => Some(id),
             Self::Aucune => None,
         }
     }
@@ -49,7 +49,7 @@ impl SelectionFeuille {
     pub(crate) fn objet(&self) -> Option<(&str, ObjetFeuille)> {
         match self {
             Self::Vue(id, j) => Some((id, ObjetFeuille::Place(*j))),
-            Self::Cartouche(id) => Some((id, ObjetFeuille::Cartouche)),
+            Self::Cartouche(id, i) => Some((id, ObjetFeuille::Cartouche(*i))),
             Self::Annotation(id, i) => Some((id, ObjetFeuille::Annotation(*i))),
             _ => None,
         }
@@ -58,7 +58,7 @@ impl SelectionFeuille {
     pub(crate) fn de_objet(feuille: &str, o: ObjetFeuille) -> Self {
         match o {
             ObjetFeuille::Place(j) => Self::Vue(feuille.into(), j),
-            ObjetFeuille::Cartouche => Self::Cartouche(feuille.into()),
+            ObjetFeuille::Cartouche(i) => Self::Cartouche(feuille.into(), i),
             ObjetFeuille::Annotation(i) => Self::Annotation(feuille.into(), i),
         }
     }
@@ -146,8 +146,8 @@ pub(crate) struct EtatFeuilles {
     pub(crate) glisse_feuille: Option<String>,
     /// Dessins des vues à leur échelle, en position nulle : (vue, échelle).
     pub(crate) vues: HashMap<(String, u64), Rendu>,
-    /// Cartouches des feuilles.
-    pub(crate) cadres: HashMap<String, Rendu>,
+    /// Cartouches des feuilles, dans l'ordre de la feuille.
+    pub(crate) cadres: HashMap<String, Vec<Rendu>>,
     /// Annotations des feuilles, dans l'ordre de la feuille.
     pub(crate) annotations: HashMap<String, Vec<Rendu>>,
     /// Tableaux des nomenclatures posées (position nulle), par nomenclature.
@@ -192,15 +192,11 @@ impl Application {
             }
         } else {
             for mut f in copies {
-                let famille = q.cartouches_feuilles.get(&f.id).cloned();
                 f.id.clear();
                 f.jeu = nom.clone();
                 f.numero = Self::nouvelle_feuille(&q, &nom).numero;
                 match q.executer(Commande::Feuille { feuille: f }) {
-                    Ok((mut projet, ids)) => {
-                        if let (Some(nom), Some(id)) = (famille, ids.first()) { projet.cartouches_feuilles.insert(id.clone(), nom); }
-                        q = projet;
-                    },
+                    Ok((projet, _)) => q = projet,
                     Err(e) => { self.error = Some(e); return; }
                 }
             }
@@ -232,13 +228,18 @@ impl Application {
         }
     }
 
-    /// Nouvelle feuille à la suite du jeu : format de sa dernière feuille (A3 sinon),
-    /// numéro suivant.
+    /// Nouvelle feuille à la suite du jeu : format et cartouches de sa dernière feuille
+    /// (A3 et le cartouche standard en bas à droite sinon), numéro suivant.
     pub(crate) fn nouvelle_feuille(p: &modele::Projet, jeu: &str) -> doc::Feuille {
         let derniere = p.feuilles.iter().rev().find(|f| f.jeu == jeu);
         let (largeur, hauteur) = derniere.map_or((420.0, 297.0), |f| (f.largeur, f.hauteur));
         let numero = (p.feuilles.len() + 1..).map(|n| format!("A{n:02}")).find(|n| !p.feuilles.iter().any(|f| &f.numero == n)).unwrap_or_default();
-        doc::Feuille { id: String::new(), numero, nom: "Nouvelle feuille".into(), jeu: jeu.into(), largeur, hauteur, cartouche: derniere.map_or(String::new(), |f| f.cartouche.clone()), vues: Vec::new(), nomenclatures: Vec::new(), position_cartouche: None, sans_cartouche: false, annotations: Vec::new() }
+        let mut f = doc::Feuille { id: String::new(), numero, nom: "Nouvelle feuille".into(), jeu: jeu.into(), largeur, hauteur, cartouche: derniere.map_or(String::new(), |f| f.cartouche.clone()), vues: Vec::new(), nomenclatures: Vec::new(), cartouches: Vec::new(), annotations: Vec::new() };
+        f.cartouches = match derniere {
+            Some(d) => d.cartouches.clone(),
+            None => vec![doc::cartouche_par_defaut(p, &f, "")],
+        };
+        f
     }
 
     /// Ruban, Documenter → Feuilles : ouvre le premier jeu ; sans feuille, en crée une.
@@ -325,10 +326,12 @@ impl Application {
         let Some(jeu) = self.jeu_actif() else { return false };
         let Some((p, _)) = &self.natif else { return false };
         let commande = match self.feuilles.selection.clone() {
-            SelectionFeuille::Cartouche(id) => p.feuilles.iter().find(|f| f.id == id && f.jeu == jeu && !f.sans_cartouche).map(|f| {
+            SelectionFeuille::Cartouche(id, i) => p.feuilles.iter().find(|f| f.id == id && f.jeu == jeu && i < f.cartouches.len()).map(|f| {
+                let mut g = f.clone();
+                g.cartouches.remove(i);
                 self.feuilles.selection = SelectionFeuille::Feuille(id.clone());
-                self.status = "Cartouche retiré de la feuille (Propriétés de la feuille pour le remettre) — Ctrl+Z pour annuler.".into();
-                Commande::Feuille { feuille: doc::Feuille { sans_cartouche: true, ..f.clone() } }
+                self.status = "Cartouche retiré de la feuille — Ctrl+Z pour annuler.".into();
+                Commande::Feuille { feuille: g }
             }),
             SelectionFeuille::Annotation(id, i) => p.feuilles.iter().find(|f| f.id == id && f.jeu == jeu && i < f.annotations.len()).map(|f| {
                 let mut g = f.clone();

@@ -1,5 +1,5 @@
 //! Annotations des feuilles : outils de dessin sur le papier (texte, ligne, polyligne,
-//! rectangle, cercle), accrochage, aperçu et saisie du texte en place. Coordonnées en mm
+//! rectangle, cercle), pose de cartouches, accrochage, aperçu et saisie du texte en place. Coordonnées en mm
 //! du papier, origine en bas à gauche de la feuille.
 use crate::*;
 use modele::documentation as doc;
@@ -14,10 +14,12 @@ pub(crate) enum OutilFeuille {
     Polyligne,
     Rectangle,
     Cercle,
+    /// Pose d'un cartouche de la famille choisie, autant de fois que voulu.
+    Cartouche,
 }
 
 impl OutilFeuille {
-    pub(crate) const TOUS: [OutilFeuille; 6] = [Self::Selection, Self::Texte, Self::Ligne, Self::Polyligne, Self::Rectangle, Self::Cercle];
+    pub(crate) const TOUS: [OutilFeuille; 7] = [Self::Selection, Self::Texte, Self::Ligne, Self::Polyligne, Self::Rectangle, Self::Cercle, Self::Cartouche];
 
     pub(crate) fn libelle(self) -> &'static str {
         match self {
@@ -27,6 +29,7 @@ impl OutilFeuille {
             Self::Polyligne => "Polyligne",
             Self::Rectangle => "Rectangle",
             Self::Cercle => "Cercle",
+            Self::Cartouche => "Cartouche",
         }
     }
 
@@ -40,6 +43,7 @@ impl OutilFeuille {
             (Self::Polyligne, _) => "Cliquer les sommets · Entrée ou double-clic pour finir · clic sur le premier sommet pour fermer · Échap pour annuler",
             (Self::Cercle, 0) => "Cliquer le centre · Échap pour revenir à la sélection",
             (Self::Cercle, _) => "Cliquer un point du cercle · Échap pour annuler",
+            (Self::Cartouche, _) => "Cartouche : choisir la famille, cliquer pour le poser (aimanté aux marges), autant de fois que voulu · Échap pour revenir à la sélection",
             (Self::Selection, _) => "",
         }
     }
@@ -54,6 +58,7 @@ pub(crate) fn nom_pilote(o: OutilFeuille) -> &'static str {
         OutilFeuille::Polyligne => "polyligne",
         OutilFeuille::Rectangle => "rectangle",
         OutilFeuille::Cercle => "cercle",
+        OutilFeuille::Cartouche => "cartouche",
     }
 }
 
@@ -77,6 +82,8 @@ pub(crate) struct TraceFeuille {
     pub texte: Option<TexteFeuille>,
     /// Hauteur des nouveaux textes (mm du papier).
     pub hauteur_texte: f64,
+    /// Famille des cartouches posés (nom ; vide : cartouche standard).
+    pub famille_cartouche: String,
 }
 
 impl TraceFeuille {
@@ -99,7 +106,7 @@ impl TraceFeuille {
         let hauteur = self.hauteur();
         let fin = |forme| Some(doc::AnnotationFeuille { hauteur, forme });
         match (self.outil, self.points.first().copied()) {
-            (OutilFeuille::Selection, _) => None,
+            (OutilFeuille::Selection | OutilFeuille::Cartouche, _) => None,
             (OutilFeuille::Texte, _) => {
                 self.texte = Some(TexteFeuille { feuille: feuille.into(), rang: None, point: q, contenu: String::new(), hauteur, focus: true });
                 None
@@ -164,7 +171,8 @@ impl TraceFeuille {
 pub(crate) fn sommets_feuille(p: &modele::Projet, f: &doc::Feuille) -> Vec<[f64; 2]> {
     let (l, h, m) = (f.largeur, f.hauteur, doc::MARGE);
     let mut v = vec![[0.0, 0.0], [l, 0.0], [l, h], [0.0, h], [m, m], [l - m, m], [l - m, h - m], [m, h - m]];
-    if let Some([x0, y0, x1, y1]) = doc::cadre_cartouche(p, f) {
+    for c in &f.cartouches {
+        let [x0, y0, x1, y1] = doc::cadre_cartouche(p, c);
         v.extend([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
     }
     for a in &f.annotations {
@@ -176,7 +184,7 @@ pub(crate) fn sommets_feuille(p: &modele::Projet, f: &doc::Feuille) -> Vec<[f64;
 
 /// Barre des outils de la feuille, en bas à gauche de la vue (le haut porte les
 /// consignes et les messages).
-pub(crate) fn barre_outils(ui: &mut egui::Ui, rect: egui::Rect, trace: &mut TraceFeuille) {
+pub(crate) fn barre_outils(ui: &mut egui::Ui, rect: egui::Rect, trace: &mut TraceFeuille, familles: &[String]) {
     let cadre = egui::Rect::from_min_size(egui::pos2(rect.min.x + 8.0, rect.max.y - 34.0), egui::vec2(rect.width() - 16.0, 26.0));
     ui.scope_builder(egui::UiBuilder::new().max_rect(cadre), |ui| {
         egui::Frame::NONE.fill(Color32::from_white_alpha(235)).stroke(egui::Stroke::new(1.0, Color32::from_gray(170))).corner_radius(4.0).inner_margin(egui::Margin::symmetric(4, 2)).show(ui, |ui| {
@@ -191,6 +199,22 @@ pub(crate) fn barre_outils(ui: &mut egui::Ui, rect: egui::Rect, trace: &mut Trac
                     let mut h = trace.hauteur();
                     ui.add(egui::DragValue::new(&mut h).speed(0.1).range(1.0..=50.0).max_decimals(1).suffix(" mm")).on_hover_text("Hauteur des nouveaux textes (papier)");
                     trace.hauteur_texte = h;
+                }
+                if trace.outil == OutilFeuille::Cartouche {
+                    if !trace.famille_cartouche.is_empty() && !familles.contains(&trace.famille_cartouche) {
+                        trace.famille_cartouche.clear();
+                    }
+                    let nom = if trace.famille_cartouche.is_empty() { doc::NOM_CARTOUCHE_STANDARD } else { trace.famille_cartouche.as_str() };
+                    egui::ComboBox::from_id_salt("famille_cartouche_pose").selected_text(nom).show_ui(ui, |ui| {
+                        if ui.selectable_label(trace.famille_cartouche.is_empty(), doc::NOM_CARTOUCHE_STANDARD).clicked() {
+                            trace.famille_cartouche.clear();
+                        }
+                        for f in familles.iter().filter(|f| f.as_str() != doc::NOM_CARTOUCHE_STANDARD) {
+                            if ui.selectable_label(trace.famille_cartouche == *f, f).clicked() {
+                                trace.famille_cartouche = f.clone();
+                            }
+                        }
+                    });
                 }
             });
         });

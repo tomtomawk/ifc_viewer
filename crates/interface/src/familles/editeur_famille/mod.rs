@@ -184,6 +184,8 @@ pub(crate) struct EditeurFamille {
     /// Fenêtre d'où l'éditeur a été ouvert : elle prend le type enregistré.
     ouverture: Option<String>,
     pub(crate) cible_feuille: Option<String>,
+    /// Rang du cartouche posé sur `cible_feuille` qui prend la famille enregistrée.
+    pub(crate) cible_cartouche: Option<usize>,
     pub(crate) cible_piece: Option<String>,
     /// Type édité ; None : nouveau type.
     type_id: Option<String>,

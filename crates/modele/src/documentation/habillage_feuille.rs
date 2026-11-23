@@ -8,6 +8,15 @@ fn hauteur_texte_feuille() -> f64 {
     HAUTEUR_TEXTE_FEUILLE
 }
 
+/// Cartouche posé sur une feuille : famille (nom ; vide : cartouche standard) et coin
+/// bas gauche (mm du papier).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct CartouchePlace {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub famille: String,
+    pub position: [f64; 2],
+}
+
 /// Annotation d'une feuille : forme en mm du papier (origine en bas à gauche) ; textes,
 /// lignes, polylignes, splines, cercles, arcs et zones. Les champs `{projet}`,
 /// `{feuille}` et `{numero}` des textes sont remplis.

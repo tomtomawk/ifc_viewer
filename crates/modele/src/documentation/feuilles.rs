@@ -54,32 +54,28 @@ pub fn trait_papier(points: Vec<DVec3>, fermee: bool, epaisseur: f64) -> Primiti
     Primitive { forme: Forme::Polyligne { points, fermee }, style: Style { couleur: [20, 20, 20, 255], epaisseur }, role: Role::Annotation, element: None }
 }
 
-pub fn famille_cartouche<'a>(p: &'a Projet, feuille: &str) -> Option<&'a FamilleCartouche> {
-    let nom = p.cartouches_feuilles.get(feuille).map(String::as_str).unwrap_or(NOM_CARTOUCHE_STANDARD);
+/// Famille de cartouche de nom `nom` (vide : la standard) ; None pour la standard non
+/// enregistrée dans le projet.
+pub fn famille_cartouche<'a>(p: &'a Projet, nom: &str) -> Option<&'a FamilleCartouche> {
+    let nom = if nom.is_empty() { NOM_CARTOUCHE_STANDARD } else { nom };
     p.familles_cartouches.iter().find(|f| f.nom == nom)
 }
 
-/// Taille du cartouche de la feuille (mm) : celle de sa famille, standard sinon.
-pub fn taille_cartouche(p: &Projet, f: &Feuille) -> [f64; 2] {
-    famille_cartouche(p, &f.id).map_or(TAILLE_CARTOUCHE_STANDARD, |c| [c.largeur, c.hauteur])
+/// Taille d'un cartouche de la famille `nom` (mm) ; standard si elle est absente.
+pub fn taille_cartouche(p: &Projet, nom: &str) -> [f64; 2] {
+    famille_cartouche(p, nom).map_or(TAILLE_CARTOUCHE_STANDARD, |c| [c.largeur, c.hauteur])
 }
 
-/// Position par défaut du cartouche (coin bas gauche, mm) : en bas à droite, dans la
-/// marge.
-pub fn position_cartouche_defaut(p: &Projet, f: &Feuille) -> [f64; 2] {
-    [f.largeur - MARGE - taille_cartouche(p, f)[0], MARGE]
+/// Cartouche de la famille `nom` en bas à droite de la feuille, dans la marge.
+pub fn cartouche_par_defaut(p: &Projet, f: &Feuille, nom: &str) -> CartouchePlace {
+    CartouchePlace { famille: if nom == NOM_CARTOUCHE_STANDARD { String::new() } else { nom.into() }, position: [f.largeur - MARGE - taille_cartouche(p, nom)[0], MARGE] }
 }
 
-/// Cadre du cartouche [x0, y0, x1, y1] (mm du papier) ; None si la feuille n'en a pas,
-/// ou si, à sa place par défaut, il ne tient pas dans les marges.
-pub fn cadre_cartouche(p: &Projet, f: &Feuille) -> Option<[f64; 4]> {
-    if f.sans_cartouche { return None; }
-    let [l, h] = taille_cartouche(p, f);
-    if let Some([x, y]) = f.position_cartouche {
-        return (l > 0.0 && h > 0.0).then_some([x, y, x + l, y + h]);
-    }
-    let [x, y] = [f.largeur - MARGE - l, MARGE + h];
-    (x > MARGE && y < f.hauteur - MARGE).then_some([x, MARGE, f.largeur - MARGE, y])
+/// Cadre d'un cartouche posé [x0, y0, x1, y1] (mm du papier).
+pub fn cadre_cartouche(p: &Projet, c: &CartouchePlace) -> [f64; 4] {
+    let [l, h] = taille_cartouche(p, &c.famille);
+    let [x, y] = c.position;
+    [x, y, x + l, y + h]
 }
 
 pub fn trait_cartouche(t: [[f64; 2]; 2]) -> Primitive {
@@ -116,7 +112,7 @@ pub fn forme_cartouche(p: &Projet, forme: &AnnotationForme) -> Vec<Primitive> {
     }
 }
 
-/// Cartouche et annotations d'une feuille, en mètres du papier (origine en bas à
+/// Cartouches et annotations d'une feuille, en mètres du papier (origine en bas à
 /// gauche). Le format de papier ne produit aucun cadre imprimé automatique.
 pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
     let mut v: Vec<Primitive> = f.annotations.iter().flat_map(|a| primitives_annotation_feuille(p, f, a)).collect();
@@ -124,28 +120,32 @@ pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
     v
 }
 
-/// Cartouche seul d'une feuille, en mètres du papier ; vide sans cartouche.
+/// Cartouches d'une feuille, en mètres du papier ; vide sans cartouche.
 pub fn cartouche_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
+    f.cartouches.iter().flat_map(|c| primitives_cartouche(p, f, c)).collect()
+}
+
+/// Un cartouche posé, en mètres du papier : éléments 2D du plan de sa famille, champs
+/// remplis.
+pub fn primitives_cartouche(p: &Projet, f: &Feuille, c: &CartouchePlace) -> Vec<Primitive> {
     let mut v = Vec::new();
-    if let Some([x0, y0, _, _]) = cadre_cartouche(p, f) {
-        let standard;
-        let famille = if let Some(famille) = famille_cartouche(p, &f.id) {
-            famille
-        } else {
-            standard = FamilleCartouche::default();
-            &standard
-        };
-        let origine = pt_papier(x0, y0);
-        let (formes, textes) = super::contenu_plan_famille(&famille.document_famille, p);
-        v.extend(formes.iter().flat_map(|forme| forme_cartouche(p, forme)).map(|pr| pr.translater(origine)));
-        let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle_sur_feuille(p))).collect();
-        echelles.dedup();
-        let ech = if echelles.is_empty() { String::new() } else { format!("Échelle {}", echelles.join(", ")) };
-        for t in &textes {
-            let contenu = super::remplir_champs(&t.contenu, &[("{projet}", &p.nom), ("{feuille}", &f.nom), ("{numero}", &f.numero), ("{cartouche}", &f.cartouche), ("{echelles}", &ech)]);
-            if !contenu.is_empty() {
-                v.push(texte_cartouche(t, &contenu).translater(origine));
-            }
+    let standard;
+    let famille = if let Some(famille) = famille_cartouche(p, &c.famille) {
+        famille
+    } else {
+        standard = FamilleCartouche::default();
+        &standard
+    };
+    let origine = pt_papier(c.position[0], c.position[1]);
+    let (formes, textes) = super::contenu_plan_famille(&famille.document_famille, p);
+    v.extend(formes.iter().flat_map(|forme| forme_cartouche(p, forme)).map(|pr| pr.translater(origine)));
+    let mut echelles: Vec<String> = f.vues.iter().map(|x| format!("1:{}", x.echelle_sur_feuille(p))).collect();
+    echelles.dedup();
+    let ech = if echelles.is_empty() { String::new() } else { format!("Échelle {}", echelles.join(", ")) };
+    for t in &textes {
+        let contenu = super::remplir_champs(&t.contenu, &[("{projet}", &p.nom), ("{feuille}", &f.nom), ("{numero}", &f.numero), ("{cartouche}", &f.cartouche), ("{echelles}", &ech)]);
+        if !contenu.is_empty() {
+            v.push(texte_cartouche(t, &contenu).translater(origine));
         }
     }
     v

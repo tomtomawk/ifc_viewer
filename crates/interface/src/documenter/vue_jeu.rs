@@ -1,5 +1,5 @@
 //! Vue du jeu ouvert : feuilles l'une sous l'autre. Molette : zoom ; glisser le fond :
-//! défiler ; glisser une vue placée, une nomenclature, le cartouche ou une annotation :
+//! défiler ; glisser une vue placée, une nomenclature, un cartouche ou une annotation :
 //! le déplacer (aimanté) ; déposer une vue de l'arborescence : la placer ; outils
 //! d'annotation (barre en haut à gauche) ; dernière page en pointillés : ajouter une
 //! feuille.
@@ -33,8 +33,7 @@ fn commande_texte(p: &modele::Projet, t: annot::TexteFeuille) -> Option<Commande
 /// Action demandée par le menu contextuel, faite après le tracé.
 enum ActionMenu {
     Supprimer,
-    ModifierCartouche(String),
-    CartoucheDefaut(String),
+    ModifierCartouche(String, usize),
 }
 
 impl Application {
@@ -128,7 +127,7 @@ impl Application {
                         }
                     });
                 }
-                etat.cadres.entry(f.id.clone()).or_insert_with(|| rendu(&doc::cartouche_feuille(p, f), [0.0; 4]));
+                etat.cadres.entry(f.id.clone()).or_insert_with(|| f.cartouches.iter().map(|c| rendu(&doc::primitives_cartouche(p, f, c), [0.0; 4])).collect());
                 etat.annotations.entry(f.id.clone()).or_insert_with(|| f.annotations.iter().map(|a| rendu(&doc::primitives_annotation_feuille(p, f, a), [0.0; 4])).collect());
                 for n in &f.nomenclatures {
                     etat.tables.entry(n.nomenclature.clone()).or_insert_with(|| table_zero(p, &n.nomenclature));
@@ -148,7 +147,7 @@ impl Application {
                         let e = *etendues_tables.get(&n.nomenclature)?;
                         Some([e[0] + n.position[0] - 2.0, e[1] + n.position[1] - 2.0, e[2] + n.position[0] + 2.0, e[3] + n.position[1] + 2.0])
                     }
-                    ObjetFeuille::Cartouche => doc::cadre_cartouche(p, f),
+                    ObjetFeuille::Cartouche(i) => f.cartouches.get(i).map(|c| doc::cadre_cartouche(p, c)),
                     ObjetFeuille::Annotation(i) => f.annotations.get(i)?.etendue(f, p).map(|e| [e[0] - 1.0, e[1] - 1.0, e[2] + 1.0, e[3] + 1.0]),
                 }
             };
@@ -161,8 +160,8 @@ impl Application {
                 if let Some(i) = (0..f.annotations.len()).rev().find(|&i| f.annotations[i].distance(f, p, pt) <= tol) {
                     return Some((k, ObjetFeuille::Annotation(i)));
                 }
-                if boite(f, ObjetFeuille::Cartouche).is_some_and(|b| dans(b, pt)) {
-                    return Some((k, ObjetFeuille::Cartouche));
+                if let Some(i) = (0..f.cartouches.len()).rev().find(|&i| boite(f, ObjetFeuille::Cartouche(i)).is_some_and(|b| dans(b, pt))) {
+                    return Some((k, ObjetFeuille::Cartouche(i)));
                 }
                 (0..f.vues.len() + f.nomenclatures.len()).rev().find(|&j| boite(f, ObjetFeuille::Place(j)).is_some_and(|b| dans(b, pt))).map(|j| (k, ObjetFeuille::Place(j)))
             };
@@ -184,6 +183,26 @@ impl Application {
                 } else {
                     SelectionFeuille::Aucune
                 }
+            };
+            // bords aimantés d'une feuille : papier, marges, vues, tableaux, cartouches (sauf l'objet glissé)
+            let aimants = |f: &doc::Feuille, sauf: Option<ObjetFeuille>| {
+                let (mut xs, mut ys) = crate::documenter::aimantation::bords_feuille(f.largeur, f.hauteur, doc::MARGE);
+                let autres = (0..f.vues.len() + f.nomenclatures.len()).map(ObjetFeuille::Place).chain((0..f.cartouches.len()).map(ObjetFeuille::Cartouche));
+                for autre in autres.filter(|a| Some(*a) != sauf).filter_map(|a| boite(f, a)) {
+                    xs.extend([autre[0], autre[2]]);
+                    ys.extend([autre[1], autre[3]]);
+                }
+                (xs, ys)
+            };
+            // cartouche à poser : centré sur le curseur, aimanté ; (feuille, cadre)
+            let famille_pose = etat.trace.famille_cartouche.clone();
+            let pose_cartouche = |q: egui::Pos2| -> Option<(usize, [f64; 4])> {
+                let (k, pt) = papier(q)?;
+                let [l, h] = doc::taille_cartouche(p, &famille_pose);
+                let b = [pt[0] - l / 2.0, pt[1] - h / 2.0, pt[0] + l / 2.0, pt[1] + h / 2.0];
+                let (xs, ys) = aimants(feuilles[k], None);
+                let [cx, cy] = crate::documenter::aimantation::aimanter(b, &xs, &ys, (8.0 / z) as f64);
+                Some((k, [b[0] + cx, b[1] + cy, b[2] + cx, b[3] + cy]))
             };
             let outil = etat.trace.outil;
             let en_trace = outil != OutilFeuille::Selection;
@@ -208,7 +227,9 @@ impl Application {
                 let k = k_trace.or_else(|| papier(q).map(|(k, _)| k))?;
                 Some((k, etat.trace.viser(sur_feuille(k, q), &annot::sommets_feuille(p, feuilles[k]), (8.0 / z) as f64, maj)))
             };
-            let vise = resp.hover_pos().filter(|_| en_trace).and_then(viser);
+            let pose = outil == OutilFeuille::Cartouche;
+            let vise = resp.hover_pos().filter(|_| en_trace && !pose).and_then(viser);
+            let apercu_cartouche = resp.hover_pos().filter(|_| pose).and_then(pose_cartouche);
             if resp.secondary_clicked() && let Some(q) = resp.interact_pointer_pos() {
                 let choix = selection_sous(q);
                 if choix != SelectionFeuille::Aucune {
@@ -218,18 +239,13 @@ impl Application {
             }
             let choix_menu = etat.selection.clone();
             resp.context_menu(|ui| {
-                if let SelectionFeuille::Cartouche(id) = &choix_menu {
-                    if ui.button("Modifier la famille du cartouche…").clicked() {
-                        action = Some(ActionMenu::ModifierCartouche(id.clone()));
+                if let SelectionFeuille::Cartouche(id, i) = &choix_menu
+                    && ui.button("Modifier la famille du cartouche…").clicked() {
+                        action = Some(ActionMenu::ModifierCartouche(id.clone(), *i));
                         ui.close();
                     }
-                    if ui.button("Remettre à la place par défaut").clicked() {
-                        action = Some(ActionMenu::CartoucheDefaut(id.clone()));
-                        ui.close();
-                    }
-                }
                 let libelle = match &choix_menu {
-                    SelectionFeuille::Cartouche(_) => Some("Supprimer le cartouche"),
+                    SelectionFeuille::Cartouche(..) => Some("Supprimer le cartouche"),
                     SelectionFeuille::Annotation(..) => Some("Supprimer l'annotation"),
                     SelectionFeuille::Vue(..) => Some("Retirer de la feuille"),
                     SelectionFeuille::Feuille(_) => Some("Supprimer la feuille"),
@@ -269,12 +285,7 @@ impl Application {
                         *d = etat.glisse_brut;
                         if let Some(f) = feuilles.iter().find(|f| &f.id == fid) && let Some(b) = boite(f, *objet) {
                             let (dx, dy) = ((d.x / z) as f64, -(d.y / z) as f64);
-                            let (mut xs, mut ys) = crate::documenter::aimantation::bords_feuille(f.largeur, f.hauteur, doc::MARGE);
-                            let autres = (0..f.vues.len() + f.nomenclatures.len()).map(ObjetFeuille::Place).chain([ObjetFeuille::Cartouche]);
-                            for autre in autres.filter(|a| a != objet).filter_map(|a| boite(f, a)) {
-                                xs.extend([autre[0], autre[2]]);
-                                ys.extend([autre[1], autre[3]]);
-                            }
+                            let (xs, ys) = aimants(f, Some(*objet));
                             let [cx, cy] = crate::documenter::aimantation::aimanter([b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy], &xs, &ys, (8.0 / z) as f64);
                             *d += egui::vec2((cx * z as f64) as f32, -(cy * z as f64) as f32);
                         }
@@ -306,9 +317,9 @@ impl Application {
                                     pos[1] += dy;
                                 }
                             }
-                            ObjetFeuille::Cartouche => {
-                                if let Some([x0, y0, _, _]) = doc::cadre_cartouche(p, &f) {
-                                    f.position_cartouche = Some([arrondi(x0 + dx), arrondi(y0 + dy)]);
+                            ObjetFeuille::Cartouche(i) => {
+                                if let Some(c) = f.cartouches.get_mut(i) {
+                                    c.position = [arrondi(c.position[0] + dx), arrondi(c.position[1] + dy)];
                                 }
                             }
                             ObjetFeuille::Annotation(i) => {
@@ -321,7 +332,16 @@ impl Application {
             if resp.clicked() {
                 self.famille_selectionnee = None;
                 let q = resp.interact_pointer_pos();
-                if en_trace {
+                if pose {
+                    // cartouche posé ; l'outil reste actif pour en poser d'autres
+                    if let Some((k, b)) = q.and_then(pose_cartouche) {
+                        let mut f = feuilles[k].clone();
+                        let arrondi = |x: f64| (x * 10.0).round() / 10.0;
+                        f.cartouches.push(doc::CartouchePlace { famille: famille_pose.clone(), position: [arrondi(b[0]), arrondi(b[1])] });
+                        etat.selection = SelectionFeuille::Cartouche(f.id.clone(), f.cartouches.len() - 1);
+                        commandes.push(Commande::Feuille { feuille: f });
+                    }
+                } else if en_trace {
                     // clic de l'outil : un texte validé par ce clic ne lance pas le suivant
                     if !texte_valide && let Some((k, pt)) = q.and_then(viser) && let Some(a) = etat.trace.clic(&feuilles[k].id, pt) {
                         let mut f = feuilles[k].clone();
@@ -350,7 +370,7 @@ impl Application {
                             Some(v) => ouvrir_vue = Some(v.vue.clone()),
                             None => ouvrir_vue = f.nomenclatures.get(j - f.vues.len()).map(|n| format!("nomenclature:{}", n.nomenclature)),
                         },
-                        ObjetFeuille::Cartouche => action = Some(ActionMenu::ModifierCartouche(f.id.clone())),
+                        ObjetFeuille::Cartouche(i) => action = Some(ActionMenu::ModifierCartouche(f.id.clone(), i)),
                         ObjetFeuille::Annotation(i) => {
                             if let Some(a) = f.annotations.get(i) && let doc::AnnotationForme::Texte { point, texte } = &a.forme {
                                 etat.trace.texte = Some(annot::TexteFeuille { feuille: f.id.clone(), rang: Some(i), point: *point, contenu: texte.clone(), hauteur: a.hauteur, focus: true });
@@ -441,8 +461,8 @@ impl Application {
                 if survol_depot == Some(k) {
                     painter.rect_stroke(r, 0.0, egui::Stroke::new(3.0, bleu), egui::StrokeKind::Outside);
                 }
-                if let Some(c) = etat.cadres.get(&f.id) {
-                    ajouter(c, k, 0.0, 0.0, decalage_de(&f.id, ObjetFeuille::Cartouche), &mut mesh, &mut traits);
+                for (i, c) in etat.cadres.get(&f.id).into_iter().flatten().enumerate() {
+                    ajouter(c, k, 0.0, 0.0, decalage_de(&f.id, ObjetFeuille::Cartouche(i)), &mut mesh, &mut traits);
                 }
                 for (j, v) in f.vues.iter().enumerate() {
                     if let Some(rv) = etat.vues.get(&cle_vue(v)) {
@@ -470,7 +490,7 @@ impl Application {
                 if let Some((fid, objet)) = etat.selection.objet().filter(|(fid, _)| *fid == f.id)
                     && let Some(b) = boite(f, objet) {
                         let cadre = egui::Rect::from_two_pos(ecran(k, b[0], b[1]), ecran(k, b[2], b[3])).translate(decalage_de(fid, objet));
-                        if objet == ObjetFeuille::Cartouche {
+                        if matches!(objet, ObjetFeuille::Cartouche(_)) {
                             painter.rect_stroke(cadre, 0.0, egui::Stroke::new(2.0, bleu), egui::StrokeKind::Outside);
                         } else {
                             painter.add(egui::Shape::dashed_line(&[cadre.left_top(), cadre.right_top(), cadre.right_bottom(), cadre.left_bottom(), cadre.left_top()], egui::Stroke::new(1.5, bleu), 6.0, 4.0));
@@ -504,6 +524,12 @@ impl Application {
                 painter.line_segment([c - egui::vec2(6.0, 0.0), c + egui::vec2(6.0, 0.0)], egui::Stroke::new(1.0, bleu));
                 painter.line_segment([c - egui::vec2(0.0, 6.0), c + egui::vec2(0.0, 6.0)], egui::Stroke::new(1.0, bleu));
             }
+            // cartouche à poser : cadre en tirets sous le curseur
+            if let Some((k, b)) = apercu_cartouche {
+                let cadre = egui::Rect::from_two_pos(ecran(k, b[0], b[1]), ecran(k, b[2], b[3]));
+                painter.rect_filled(cadre, 0.0, Color32::from_rgba_unmultiplied(0, 120, 215, 20));
+                painter.add(egui::Shape::dashed_line(&[cadre.left_top(), cadre.right_top(), cadre.right_bottom(), cadre.left_bottom(), cadre.left_top()], egui::Stroke::new(1.5, bleu), 6.0, 4.0));
+            }
             // feuille glissée : barre d'insertion entre deux feuilles
             if etat.glisse_feuille.is_some()
                 && let Some(q) = ui.input(|i| i.pointer.latest_pos()) {
@@ -520,7 +546,8 @@ impl Application {
             painter.add(egui::Shape::dashed_line(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], egui::Stroke::new(1.5, gris), 8.0, 6.0));
             painter.text(r.center(), egui::Align2::CENTER_CENTER, "+ Ajouter une feuille", egui::FontId::proportional(16.0), gris);
             if !feuilles.is_empty() {
-                annot::barre_outils(ui, rect, &mut etat.trace);
+                let familles: Vec<String> = p.familles_cartouches.iter().map(|f| f.nom.clone()).collect();
+                annot::barre_outils(ui, rect, &mut etat.trace, &familles);
             }
             if self.error.is_none() {
                 let aide = if feuilles.is_empty() {
@@ -528,13 +555,13 @@ impl Application {
                 } else if en_trace {
                     etat.trace.outil.consigne(etat.trace.points.len())
                 } else {
-                    "Déposer une vue ou une nomenclature · Glisser un objet, le cartouche ou le titre pour le déplacer · Suppr pour retirer · Double-clic : ouvrir la vue, modifier le cartouche ou le texte · Molette pour zoomer"
+                    "Déposer une vue ou une nomenclature · Annoter → Cartouche pour en poser · Glisser un objet, un cartouche ou le titre pour le déplacer · Suppr pour retirer · Double-clic : ouvrir la vue, modifier la famille du cartouche ou le texte · Molette pour zoomer"
                 };
                 crate::socle::messages::consigne_vue(ui, rect, 0.0, aide);
             }
             let curseur = if etat.glisse.is_some() || etat.glisse_feuille.is_some() {
                 Some(egui::CursorIcon::Grabbing)
-            } else if en_trace && vise.is_some() {
+            } else if en_trace && (vise.is_some() || apercu_cartouche.is_some()) {
                 Some(egui::CursorIcon::Crosshair)
             } else if survol_ajout {
                 Some(egui::CursorIcon::PointingHand)
@@ -560,8 +587,7 @@ impl Application {
         }
         match action {
             Some(ActionMenu::Supprimer) => { self.supprimer_dans_jeu(); }
-            Some(ActionMenu::ModifierCartouche(id)) => self.editer_cartouche_feuille(&id),
-            Some(ActionMenu::CartoucheDefaut(id)) => self.placer_cartouche(&id, None),
+            Some(ActionMenu::ModifierCartouche(id, i)) => self.editer_cartouche_feuille(&id, i),
             None => {}
         }
         if let Some(id) = ouvrir_vue.as_deref().and_then(|x| x.strip_prefix("nomenclature:")) {
@@ -574,13 +600,4 @@ impl Application {
         }
     }
 
-    /// Place le cartouche de la feuille `id` : coin bas gauche (mm du papier), ou à sa
-    /// place par défaut avec None ; le remet s'il avait été retiré.
-    pub(crate) fn placer_cartouche(&mut self, id: &str, position: Option<[f64; 2]>) {
-        let Some(f) = self.natif.as_ref().and_then(|(p, _)| p.feuilles.iter().find(|f| f.id == id)) else { return };
-        let g = doc::Feuille { position_cartouche: position, sans_cartouche: false, ..f.clone() };
-        if let Err(e) = self.executer_bim(Commande::Feuille { feuille: g }) {
-            self.error = Some(e);
-        }
-    }
 }
