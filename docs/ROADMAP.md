@@ -15,7 +15,7 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| T1 | Tests de fichiers malformés, reste : balayage aléatoire des RVT (aucun fichier RVT d'exemple dans le dépôt) ; `feuilles::visible_dans_vue` cherche la catégorie de chaque élément coté dans toutes les collections (coût quadratique sur un gros modèle) ; formule de nomenclature à champs partagés sans cycle (arbre de 16 champs au plus, chacun cité plusieurs fois) : coût exponentiel possible | P3 | `crates/formats/src/rvt/` |
+| T1 | Tests de fichiers malformés, reste : balayage aléatoire des RVT (aucun fichier RVT d'exemple dans le dépôt) ; index des catégories et mémoïsation des formules de nomenclature (23/11/2026) à vérifier sur une maquette RVT (les tests Revit sont sautés sans les fichiers d'essai) | P3 | `crates/formats/src/rvt/` |
 | G1 | Reste du gabarit pendant l'édition : les textures livrées (`gabarit:textures/…`, `maillage::textures_gabarit`) restent embarquées et désignées par les matériaux ; à copier dans le dossier du projet (ou une bibliothèque) avant de cesser d'embarquer le gabarit | P3 | `crates/maillage/src/textures_gabarit.rs` |
 
 ## 2. Réactivité
@@ -55,7 +55,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M7 | Ajuster plusieurs éléments | P2 | §2 |
 | M8 | Menu du clic droit pendant une commande (Valider / Annuler) | P2 | §1 |
 | S3 | Quadrillages et repères des autres coupes non dessinés ni sélectionnables en coupe et élévation ; repère de coupe sélectionnable seulement en plan | P2 | `modele::documentation::niveaux_et_limites_en_coupe` |
-| S5 | Un clic au centre exact de la vue ne sélectionne pas l'annotation qui y passe (constaté en vue de dessin et en vue en plan, polyligne passant par la cible de la caméra) ; 30 px à côté, la sélection marche | P2 | `crates/interface/src/socle/viewport.rs` |
 | S4 | Types de niveau (tête, trait) absents du modèle : le sélecteur d'un niveau reste « Générique » | P3 | `docs/MODELE.md` |
 | M10 | Décaler et Scinder des lignes d'annotation à la souris | P2 | §2 |
 | M11 | Compléments de fonctions faites : trait de démolition dans les plans imprimés ; Joindre par clic sur la cible ; Coller aligné sur plusieurs niveaux d'un coup ; aperçu glissant de Changer d'hôte ; propriétés grisées d'un élément verrouillé | P2 | §3, §5 |

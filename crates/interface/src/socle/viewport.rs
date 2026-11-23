@@ -411,8 +411,12 @@ impl Application {
             }) {
                 // repère d'arête de l'élément sélectionné : la pente est ajoutée ou retirée
                 self.basculer_pente(c, k);
-            } else if resp.clicked() && resp.interact_pointer_pos().zip(self.origine_ecran(rect)).is_some_and(|(q, o)| q.distance(o) <= 10.0) {
-                // origine du projet (trait invisible) : ses coordonnées dans Propriétés
+            } else if resp.clicked() && resp.interact_pointer_pos().zip(self.origine_ecran(rect)).is_some_and(|(q, o)| q.distance(o) <= 10.0)
+                && resp.interact_pointer_pos().is_some_and(|q| crate::saisie::cycle::au_clic(&self.cycle, q).is_none() && self.candidats_selection(rect, q).is_empty())
+            {
+                // origine du projet (trait invisible) : ses coordonnées dans Propriétés, si
+                // rien d'autre n'est sous le curseur (une annotation passant par l'origine,
+                // souvent au centre de la vue, reste sélectionnable)
                 self.select(None, false);
                 self.bim.origine = true;
             } else if let Some(c) = resp.clicked().then(|| resp.interact_pointer_pos()).flatten()

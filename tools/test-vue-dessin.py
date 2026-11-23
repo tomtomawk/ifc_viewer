@@ -70,6 +70,11 @@ def run(exe):
                 assert commande("etat")["objets_visibles"] == 0, "Échap a fait réapparaître le modèle"
                 clic((a[0] + 3 * b[0]) / 4, (a[1] + 3 * b[1]) / 4)
                 assert commande("etat")["selection_native"] == [avant[0]["id"]], commande("etat")["selection_native"]
+                # S5 : la polyligne passe par l'origine du projet ; un clic sur l'origine la
+                # sélectionne (l'origine invisible ne passe qu'en l'absence d'autre candidat)
+                saisie([{"action": "touche", "touche": "Escape"}])
+                clic(*commande("ecran", "0 0")["ecran"])
+                assert commande("etat")["selection_native"] == [avant[0]["id"]], commande("etat")["selection_native"]
                 commande("outil", "deplacer")
                 d = commande("ecran", "1000 500")["ecran"]
                 clic(*b)

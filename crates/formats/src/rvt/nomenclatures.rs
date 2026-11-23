@@ -242,39 +242,62 @@ fn groupe_pourcentage(m: &Maquette, element: i64, d: &Definition, par: i64) -> S
     }
 }
 
-/// Valeur d'un champ pour un élément ; un champ calculé évalue sa formule, dont les
-/// variables sont d'autres champs de la nomenclature ou des paramètres ; un pourcentage
-/// est la part de l'élément dans le total de son groupe.
-/// `pile` : champs en cours d'évaluation ; un champ qui s'y trouve déjà (formule
-/// circulaire lue dans le fichier) ou une pile de plus de 16 champs donne None.
 /// Niveaux de tri et de regroupement retenus d'une nomenclature (Revit en propose
 /// quelques-uns).
 const TRIS_MAX: usize = 8;
 
+/// Valeur d'un champ pour un élément ; un champ calculé évalue sa formule, dont les
+/// variables sont d'autres champs de la nomenclature ou des paramètres ; un pourcentage
+/// est la part de l'élément dans le total de son groupe. Une formule circulaire lue
+/// dans le fichier, ou une chaîne de plus de 16 champs, donne None.
 fn valeur(m: &Maquette, element: i64, d: &Definition, c: &Champ, totaux: &Totaux, pile: &[i64]) -> Option<Valeur> {
+    let memo = std::cell::RefCell::new(HashMap::new());
+    valeur_memo(m, element, d, c, totaux, pile, &memo).0
+}
+
+/// Évaluation d'un champ avec les valeurs déjà calculées pour cet élément (`memo`) : un
+/// champ cité plusieurs fois par des formules n'est évalué qu'une fois (sans cela, un
+/// arbre de champs partagés coûtait un temps exponentiel). Rend aussi si la valeur a
+/// été coupée par la détection de cycle ou de profondeur ; une telle valeur dépend du
+/// chemin suivi et n'est pas gardée.
+fn valeur_memo(m: &Maquette, element: i64, d: &Definition, c: &Champ, totaux: &Totaux, pile: &[i64], memo: &std::cell::RefCell<HashMap<i64, Option<Valeur>>>) -> (Option<Valeur>, bool) {
     if pile.len() > 16 || pile.contains(&c.id) {
-        return None;
+        return (None, true);
+    }
+    if let Some(v) = memo.borrow().get(&c.id) {
+        return (v.clone(), false);
     }
     let pile: Vec<i64> = pile.iter().copied().chain([c.id]).collect();
     let champ = |id: i64| d.champs.iter().find(|c| c.id == id);
-    match c.genre {
+    let coupe = std::cell::Cell::new(false);
+    let sous = |c: &Champ| {
+        let (v, k) = valeur_memo(m, element, d, c, totaux, &pile, memo);
+        if k { coupe.set(true); }
+        v
+    };
+    let v = match c.genre {
         GenreChamp::Formule => {
             let var = |x: &Expr| match x {
-                Expr::Champ(k) => champ(*k).and_then(|c| valeur(m, element, d, c, totaux, &pile)),
+                Expr::Champ(k) => champ(*k).and_then(sous),
                 Expr::Param(p) => parametre(m, element, *p),
                 _ => None,
             };
-            formules::evaluer(c.formule.as_ref()?, &var)
+            c.formule.as_ref().and_then(|f| formules::evaluer(f, &var))
         }
-        GenreChamp::Pourcentage => {
+        GenreChamp::Pourcentage => (|| {
             let (de, par) = c.pourcentage?;
-            let x = valeur(m, element, d, champ(de)?, totaux, &pile)?.nombre()?;
+            let x = sous(champ(de)?)?.nombre()?;
             let t = *totaux.get(&c.id)?.get(&groupe_pourcentage(m, element, d, par))?;
             (t != 0.0).then(|| Valeur::Nombre(x / t))
-        }
+        })(),
         GenreChamp::Nombre => Some(Valeur::Nombre(1.0)),
         _ => brut(m, element, c).map(|(b, st)| formules::de_brut(&b, st)),
+    };
+    let coupe = coupe.get();
+    if !coupe {
+        memo.borrow_mut().insert(c.id, v.clone());
     }
+    (v, coupe)
 }
 
 /// Texte du résultat d'une formule ou d'un pourcentage, dans l'unité du champ.

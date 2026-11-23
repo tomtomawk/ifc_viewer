@@ -617,9 +617,10 @@ fn kerreut_cotes() {
     let Some(p) = essai("fichiers", "Kerreut 2025.rvt") else { return };
     let m = lire(&p, &|_| {}).unwrap();
     let boites = feuilles::boites(&m);
+    let categories = feuilles::categories(&m);
     let vue = |id: i64| m.vues.iter().find(|v| v.id == id).unwrap();
     let el = |id: i64| m.elements_2d.iter().find(|e| e.id == id).unwrap();
-    let visible = |e: i64, v: i64| feuilles::visible_dans_vue(&m, el(e), vue(v), &boites);
+    let visible = |e: i64, v: i64| feuilles::visible_dans_vue(&m, el(e), vue(v), &boites, &categories);
     // « RDC 50e » : 10168246 visible ; 10168254 cote un mur hors cadrage
     assert!(visible(10168246, 10168217));
     assert!(!visible(10168254, 10168217));

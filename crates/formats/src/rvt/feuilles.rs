@@ -220,35 +220,30 @@ pub fn boites(m: &Maquette) -> HashMap<i64, (DVec3, DVec3)> {
         .collect()
 }
 
-/// Catégorie (BuiltInCategory) d'un élément du modèle : celle de la famille d'une
+/// Catégorie (BuiltInCategory) de chaque élément du modèle : celle de la famille d'une
 /// instance, sinon d'après sa classe (murs, sols, plafonds, toits, escaliers,
-/// garde-corps, pièces, niveaux, quadrillages).
-pub fn categorie(m: &Maquette, id: i64) -> Option<i64> {
-    if let Some(i) = m.instances.iter().find(|i| i.id == id) {
-        return m.types.get(&i.type_id).and_then(|t| m.familles.get(&t.famille)).map(|f| f.categorie);
+/// garde-corps, pièces, niveaux, quadrillages). Table construite une fois par modèle
+/// (un parcours des collections par élément coûtait un temps quadratique) ; priorité
+/// d'un même identifiant : instance, mur, dalle, toit, escalier, garde-corps, pièce,
+/// niveau, quadrillage.
+pub fn categories(m: &Maquette) -> HashMap<i64, i64> {
+    let mut c: HashMap<i64, i64> = HashMap::new();
+    // de la moins prioritaire à la plus prioritaire : chaque insertion remplace
+    c.extend(m.grilles.iter().map(|x| (x.id, -2_000_220)));
+    c.extend(m.niveaux.iter().map(|x| (x.id, -2_000_240)));
+    c.extend(m.pieces.iter().map(|x| (x.id, -2_000_160)));
+    c.extend(m.garde_corps.iter().map(|x| (x.id, -2_000_126)));
+    c.extend(m.escaliers.iter().map(|x| (x.id, -2_000_120)));
+    c.extend(m.toits.iter().map(|x| (x.id, -2_000_035)));
+    c.extend(m.dalles.iter().map(|d| (d.id, if d.classe == "Ceiling" { -2_000_038 } else { -2_000_032 })));
+    c.extend(m.murs.iter().map(|x| (x.id, -2_000_011)));
+    for i in &m.instances {
+        match m.types.get(&i.type_id).and_then(|t| m.familles.get(&t.famille)) {
+            Some(f) => { c.insert(i.id, f.categorie); }
+            None => { c.remove(&i.id); }
+        }
     }
-    if m.murs.iter().any(|x| x.id == id) {
-        return Some(-2_000_011);
-    }
-    if let Some(d) = m.dalles.iter().find(|x| x.id == id) {
-        return Some(if d.classe == "Ceiling" { -2_000_038 } else { -2_000_032 });
-    }
-    let c = if m.toits.iter().any(|x| x.id == id) {
-        -2_000_035
-    } else if m.escaliers.iter().any(|x| x.id == id) {
-        -2_000_120
-    } else if m.garde_corps.iter().any(|x| x.id == id) {
-        -2_000_126
-    } else if m.pieces.iter().any(|x| x.id == id) {
-        -2_000_160
-    } else if m.niveaux.iter().any(|x| x.id == id) {
-        -2_000_240
-    } else if m.grilles.iter().any(|x| x.id == id) {
-        -2_000_220
-    } else {
-        return None;
-    };
-    Some(c)
+    c
 }
 
 /// Éléments du modèle dont la catégorie est masquée dans la vue `v`.
@@ -272,14 +267,14 @@ pub fn masques_par_categorie(m: &Maquette, v: &Vue) -> Vec<i64> {
 /// seulement si chacun des éléments qu'elle cote y est visible (pas une ligne
 /// d'esquisse, pas masqué, catégorie affichée, boîte qui touche le cadrage de la vue) :
 /// vérifié contre le collecteur de la vue dans l'API (Kerreut, « RDC 50e » et « PC Est »).
-pub fn visible_dans_vue(m: &Maquette, e: &Element2D, v: &Vue, boites: &HashMap<i64, (DVec3, DVec3)>) -> bool {
+pub fn visible_dans_vue(m: &Maquette, e: &Element2D, v: &Vue, boites: &HashMap<i64, (DVec3, DVec3)>, categories: &HashMap<i64, i64>) -> bool {
     if v.masques.contains(&e.id) {
         return false;
     }
     let Contenu::Cote { references, .. } = &e.contenu else { return true };
     let cadre = v.cadre.filter(|c| c.actif[0] && c.actif[1]);
     references.iter().all(|r| {
-        if m.lignes_esquisse.contains(r) || v.masques.contains(r) || categorie(m, *r).is_some_and(|c| v.categories_masquees.contains(&c)) {
+        if m.lignes_esquisse.contains(r) || v.masques.contains(r) || categories.get(r).is_some_and(|c| v.categories_masquees.contains(c)) {
             return false;
         }
         match (cadre, boites.get(r)) {

@@ -863,9 +863,10 @@ pub fn scene(m: &Maquette, titre: &str, file_name: String, format: &str) -> Scen
     // éléments 2D par vue, sauf ceux que Revit n'y montre pas (masqués, cotes dont un
     // élément coté n'est pas visible dans la vue)
     let boites = feuilles::boites(m);
+    let categories = feuilles::categories(m);
     let par_id: HashMap<i64, &Vue> = m.vues.iter().map(|v| (v.id, v)).collect();
     let mut par_vue: BTreeMap<i64, Vec<&Element2D>> = BTreeMap::new();
-    for e in m.elements_2d.iter().filter(|e| par_id.get(&e.vue).is_some_and(|v| feuilles::visible_dans_vue(m, e, v, &boites))) {
+    for e in m.elements_2d.iter().filter(|e| par_id.get(&e.vue).is_some_and(|v| feuilles::visible_dans_vue(m, e, v, &boites, &categories))) {
         par_vue.entry(e.vue).or_default().push(e);
     }
     let nom_vue: HashMap<i64, &str> = m.vues.iter().map(|v| (v.id, v.nom.as_str())).collect();
