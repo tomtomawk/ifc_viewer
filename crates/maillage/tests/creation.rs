@@ -205,3 +205,28 @@ fn motif_de_modele_marque_pour_le_rendu() {
     assert_eq!(scene.definitions_surface[rang].tuile.as_ref(), Some(&tuile));
     assert_eq!(scene.table_motifs[rang][1..], [0.0, 1.0, 600.0]);
 }
+
+/// E1 : un élément sans matériau propre prend celui de sa catégorie (couleur et poché de
+/// coupe) ; sans matériau de catégorie, couleur et poché génériques.
+#[test]
+fn materiau_par_defaut_de_la_categorie() {
+    let mut p = Projet::nouveau("Catégories");
+    p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
+    let poteau = Barre { id: "p".into(), nom: "Poteau".into(), genre: GenreBarre::Poteau, niveau: "n".into(), debut: [0.0, 0.0, 0.0], fin: [0.0, 0.0, 2500.0], largeur: 200.0, hauteur: 200.0, rotation: 0.0, pose: Default::default(), origine: None };
+    p.barres.push(poteau);
+    let couleur = |p: &Projet| {
+        let s = maillage::depuis_natif(p, std::path::Path::new("c.bem")).unwrap();
+        let o = s.objects.iter().find(|o| o.id == modele::identifiants::id_natif("barre", "p")).unwrap();
+        (s.vertices[o.opaque.start as usize].color, s.couches_coupe.contains_key(&o.id))
+    };
+    let (avant, coupe) = couleur(&p);
+    assert!(!coupe, "sans matériau : poché générique");
+    p.materiaux_categories.insert(CategorieMateriau::Poteaux, "Brique".into());
+    p.completer_materiaux();
+    p.verifier().unwrap();
+    let brique = p.materiau("Brique").unwrap().couleur;
+    let (apres, coupe) = couleur(&p);
+    assert!(coupe, "matériau de la catégorie : bande de coupe");
+    assert_ne!(avant, apres);
+    assert!((0..3).all(|i| apres[i].abs_diff(brique[i]) <= 3), "{apres:?} / {brique:?}");
+}

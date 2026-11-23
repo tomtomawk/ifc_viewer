@@ -17,7 +17,8 @@ pub mod textures_gabarit;
 mod navigateur;
 
 use aretes::{aretes_jointes, aretes_terrain};
-use materiaux::{coupe_materiau, motif_surface, opacite, rendu_materiau};
+use materiaux::{coupe_materiau, motif_surface, objet_materiau, opacite, rendu_materiau, Tables};
+use modele::CategorieMateriau as Cat;
 use navigateur::navigateur;
 
 pub fn depuis_natif(projet: &Projet, path: &Path) -> Result<Scene, String> {
@@ -154,7 +155,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         }
         // matériau d'un mur monocouche (couche d'assemblage) : couleur et motif de coupe
         let materiau = match type_mur.couches.as_slice() {
-            [c] => c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(n))),
+            [c] => projet.materiau_resolu(c.materiau.as_deref(), Cat::Murs),
             _ => None,
         };
         let couleur = materiau.as_ref().map_or([0.72, 0.72, 0.69, 1.0], |x| {
@@ -245,7 +246,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             if c.fonction == modele::FonctionCouche::LameAir { continue; }
             let tris = modele::elements::pente::couche(&d.contours, &plans, z0, bas, haut);
             if tris.is_empty() { continue; }
-            let m = c.materiau.as_ref().map(|n| projet.materiau(n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(n)));
+            let m = projet.materiau_resolu(c.materiau.as_deref(), Cat::de_dalle(d.sorte));
             let couleur = m.as_ref().map_or([0.70, 0.70, 0.68, 1.0], |x| {
                 let [r, g, b] = x.couleur.map(|c| c as f32 / 255.0);
                 [r, g, b, 1.0]
@@ -331,6 +332,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         use modele::famille::Role;
         let menuiserie = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref().map(|m| m.couleur).or(t.famille.as_ref().map(|f| f.couleur)))
             .map_or([0.55, 0.40, 0.24, 1.0], |c| { let [r, g, b] = c.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
+        let categorie = projet.materiau_resolu(None, Cat::de_ouverture(o.genre));
         let menuiserie_parts = menuiseries.next().ok_or("Menuiserie absente.")??;
         let visibilite = menuiserie_parts.iter().map(|(_, _, masque, _)| *masque).collect();
         let parts: Vec<Part> = menuiserie_parts.into_iter().map(|(role, materiau, _, tris)| Part {
@@ -339,7 +341,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                 (Some(m), r) => { let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0); [cr, cg, cb, if r == Role::Vitrage { 0.35 } else { 1.0 }] }
                 (None, Role::Vitrage) => [0.62, 0.78, 0.86, 0.35],
                 (None, Role::Appui) => [0.78, 0.76, 0.72, 1.0],
-                (None, _) => menuiserie,
+                (None, _) => categorie.as_ref().map_or(menuiserie, |m| { let [cr, cg, cb] = m.couleur.map(|c| c as f32 / 255.0); [cr, cg, cb, 1.0] }),
             },
             tris: tris.into_iter().map(|t| t.map(|v| v * 0.001)).collect(),
         }).collect();
@@ -353,23 +355,11 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
         let tris = modele::volumes::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        // poutre typée : couleur et poché du matériau de son type
-        let materiau = b.pose.type_poutre.as_ref().and_then(|t| projet.type_poutre(t)).and_then(|t| t.materiau.as_ref())
-            .map(|n| projet.materiau(n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(n)));
-        match materiau {
-            Some(m) => {
-                let [r, g, bl] = m.couleur.map(|c| c as f32 / 255.0);
-                let couleur = opacite(Some(&m), [r, g, bl, 1.0]);
-                let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
-                couches_coupe.push((id, coupe_materiau(projet, &m, vec![neutre, neutre], noyau::aretes::TRAIT_FORT_MM)));
-                materiaux_parts.push(vec![Some(m.nom.clone())]);
-                geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: couleur, tris }], lignes: Vec::new(), rendu: vec![Some(rendu_materiau(&m, couleur, &mut table_apparences))], motifs: vec![motif_surface(projet, &m, &mut table_motifs)] });
-            }
-            None => {
-                materiaux_parts.push(vec![None]);
-                geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: [0.65,0.68,0.72,1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
-            }
-        }
+        // poutre typée : matériau de son type, sinon celui de la catégorie (poteau, poutre)
+        let propre = b.pose.type_poutre.as_ref().and_then(|t| projet.type_poutre(t)).and_then(|t| t.materiau.as_deref());
+        let materiau = projet.materiau_resolu(propre, Cat::de_barre(b.genre));
+        let mut t = Tables { couches_coupe: &mut couches_coupe, materiaux_parts: &mut materiaux_parts, apparences: &mut table_apparences, motifs: &mut table_motifs };
+        geoms.push(objet_materiau(projet, id, tris, materiau.as_ref(), [0.65, 0.68, 0.72, 1.0], &mut t));
     }
     for c in &projet.composants {
         let id = id_natif("composant", &c.id);
@@ -381,6 +371,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
             let [r, g, b] = t.modele.couleur.map(|x| x as f32 / 255.0);
             [r, g, b, 1.0]
         });
+        let couleur = projet.materiau_resolu(None, Cat::Composants).map_or(couleur, |m| { let [r, g, b] = m.couleur.map(|x| x as f32 / 255.0); [r, g, b, 1.0] });
         let solides = c.solides(projet)?;
         // géométrie de rendu désignée par la famille (paramètre « Rendu »), ajustée à
         // l'encombrement de la géométrie graphique : style Réaliste seulement
@@ -423,8 +414,9 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
         let tris = e.solide(projet)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        materiaux_parts.push(vec![None]);
-        geoms.push(ProductGeom { visibilite: Vec::new(), id, parts: vec![Part { color: [0.74, 0.73, 0.70, 1.0], tris }], lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
+        let materiau = projet.materiau_resolu(None, Cat::Escaliers);
+        let mut t = Tables { couches_coupe: &mut couches_coupe, materiaux_parts: &mut materiaux_parts, apparences: &mut table_apparences, motifs: &mut table_motifs };
+        geoms.push(objet_materiau(projet, id, tris, materiau.as_ref(), [0.74, 0.73, 0.70, 1.0], &mut t));
     }
     for g in &projet.garde_corps {
         let id = id_natif("garde_corps", &g.id);
@@ -433,7 +425,11 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(parent).or_default().push(id);
         // couleur du matériau de chaque élément (métal sombre à défaut), vitrage translucide
         let parts: Vec<Part> = g.solides(projet)?.into_iter().map(|(materiau, vitre, t)| {
-            let m = materiau.map(|n| projet.materiau(&n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(&n)));
+            let m = match materiau {
+                Some(n) => Some(projet.materiau(&n).cloned().unwrap_or_else(|| projet.materiau_par_defaut(&n))),
+                None if !vitre => projet.materiau_resolu(None, Cat::GardeCorps),
+                None => None,
+            };
             let [r, v, b] = m.as_ref().map_or(if vitre { [158, 199, 219] } else { [77, 79, 84] }, |m| m.couleur).map(|c| c as f32 / 255.0);
             Part { color: [r, v, b, if vitre { 0.35 } else { 1.0 }], tris: t.into_iter().map(|t| t.map(|v| v * 0.001)).collect() }
         }).collect();
@@ -451,8 +447,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let couches = modele::elements::terre_plein::couches_terrain(projet, t)?;
         let (mut parts, mut noms, mut rendu, mut motifs) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for (k, (nom, tris)) in couches.parts.into_iter().enumerate() {
-            let par_defaut = nom.as_ref().filter(|n| projet.materiau(n).is_none()).map(|n| projet.materiau_par_defaut(n));
-            let materiau = nom.as_ref().and_then(|n| projet.materiau(n)).or(par_defaut.as_ref());
+            let resolu = projet.materiau_resolu(nom.as_deref(), Cat::Terrain);
+            let materiau = resolu.as_ref();
             let couleur = materiau.map_or([0.48, 0.62, 0.38, 1.0], |m| { let [r, g, b] = m.couleur.map(|c| c as f32 / 255.0); [r, g, b, 1.0] });
             let couleur = opacite(materiau, couleur);
             if k == 0 && let Some(m) = materiau {

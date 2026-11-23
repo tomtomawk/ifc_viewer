@@ -87,6 +87,9 @@ impl Projet {
             }
             if t.materiau.as_ref().is_some_and(|m| self.materiau(m).is_none()) { return Err(format!("{} : matériau introuvable.", t.nom)); }
         }
+        for (c, m) in &self.materiaux_categories {
+            if self.materiau(m).is_none() { return Err(format!("Matériau par défaut des {} : « {m} » introuvable.", c.libelle().to_lowercase())); }
+        }
         for t in &self.terrains {
             t.triangles()?;
             if t.type_terrain.as_ref().is_some_and(|id| !types_terrains.contains(id)) { return Err(format!("{} : type de terrain introuvable.", t.nom)); }

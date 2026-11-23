@@ -8,6 +8,7 @@ impl Application {
         self.fenetre_ciel(ui.ctx());
         self.fenetre_position_plan(ui.ctx());
         self.fenetre_plumes(ui.ctx());
+        self.fenetre_materiaux_categories(ui.ctx());
         self.fenetre_types_traits(ui.ctx());
         self.entete_panneau(ui, Panneau::Proprietes, "Propriétés");
         if self.proprietes_famille_selectionnee(ui) { return; }

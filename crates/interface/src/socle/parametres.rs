@@ -130,6 +130,8 @@ impl Application {
                                 ui.heading("Graphisme du projet");ui.add_space(10.0);
                                 ui.label("Les épaisseurs des plumes sont enregistrées dans le projet ouvert.");
                                 if ui.add_enabled(self.natif.is_some(),egui::Button::new("Modifier les 12 épaisseurs de traits…")).clicked(){self.editeur_plumes=self.natif.as_ref().map(|(p,_)|p.epaisseurs_plumes());}
+                                ui.label("Chaque catégorie d'élément a un matériau par défaut, qui donne couleur, motif de coupe et motif de surface aux éléments sans matériau propre.");
+                                if ui.add_enabled(self.natif.is_some(),egui::Button::new("Matériaux par catégorie…")).clicked(){let ctx=ui.ctx().clone();self.ouvrir_materiaux_categories(&ctx);}
                                 ui.label(RichText::new("Les styles visuels, ombres et échelles restent réglables dans la barre de la vue.").small().weak());
                             }
                             "gabarit"=>{

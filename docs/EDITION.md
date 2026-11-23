@@ -196,6 +196,16 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Toiture) ; Modifier, Dupliquer et « + Nouveau type… » ouvrent l'éditeur des types de
   murs (couches du dessus vers le dessous, fonction, matériau, épaisseur, plume,
   ossature). Les éléments du type suivent ses couches.
+  **Matériaux par catégorie** (Paramètres → Graphisme → « Matériaux par catégorie… ») :
+  chaque catégorie (murs, dalles, sols, plafonds, toitures, terre-pleins, portes,
+  fenêtres, poteaux, poutres, escaliers, garde-corps, composants, terrain) désigne un
+  matériau du projet. Un élément sans matériau propre (couche, type, paramètre de
+  famille) prend celui de sa catégorie : couleur, motif de coupe et motif de surface ;
+  « Aucun » garde la couleur du logiciel. Un nouveau projet reçoit la table du gabarit
+  (béton pour les dalles, poteaux, poutres et escaliers, mur générique, chape, plâtre,
+  étanchéité, remblai, bois et aluminium de menuiserie, acier laqué, bois, terre
+  naturelle). Portes, fenêtres et composants en prennent la couleur ; leur poché de
+  coupe reste générique.
   Pour les éléments horizontaux et les limites de propriété, **Sélectionner** dans le
   bandeau ou l'onglet **Modifier** interrompt le tracé et permet de choisir un
   sommet ou un segment. **Déplacer** utilise un point de départ et un point d'arrivée ;

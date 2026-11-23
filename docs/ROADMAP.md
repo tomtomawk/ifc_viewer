@@ -64,7 +64,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M15 | Toitures concaves à pentes différentes par arête (aujourd'hui refusées) | P3 | `docs/EDITION.md` |
 | M16 | Poutres inclinées ; sections circulaires de poteau | P2 | `docs/EDITION.md` |
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
-| M18 | Épaisseurs de trait par catégorie (voir E1) | P2 | `README.md` « Limites connues » |
+| M18 | Épaisseurs de trait par catégorie (les matériaux par catégorie donnent couleur et motifs, pas l'épaisseur) | P2 | `README.md` « Limites connues » |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
 | U11 | Réglages retirés car jamais lus (U3, 20/11/2026), à réaliser s'ils sont voulus : Texte (ligne de repère avec flèche, alignement gauche / centre / droite), Étiquette (contenu : type, repère, matériau), Cote (mode orthogonal, décalage papier), Zone (motif, pas), Quadrillage en arc, Déplacer contraint horizontal / vertical (Maj contraint déjà aux axes) | P3 | `zones/ruban/mod.rs` (`champs`) ; question au §9 |
 | U7 | Revue des parcours : Déplacer, Copier, Tourner, Symétrie, Réseau, Échelle exigent une sélection préalable ; pas d'étape « Sélectionner, Entrée pour valider » dans la commande | P2 | `outils/modifier/transformer.rs`, `docs/MODIFICATION.md` §1 |
@@ -105,7 +105,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
-| E1 | Styles d'objets globaux (demande n° 15) | P2 | §10 |
+| E1b | Matériaux par catégorie, reste : poché de coupe des ouvertures et des composants (la couleur suit le matériau de la catégorie, le poché reste générique) ; éléments importés (couleur de la source) ; bibliothèque partagée entre projets si elle reste voulue (aujourd'hui : table du projet amorcée par le gabarit) | P3 | `crates/maillage/src/lib.rs`, `crates/modele/src/categories.rs` |
 | E2 | Vérification multiplateforme : essai manuel sur chaque système, cache macOS (demande n° 4) | P2 | §10 |
 | E3 | Version navigateur en lecture seule (demande n° 3) | P3 | §10 |
 
@@ -120,7 +120,6 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 | Sujet | Question |
 |---|---|
-| E1 | Emplacement partagé de la bibliothèque de styles, liste des catégories, priorité matériau / catégorie |
 | U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
 | U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
 | Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
@@ -128,55 +127,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 
 ## 10. Études des évolutions
 
-Demandes n° 15, 4 et 3 de la feuille de route du 16 novembre 2026 (tâches E1, E2, E3 du §7) : architecture ou plan, sans réalisation. Les relevés de code datent du 16 novembre 2026 (commit `35e1c42`).
-
-### 10.1 E1 — Styles d'objets globaux (n° 15)
-
-#### Besoin
-
-Une bibliothèque de styles indépendante des projets, par catégorie d'objets : couleur, épaisseur de trait, motifs, transparence. Le besoin est de prévoir l'architecture tôt, et de préciser les surcharges locales et la synchronisation.
-
-#### Existant
-
-- Les styles sont aujourd'hui portés par chaque projet :
-  - `materiaux[]` : couleur, motifs de coupe et de surface, apparence ;
-  - `plumes` : épaisseurs ;
-  - `motifs[]` : définitions de hachures ;
-  - `types_traits` : types de trait.
-- Le gabarit (`gabarits/defaut.gabarit.json`, `modele::gabarit`) amorce un nouveau projet, puis n'est plus relu. Chaque projet garde sa copie.
-
-#### Architecture proposée
-
-1. **Fichier de bibliothèque**, hors projet : `styles.bimstyles.json`, dans le dossier de configuration de l'utilisateur (crate `config`) ou à un chemin partagé de l'agence. Contenu :
-   - `version` ;
-   - `categories[]` : `cle` (catégorie IFC ou native : `murs`, `dalles`, `ouvertures`, `annotations/cotes`…), `couleur`, `plume` (1 à 12), `motif_coupe`, `motif_surface`, `transparence` (0 à 1), `type_trait`, chaque champ facultatif ;
-   - `motifs[]` et `types_traits[]` référencés par nom.
-2. **Résolution d'un style**, de la plus faible à la plus forte priorité :
-   1. valeur par défaut du code ;
-   2. bibliothèque globale (catégorie) ;
-   3. surcharge du projet (catégorie) ;
-   4. surcharge de vue (gabarit de vue, visibilité / graphismes) ;
-   5. matériau de l'élément pour la couleur et les motifs de coupe.
-
-   Une fonction pure `modele::styles::resoudre(bibliotheque, projet, vue, categorie) -> StyleResolu` sert le maillage (`maillage`) et le dessin (`moteur2d`) : un seul point de calcul.
-3. **Surcharges locales** : `projet.styles_surcharges[]`, avec la même structure que les catégories de la bibliothèque. Un champ absent hérite de la bibliothèque. Propriétés montre la provenance de chaque valeur (« bibliothèque », « projet », « vue ») et propose de rétablir la valeur héritée.
-4. **Synchronisation** :
-   - le projet mémorise `styles_source` : chemin et empreinte SHA-256 de la bibliothèque lue (`noyau::hash` existe) ;
-   - à l'ouverture, une empreinte différente déclenche un message (n° 16) « Bibliothèque de styles modifiée » avec deux choix : appliquer, ou garder la copie du projet ;
-   - le projet garde un instantané des valeurs résolues de la bibliothèque. Il s'affiche donc à l'identique sur un poste sans accès à la bibliothèque, et un export reste reproductible.
-5. **Collaboration** : `styles_surcharges` devient une collection identifiée (`commandes::socle::objets::COLLECTIONS`). La bibliothèque elle-même n'entre pas dans les transactions partagées : chaque poste la lit, et l'instantané du projet fait foi.
-
-#### Points à décider avant réalisation (§9)
-
-- Emplacement partagé de la bibliothèque (serveur de l'agence ou dossier synchronisé), et qui a le droit de la modifier.
-- Liste fermée des catégories, alignée sur la boîte de visibilité actuelle (`zones/barre_haute.rs`, catégories de modèle et d'annotation).
-- Le matériau prime-t-il sur la catégorie pour la couleur en style « Graphique » ? Proposition : oui en coupe, non en vue.
-
-#### Ordre de réalisation
-
-1. `modele::styles` : bibliothèque, surcharges, `resoudre`, tests et schéma dans `docs/MODELE.md`.
-2. `maillage` et `moteur2d` : lecture du style résolu.
-3. Interface : éditeur de bibliothèque, provenance dans Propriétés, message de synchronisation.
+Demandes n° 4 et 3 de la feuille de route du 16 novembre 2026 (tâches E2, E3 du §7 ; l'étude de E1, n° 15, est dans l'historique : `git show d8a8bc6:docs/ROADMAP.md`) : architecture ou plan, sans réalisation. Les relevés de code datent du 16 novembre 2026 (commit `35e1c42`).
 
 ### 10.2 E2 — Compatibilité multiplateforme (n° 4)
 
