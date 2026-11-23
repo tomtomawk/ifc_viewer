@@ -166,7 +166,7 @@ fn trianguler(exterieur: &[[f64; 2]], trous: &[&Vec<[f64; 2]>]) -> Vec<[DVec2; 3
     let Some(indices) = noyau::geometrie::earcut(&coords, &debuts, 2) else { return Vec::new() };
     let p = |i: usize| DVec2::new(coords[2 * i], coords[2 * i + 1]);
     indices
-        .chunks_exact(3)
+        .as_chunks::<3>().0.iter()
         .map(|t| {
             let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
             if (b - a).perp_dot(c - a) < 0.0 { [a, c, b] } else { [a, b, c] }

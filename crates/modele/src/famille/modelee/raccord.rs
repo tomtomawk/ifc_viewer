@@ -79,7 +79,7 @@ pub(super) fn capuchon(contour: &[[f64; 2]]) -> Option<Capuchon> {
     let suivant = |k: usize| coins.iter().position(|&c| c == k).map(|i| coins[(i + 1) % coins.len()]);
     let mut ajoutes = Vec::new();
     let mut tris = Vec::new();
-    for t in indices.chunks_exact(3) {
+    for t in indices.as_chunks::<3>().0 {
         let sommets = [coins[t[0]], coins[t[1]], coins[t[2]]];
         let mut tour = Vec::new();
         for e in 0..3 {

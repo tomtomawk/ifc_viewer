@@ -557,8 +557,8 @@ impl Application {
         if let Some(e) = self.dessin2d.edition_contour.as_ref() && e.dessin && e.raccord.is_none() {
             let proche = |p: &[f64; 2]| self.vers_ecran(rect, DVec2::from_array(*p)).is_some_and(|q| q.distance(clic) <= 10.0);
             let trouve = self.dessin2d.dalle.iter().enumerate().filter(|(c, _)| !e.fermee(*c)).find_map(|(c, points)| {
-                if points.last().is_some_and(&proche) { Some((c, false)) }
-                else if points.first().is_some_and(&proche) { Some((c, true)) } else { None }
+                if points.last().is_some_and(proche) { Some((c, false)) }
+                else if points.first().is_some_and(proche) { Some((c, true)) } else { None }
             });
             if let Some((c, premier)) = trouve {
                 let points = &self.dessin2d.dalle[c];
@@ -575,7 +575,7 @@ impl Application {
         }
         let proche = |q: &DVec2| self.vers_ecran(rect, *q).is_some_and(|e| e.distance(clic) <= 10.0);
         let trouve = self.dessin2d.ouverts.iter().enumerate().find_map(|(i, c)| {
-            if c.last().is_some_and(&proche) { Some((i, false)) } else if c.first().is_some_and(&proche) { Some((i, true)) } else { None }
+            if c.last().is_some_and(proche) { Some((i, false)) } else if c.first().is_some_and(proche) { Some((i, true)) } else { None }
         });
         let Some((i, debut)) = trouve else { return false };
         let (mut points, mut k) = self.dessin2d.retirer_ouvert(i);

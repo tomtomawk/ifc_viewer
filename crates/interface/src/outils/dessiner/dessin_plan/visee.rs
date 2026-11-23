@@ -99,11 +99,8 @@ impl Application {
                         .segments_contour(ci, fermee)
                         .into_iter()
                         .enumerate()
-                        .filter_map(|(i, (a, b, k))| {
-                            (!e.glisse
-                                .is_some_and(|g| g.deplace_segment(ci, i, (i + 1) % n, n)))
-                            .then(|| noyau::forme2d::geom_segment(a, b, k))
-                        }),
+                        .filter(|(i, _)| !e.glisse.is_some_and(|g| g.deplace_segment(ci, *i, (*i + 1) % n, n)))
+                        .map(|(_, (a, b, k))| noyau::forme2d::geom_segment(a, b, k)),
                 );
             }
         }

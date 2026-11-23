@@ -894,7 +894,7 @@ impl Renderer {
         let indices = if self.tient("Traits et arêtes", indices.len() / 2 * 2 * size_of::<Vertex>()) { indices } else { &[] };
         let v = &self.sommets_cpu;
         let paires: Vec<Vertex> = indices
-            .chunks_exact(2)
+            .as_chunks::<2>().0.iter()
             .filter_map(|p| Some([*v.get(p[0] as usize)?, *v.get(p[1] as usize)?]))
             .flatten()
             .collect();
@@ -934,8 +934,8 @@ impl Renderer {
         let decoupe = |i: u32| self.decoupe_rangs.get(rang(i)).copied().unwrap_or(false);
         let style = |i: u32| self.style_sommets.get(i as usize).copied().unwrap_or(0);
         let tampon = |d: &wgpu::Device, label: &str, t: &[u32]| Self::tampon(d, label, if t.is_empty() { &[0u8; 16] } else { as_bytes(t) }, wgpu::BufferUsages::INDEX);
-        let tris = self.indices_opaques.chunks_exact(3);
-        let liste = |f: &dyn Fn(&[u32]) -> bool| -> Vec<u32> { tris.clone().filter(|t| f(t)).flatten().copied().collect() };
+        let tris = self.indices_opaques.as_chunks::<3>().0;
+        let liste = |f: &dyn Fn(&[u32]) -> bool| -> Vec<u32> { tris.iter().filter(|t| f(t.as_slice())).flatten().copied().collect() };
         let herbe_t = liste(&|t| herbe(t[0]));
         let ombres_g = liste(&|t| style(t[0]) != 2);
         let ombres_r = liste(&|t| style(t[0]) != 1 && !decoupe(t[0]));

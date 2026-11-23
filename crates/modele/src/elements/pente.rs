@@ -336,7 +336,7 @@ fn domaines_concaves(contours:&[Vec<[f64;2]>],plans:&[Plan])->Result<Option<Doma
         // toujours des morceaux convexes, comme pour le calcul par enveloppe de plans.
         let coords:Vec<_>=poly.iter().flat_map(|p|[p.x-origine.x,p.y-origine.y]).collect();
         let indices=noyau::geometrie::earcut(&coords,&[],2).ok_or("Triangulation impossible.")?;
-        for t in indices.chunks_exact(3) {
+        for t in indices.as_chunks::<3>().0 {
             let mut tri=vec![poly[t[0]],poly[t[1]],poly[t[2]]];
             if aire(&tri)<0.0 {tri.swap(1,2);}faces.push((*q,tri));
         }

@@ -686,7 +686,7 @@ impl Application {
             let o = s.objects.get(obj as usize)?;
             let tris: Vec<[glam::DVec3; 3]> = [o.opaque, o.transparent]
                 .iter()
-                .flat_map(|r| s.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3))
+                .flat_map(|r| s.vertices[r.start as usize..(r.start + r.count) as usize].as_chunks::<3>().0)
                 .map(|t| [0, 1, 2].map(|k| Vec3::from(t[k].pos).as_dvec3()))
                 .collect();
             let aretes = noyau::aretes::aretes(&tris).vives.into_iter().filter(|[a, b]| (b.truncate() - a.truncate()).length() > 1e-4).map(|e| e.map(|q| q.as_vec3())).collect();

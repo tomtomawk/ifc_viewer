@@ -141,7 +141,7 @@ mod tests {
             segments,
         };
         let image = masque(&tuile, 96);
-        for (y, ligne) in image.chunks_exact(96).enumerate() {
+        for (y, ligne) in image.as_chunks::<96>().0.iter().enumerate() {
             let couverture = if matches!(y % 4, 0 | 3) { 128 } else { 0 };
             assert!(ligne.iter().all(|&p| p == couverture));
         }

@@ -23,8 +23,8 @@ pub(crate) fn appliquer(scene: &mut scene::Scene, projet: &modele::Projet) {
             let debut = plage.start as usize;
             let fin = debut + plage.count as usize;
             for (sommets, sortie) in scene.vertices[debut..fin]
-                .chunks_exact(3)
-                .zip(placements[debut..fin].chunks_exact_mut(3))
+                .as_chunks::<3>().0.iter()
+                .zip(placements[debut..fin].as_chunks_mut::<3>().0.iter_mut())
             {
                 let point = |i: usize| glam::Vec3::from(sommets[i].pos).as_dvec3();
                 let normale = (point(1) - point(0))

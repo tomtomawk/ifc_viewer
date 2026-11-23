@@ -529,7 +529,7 @@ mod tests {
             let ctx = egui::Context::default();
             let mut action = None;
             let mut image = |events| {
-                ctx.run_ui(
+                let mut sortie = ctx.run_ui(
                     egui::RawInput {
                         events,
                         ..Default::default()
@@ -539,7 +539,10 @@ mod tests {
                             action = boutons(ui, "conflit-affiche", libre, true);
                         });
                     },
-                )
+                );
+                // sans moteur de rendu : les textures de l'image ne sont envoyées nulle part
+                sortie.textures_delta.clear();
+                sortie
             };
             image(vec![]);
             let sortie = image(vec![]);

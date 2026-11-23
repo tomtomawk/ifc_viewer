@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::panic, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
 use collaboration::{partage, session::Session};
 use modele::Projet;
 use std::time::{Duration, Instant};

@@ -86,7 +86,7 @@ impl Application {
             .find_map(|r| {
                 let d = r.start as usize;
                 scene.vertices[d..d + r.count as usize]
-                    .chunks_exact(3)
+                    .as_chunks::<3>().0.iter()
                     .position(|vs| vs.iter().zip(triangle).all(|(v, p)| v.pos == p.to_array()))
                     .map(|i| d + 3 * i)
             })?;
@@ -218,8 +218,7 @@ impl Application {
         if outil.is_none()
             && ui.input(|i| i.modifiers.alt)
             && let Some(q) = curseur
-        {
-            if let Some((id, face, trait_motif)) = self.visee_motif_surface(rect, q) {
+            && let Some((id, face, trait_motif)) = self.visee_motif_surface(rect, q) {
                 let points =
                     trait_motif.map(|p| self.ecran_3d(rect, face.dans_face(face.depuis_motif(p))));
                 if let [Some(a), Some(b)] = points {
@@ -245,7 +244,6 @@ impl Application {
                     return true;
                 }
             }
-        }
         let Some(mut selection) = self.motif_face.take() else {
             return false;
         };

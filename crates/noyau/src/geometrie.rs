@@ -54,7 +54,7 @@ pub fn trianguler_contours(mut contours: Vec<Vec<[f64; 2]>>, aire_min: f64) -> V
         }
         if let Some(idx) = earcut(&coords, &indices_trous, 2) {
             let pt = |k: usize| [coords[2*k], coords[2*k+1]];
-            out.extend(idx.chunks_exact(3).map(|t| [pt(t[0]), pt(t[1]), pt(t[2])]));
+            out.extend(idx.as_chunks::<3>().0.iter().map(|t| [pt(t[0]), pt(t[1]), pt(t[2])]));
         }
     }
     out

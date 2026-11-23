@@ -176,7 +176,9 @@ def run(exe):
                 attendre(lambda:not commande2("collaboration_etat", "complet")["synchronisation"])
                 conflits=commande2("collaboration_etat", "complet")["copie"]["conflits"]
                 assert conflits,"Conflit numérique attendu entre deux copies"
-                assert commande2("projet_natif")["projet"]["niveaux"][0]["altitude"]==altitude+111,"La vue doit garder la proposition locale"
+                # Pendant un conflit, la vue part de la dernière version partagée ; la proposition
+                # locale incompatible (même champ) reste dans le détail du conflit (COLLABORATION.md).
+                assert commande2("projet_natif")["projet"]["niveaux"][0]["altitude"]==altitude,"La vue doit montrer la version partagée"
                 for tid in conflits:
                     commande2("collaboration_resoudre",{"transaction":tid,"choix":choix})
                 assert not commande2("collaboration_etat", "complet")["copie"]["conflits"]

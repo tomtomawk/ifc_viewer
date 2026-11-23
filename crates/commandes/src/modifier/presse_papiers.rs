@@ -226,7 +226,7 @@ mod tests {
                 allege: 0.0,
             })
             .unwrap();
-        let fragment = copier_selection(&source, &[mur.clone()]).unwrap();
+        let fragment = copier_selection(&source, std::slice::from_ref(&mur)).unwrap();
         assert_eq!(fragment.murs.len(), 1);
         assert_eq!(fragment.ouvertures.len(), 1);
         source.murs[0].nom = "Modification ultérieure".into();

@@ -192,7 +192,7 @@ impl Scene {
             if fin > self.vertices.len() || o.min.x > x || o.max.x < x || o.min.y > y || o.max.y < y || o.min.z > z_max {
                 continue;
             }
-            for t in self.vertices[r.start as usize..fin].chunks_exact(3) {
+            for t in self.vertices[r.start as usize..fin].as_chunks::<3>().0 {
                 let [a, b, c] = [t[0].pos, t[1].pos, t[2].pos];
                 let d = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
                 if d.abs() < 1e-9 {
@@ -230,7 +230,7 @@ impl Scene {
                 if fin > self.vertices.len() {
                     continue;
                 }
-                for t in self.vertices[r.start as usize..fin].chunks_exact(3) {
+                for t in self.vertices[r.start as usize..fin].as_chunks::<3>().0 {
                     let [a, b, c] = [Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos)];
                     // Möller-Trumbore
                     let (e1, e2) = (b - a, c - a);
@@ -350,7 +350,7 @@ impl Scene {
             }
             for r in [o.opaque, o.transparent] {
                 let vs = &self.vertices[r.start as usize..(r.start + r.count) as usize];
-                for (k, t) in vs.chunks_exact(3).enumerate() {
+                for (k, t) in vs.as_chunks::<3>().0.iter().enumerate() {
                     if affichage.is_some_and(|a| !self.montre(r.start as usize + k * 3, a)) { continue; }
                     let (a, b, c) = (Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos));
                     if let Some(d) = ray_tri(origin, dir, a, b, c) {
@@ -385,7 +385,7 @@ impl Scene {
             let mut proche: Option<f32> = None;
             for r in [o.opaque, o.transparent] {
                 let vs = &self.vertices[r.start as usize..(r.start + r.count) as usize];
-                for t in vs.chunks_exact(3) {
+                for t in vs.as_chunks::<3>().0 {
                     let (a, b, c) = (Vec3::from(t[0].pos), Vec3::from(t[1].pos), Vec3::from(t[2].pos));
                     let Some(d) = ray_tri(origin, dir, a, b, c) else { continue };
                     let q = origin + dir * d;

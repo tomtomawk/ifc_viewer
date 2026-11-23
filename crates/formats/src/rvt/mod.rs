@@ -126,13 +126,13 @@ impl Cfb {
         fat_sectors.truncate(n_fat);
         for s in fat_sectors {
             let b = cfb.sector(s)?;
-            cfb.fat.extend(b.chunks_exact(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])));
+            cfb.fat.extend(b.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])));
         }
 
         let dir_data = cfb.chain_bytes(first_dir)?;
-        for e in dir_data.chunks_exact(128) {
+        for e in dir_data.as_chunks::<128>().0 {
             let nl = (u16_at(e, 64) as usize).min(64);
-            let units: Vec<u16> = e[..nl.saturating_sub(2)].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            let units: Vec<u16> = e[..nl.saturating_sub(2)].as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
             let mut size = u64::from(u32_at(e, 120)) | (u64::from(u32_at(e, 124)) << 32);
             if major == 3 {
                 size &= 0xFFFF_FFFF;
@@ -152,7 +152,7 @@ impl Cfb {
         }
         if n_minifat > 0 {
             let m = cfb.chain_bytes(first_minifat)?;
-            cfb.minifat = m.chunks_exact(4).map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
+            cfb.minifat = m.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
         }
         let (root_start, root_size) = (cfb.dirs[0].start, cfb.dirs[0].size);
         if root_size > 0 && root_start < END_OF_CHAIN {
@@ -442,7 +442,7 @@ pub fn parse_basic_file_info(b: &[u8]) -> Vec<(String, String)> {
     // Le bloc texte n'est pas aligné sur 2 octets d'un fichier à l'autre : essayer les deux parités.
     let mut best: Vec<(String, String)> = Vec::new();
     for parity in 0..2 {
-        let units: Vec<u16> = b[parity..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        let units: Vec<u16> = b[parity..].as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
         for run in units.split(|&u| !(u >= 0x20 || u == 0x0A || u == 0x0D || u == 0x09) || (0xD800..0xE000).contains(&u)) {
             if run.len() < 8 {
                 continue;
@@ -470,7 +470,7 @@ pub fn parse_basic_file_info(b: &[u8]) -> Vec<(String, String)> {
 /// Texte UTF-16LE précédé de sa longueur en caractères (u32).
 fn utf16_after_len(b: &[u8]) -> String {
     let body = if b.len() >= 4 && u32_at(b, 0) as usize * 2 <= b.len() - 4 { &b[4..4 + u32_at(b, 0) as usize * 2] } else { b };
-    let units: Vec<u16> = body.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    let units: Vec<u16> = body.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
     String::from_utf16_lossy(&units).trim_end_matches('\0').to_string()
 }
 
@@ -543,7 +543,7 @@ pub fn decode_png_rgba(data: &[u8]) -> Option<(usize, usize, Vec<u8>)> {
     let (w, h) = (out.width as usize, out.height as usize);
     let rgba = match out.color_type {
         png::ColorType::Rgba => buf.get(..w * h * 4)?.to_vec(),
-        png::ColorType::GrayscaleAlpha => buf.get(..w * h * 2)?.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        png::ColorType::GrayscaleAlpha => buf.get(..w * h * 2)?.as_chunks::<2>().0.iter().flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
         _ => return None,
     };
     Some((w, h, rgba))

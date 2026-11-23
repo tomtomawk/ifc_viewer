@@ -93,7 +93,7 @@ impl Tranche<'_> {
         let coords: Vec<f64> = q.iter().flat_map(|p| [p.x, p.y]).collect();
         let indices = noyau::geometrie::earcut(&coords, &[], 2)
             .ok_or("Sous-face d'escalier : marche invalide.")?;
-        for t in indices.chunks_exact(3) {
+        for t in indices.as_chunks::<3>().0 {
             let mut ix = [t[0], t[1], t[2]];
             if (q[ix[1]] - q[ix[0]]).perp_dot(q[ix[2]] - q[ix[0]]) < 0.0 {
                 ix.swap(1, 2);

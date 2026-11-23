@@ -16,8 +16,6 @@ Priorités : **P0** défaut présent à corriger ; **P1** frein d'usage ; **P2**
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
 | T1 | Tests de fichiers malformés, reste : balayage aléatoire des RVT (aucun fichier RVT d'exemple dans le dépôt) ; `feuilles::visible_dans_vue` cherche la catégorie de chaque élément coté dans toutes les collections (coût quadratique sur un gros modèle) ; formule de nomenclature à champs partagés sans cycle (arbre de 16 champs au plus, chacun cité plusieurs fois) : coût exponentiel possible | P3 | `crates/formats/src/rvt/` |
-| T2 | Test `projet::conflits::tests::boutons_de_resolution_ciblent_le_conflit_affiche` en échec sur `master` (constaté le 23/11/2026, `8015406`) : epaint s'arrête sur « Dropped TexturesDelta with 1 unapplied deltas » (contexte egui du test qui ne vide pas ses textures) | P0 | `crates/interface/src/projet/conflits.rs` |
-| T3 | `tools/test-pilote.py` en échec sur `master` (constaté le 23/11/2026, `8015406`, Windows) : assertion « La vue doit garder la proposition locale » (collaboration à deux instances, ligne 179). Clippy local 1.99 : lints récents (`chunks_exact_to_as_chunks`, `needless_borrows_for_generic_args`, `expect` de `crates/app/build.rs`) hors des fichiers des feuilles | P0 | `tools/test-pilote.py`, `crates/collaboration/` |
 | G1 | Reste du gabarit pendant l'édition : les textures livrées (`gabarit:textures/…`, `maillage::textures_gabarit`) restent embarquées et désignées par les matériaux ; à copier dans le dossier du projet (ou une bibliothèque) avant de cesser d'embarquer le gabarit | P3 | `crates/maillage/src/textures_gabarit.rs` |
 
 ## 2. Réactivité

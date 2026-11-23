@@ -144,7 +144,7 @@ impl Application {
                                 ui.add_sized([champ, 20.0], egui::DragValue::new(&mut self.dessin2d.esc_decalage_haut).speed(10.0).dimensions()).on_hover_text("Décalage de l'arrivée par rapport au niveau");
                             }
                         } else {
-                            let texte = self.dessin2d.esc_bas.as_deref().map_or(nom_plan.clone(), &nom);
+                            let texte = self.dessin2d.esc_bas.as_deref().map_or(nom_plan.clone(), nom);
                             egui::ComboBox::from_id_salt("esc_bas").width(largeur).wrap().selected_text(texte).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.dessin2d.esc_bas, None, format!("Niveau du plan ({nom_plan})"));
                                 for (id, n) in &niveaux {

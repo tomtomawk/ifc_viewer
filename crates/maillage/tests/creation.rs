@@ -61,7 +61,7 @@ fn dalle_creation_contour_et_relecture() {
     assert_eq!(relu.dalles.len(), 2);
     let s = maillage::depuis_natif(&relu, std::path::Path::new("dalle.modele.json")).unwrap();
     assert_eq!(s.objects.len(), 2);
-    let volume: f64 = s.objects.iter().map(|o| s.vertices[o.opaque.start as usize..(o.opaque.start + o.opaque.count) as usize].chunks_exact(3).map(|t| {
+    let volume: f64 = s.objects.iter().map(|o| s.vertices[o.opaque.start as usize..(o.opaque.start + o.opaque.count) as usize].as_chunks::<3>().0.iter().map(|t| {
         let p = [0, 1, 2].map(|k| glam::Vec3::from(t[k].pos).as_dvec3());
         p[0].dot(p[1].cross(p[2])) / 6.0
     }).sum::<f64>()).sum();
@@ -162,7 +162,7 @@ fn mur_creation_enregistrement_relecture() {
     // Le nombre de triangles dépend de la tessellation ; le volume fermé
     // ci-dessous est l’invariant géométrique utile après changement des identités.
     assert!(s.triangles >= 24);
-    let volume: f64 = s.objects.iter().map(|o| s.vertices[o.opaque.start as usize..(o.opaque.start+o.opaque.count) as usize].chunks_exact(3).map(|t| {
+    let volume: f64 = s.objects.iter().map(|o| s.vertices[o.opaque.start as usize..(o.opaque.start+o.opaque.count) as usize].as_chunks::<3>().0.iter().map(|t| {
         let p = [0,1,2].map(|k| glam::Vec3::from(t[k].pos).as_dvec3());
         p[0].dot(p[1].cross(p[2])) / 6.0
     }).sum::<f64>()).sum();

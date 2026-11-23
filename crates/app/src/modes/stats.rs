@@ -43,7 +43,7 @@ pub(crate) fn stats(path: PathBuf) -> i32 {
                 for o in &s.objects {
                     let mut v = 0.0f64;
                     for r in [o.opaque, o.transparent] {
-                        for t in s.vertices[r.start as usize..(r.start + r.count) as usize].chunks_exact(3) {
+                        for t in s.vertices[r.start as usize..(r.start + r.count) as usize].as_chunks::<3>().0 {
                             let [a, b, c] = [0, 1, 2].map(|i| glam::Vec3::from(t[i].pos).as_dvec3());
                             v += a.dot(b.cross(c)) / 6.0;
                         }

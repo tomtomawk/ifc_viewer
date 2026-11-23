@@ -72,7 +72,7 @@ pub fn prisme(contour: &[[f64; 2]], bas: f64, haut: f64) -> Vec<Tri> {
             a[0] * b[1] - b[0] * a[1]
         })
         .sum();
-    for t in indices.chunks_exact(3) {
+    for t in indices.as_chunks::<3>().0 {
         let mut top = [p(t[0], haut), p(t[1], haut), p(t[2], haut)];
         if (top[1] - top[0]).cross(top[2] - top[0]).z < 0.0 {
             top.swap(1, 2);

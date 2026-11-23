@@ -215,7 +215,7 @@ impl<'s> Lecteur<'s, '_> {
                 let n = self.u32()? as usize;
                 let s = self.b.get(self.o..self.o + 2 * n).filter(|_| n <= 100_000);
                 let s = s.ok_or_else(|| format!("chaîne de {n} caractères à {}", self.o - 4))?;
-                let units: Vec<u16> = s.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                let units: Vec<u16> = s.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
                 self.o += 2 * n;
                 Val::Str(String::from_utf16_lossy(&units))
             }

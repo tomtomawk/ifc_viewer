@@ -242,7 +242,7 @@ fn scene_section(tris: Vec<[DVec3; 3]>) -> Scene {
 }
 
 fn aire_poche(v: &[Vertex]) -> f64 {
-    v.chunks_exact(3).filter(|t| t[0].color == [75, 75, 75, 255]).map(|t| {
+    v.as_chunks::<3>().0.iter().filter(|t| t[0].color == [75, 75, 75, 255]).map(|t| {
         let p = [0, 1, 2].map(|k| Vec3::from(t[k].pos).as_dvec3());
         (p[1] - p[0]).cross(p[2] - p[0]).length() * 0.5
     }).sum()

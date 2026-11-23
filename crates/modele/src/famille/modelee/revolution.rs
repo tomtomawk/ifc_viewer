@@ -59,7 +59,7 @@ impl Revolution {
         if !ferme {
             let coords: Vec<_> = contour.iter().flatten().copied().collect();
             let Some(indices) = noyau::geometrie::earcut(&coords, &[], 2) else { return Vec::new(); };
-            for t in indices.chunks_exact(3) {
+            for t in indices.as_chunks::<3>().0 {
                 let mut ids = [t[0],t[1],t[2]];
                 let a = DVec2::from_array(contour[ids[0]]);
                 let b = DVec2::from_array(contour[ids[1]]);

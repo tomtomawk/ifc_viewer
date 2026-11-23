@@ -70,7 +70,7 @@ impl Terrain {
         let indices = noyau::geometrie::earcut(&coords, &[], 2).ok_or("Triangulation du terrain impossible.")?;
         if indices.is_empty() || indices.len() % 3 != 0 { return Err("Triangulation du terrain impossible.".into()); }
         let mut sommets: Vec<DVec3> = self.contour.iter().copied().map(DVec3::from_array).collect();
-        let mut faces: Vec<[usize; 3]> = indices.chunks_exact(3).map(|t| [t[0], t[1], t[2]]).collect();
+        let mut faces: Vec<[usize; 3]> = indices.as_chunks::<3>().0.iter().map(|t| [t[0], t[1], t[2]]).collect();
         for &point in &self.points {
             let p = DVec2::new(point[0], point[1]);
             if sommets.iter().any(|v| v.truncate().distance(p) < 1e-6) { return Err("Deux points du terrain ont la même position.".into()); }
