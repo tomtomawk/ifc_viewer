@@ -494,7 +494,7 @@ fn lignes_vues_stylees_par_objet() {
     let vu = |e: u64| Primitive { forme: Forme::Segments(vec![[DVec3::ZERO, DVec3::new(1.0, 0.0, 0.0)]]), style: noyau::trace2d::Style { couleur: [0, 0, 0, 255], epaisseur: 0.0 }, role: Role::Vu, element: Some(e) };
     s.traits_vus.insert(id, scene::TraitVu { epaisseur: 0.35, tirets: vec![3.0, 2.0] });
     // 1 m au 1:100 = 10 mm papier : tirets de 3 mm (0,3 m), blancs de 2 mm (0,2 m)
-    let p = super::styler_vus(vec![vu(id), vu(id + 1)], &s, DVec3::X, DVec3::Y, 100.0);
+    let p = super::styler_traits(vec![vu(id), vu(id + 1)], &s, DVec3::X, DVec3::Y, 100.0);
     assert_eq!(p[0].style.epaisseur, 0.35);
     let Forme::Segments(t) = &p[0].forme else { panic!() };
     let longueurs: Vec<f64> = t.iter().map(|[a, b]| ((b.x - a.x) * 1000.0).round() / 1000.0).collect();
@@ -502,4 +502,12 @@ fn lignes_vues_stylees_par_objet() {
     assert!((t[1][0].x - 0.5).abs() < 1e-9);
     assert_eq!(p[1].style.epaisseur, 0.0);
     assert!(matches!(&p[1].forme, Forme::Segments(v) if v.len() == 1));
+    // contour coupé fermé (carré de 1 m) : tirets de coupe, épaisseur de la bande gardée
+    s.traits_coupe.insert(id, scene::TraitVu { epaisseur: 0.5, tirets: vec![5.0, 5.0] });
+    let carre = vec![DVec3::ZERO, DVec3::X, DVec3::new(1.0, 1.0, 0.0), DVec3::Y];
+    let contour = Primitive { forme: Forme::Polyligne { points: carre, fermee: true }, style: noyau::trace2d::Style { couleur: [0, 0, 0, 255], epaisseur: 0.18 }, role: Role::Coupe, element: Some(id) };
+    let p = super::styler_traits(vec![contour], &s, DVec3::X, DVec3::Y, 100.0);
+    assert_eq!(p[0].style.epaisseur, 0.18);
+    // 4 côtés de 1 m au 1:100, tirets de 0,5 m : un tiret par côté
+    assert!(matches!(&p[0].forme, Forme::Segments(v) if v.len() == 4), "{:?}", p[0].forme);
 }

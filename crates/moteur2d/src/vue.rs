@@ -272,31 +272,51 @@ pub(super) fn vu_limites(scene: &Scene, visible: &[bool], affichage: Affichage, 
         .collect()
 }
 
-/// Lignes vues stylées par objet (styles d'objets, `Scene::traits_vus`) : épaisseur et
-/// tirets en mm du papier à l'échelle `echelle` (dénominateur), tirets mesurés sur la
-/// projection de chaque arête dans le plan (`droite`, `haut`).
-pub fn styler_vus(mut prims: Vec<Primitive>, scene: &Scene, droite: DVec3, haut: DVec3, echelle: f64) -> Vec<Primitive> {
-    for p in prims.iter_mut().filter(|p| p.role == Role::Vu) {
-        let Some(t) = p.element.and_then(|e| scene.traits_vus.get(&e)) else { continue };
-        p.style.epaisseur = t.epaisseur;
+/// Segments découpés en tirets : `motif` (longueurs alternées trait, blanc… en unités
+/// de la scène), longueur de chaque segment mesurée par `longueur`. Un segment de
+/// longueur nulle ou trop découpé est gardé entier.
+fn tireter(segments: &[[DVec3; 2]], motif: &[f64], longueur: &dyn Fn(DVec3) -> f64) -> Vec<[DVec3; 2]> {
+    let pas: f64 = motif.iter().sum();
+    let mut out = Vec::new();
+    for [a, b] in segments {
+        let d = *b - *a;
+        let l = longueur(d);
+        if l <= 1e-12 || l / pas > 10_000.0 { out.push([*a, *b]); continue; }
+        let (mut x, mut k) = (0.0, 0);
+        while x < l {
+            let fin = (x + motif[k % motif.len()]).min(l);
+            if k % 2 == 0 && fin > x { out.push([*a + d * (x / l), *a + d * (fin / l)]); }
+            x = fin;
+            k += 1;
+        }
+    }
+    out
+}
+
+/// Traits stylés par objet (styles d'objets) à l'échelle `echelle` (dénominateur) :
+/// lignes vues (`Scene::traits_vus` : épaisseur et tirets mesurés sur leur projection
+/// dans le plan `droite`, `haut`) et contours coupés (`Scene::traits_coupe` : tirets ;
+/// l'épaisseur des contours est déjà celle de leur bande ou de la catégorie).
+pub fn styler_traits(mut prims: Vec<Primitive>, scene: &Scene, droite: DVec3, haut: DVec3, echelle: f64) -> Vec<Primitive> {
+    for p in prims.iter_mut().filter(|p| matches!(p.role, Role::Vu | Role::Coupe)) {
+        let vue = p.role == Role::Vu;
+        let table = if vue { &scene.traits_vus } else { &scene.traits_coupe };
+        let Some(t) = p.element.and_then(|e| table.get(&e)) else { continue };
+        if vue { p.style.epaisseur = t.epaisseur; }
         let motif: Vec<f64> = t.tirets.iter().map(|x| x.max(0.0) * echelle / 1000.0).collect();
         if motif.len() < 2 || motif.iter().sum::<f64>() <= 1e-9 { continue; }
-        let Forme::Segments(segments) = &p.forme else { continue };
-        let mut out = Vec::new();
-        for [a, b] in segments {
-            let d = *b - *a;
-            let l = d.dot(droite).hypot(d.dot(haut));
-            // arête vue de bout ou trop découpée : gardée entière
-            if l <= 1e-12 || l / motif.iter().sum::<f64>() > 10_000.0 { out.push([*a, *b]); continue; }
-            let (mut x, mut k) = (0.0, 0);
-            while x < l {
-                let fin = (x + motif[k % motif.len()]).min(l);
-                if k % 2 == 0 && fin > x { out.push([*a + d * (x / l), *a + d * (fin / l)]); }
-                x = fin;
-                k += 1;
+        let segments: Vec<[DVec3; 2]> = match &p.forme {
+            Forme::Segments(s) => s.clone(),
+            Forme::Polyligne { points, fermee } if points.len() > 1 => {
+                let mut s: Vec<[DVec3; 2]> = points.windows(2).map(|w| [w[0], w[1]]).collect();
+                if *fermee && points.len() > 2 { s.push([points[points.len() - 1], points[0]]); }
+                s
             }
-        }
-        p.forme = Forme::Segments(out);
+            _ => continue,
+        };
+        // lignes vues : longueur projetée ; contours coupés : dans le plan de coupe
+        let longueur = |d: DVec3| if vue { d.dot(droite).hypot(d.dot(haut)) } else { d.length() };
+        p.forme = Forme::Segments(tireter(&segments, &motif, &longueur));
     }
     prims
 }

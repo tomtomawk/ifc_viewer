@@ -91,7 +91,7 @@ impl Projet {
             let nom = c.libelle().to_lowercase();
             if let Some(m) = s.materiau.as_ref().filter(|m| self.materiau(m).is_none()) { return Err(format!("Style des {nom} : matériau « {m} » introuvable.")); }
             if [s.plume_coupe, s.plume_projection].iter().flatten().any(|p| !(1..=12).contains(p)) { return Err(format!("Style des {nom} : plume hors de 1 à 12.")); }
-            if let Some(t) = s.type_trait.as_ref().filter(|t| !self.types_traits.iter().any(|x| &x.id == *t)) { return Err(format!("Style des {nom} : type de trait « {t} » introuvable.")); }
+            if let Some(t) = [&s.type_trait_coupe, &s.type_trait_projection].into_iter().flatten().find(|t| !self.types_traits.iter().any(|x| &x.id == *t)) { return Err(format!("Style des {nom} : type de trait « {t} » introuvable.")); }
         }
         for t in &self.terrains {
             t.triangles()?;

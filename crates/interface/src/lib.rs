@@ -1044,6 +1044,7 @@ impl eframe::App for Application {
                     self.vue_nomenclature(ui);
                 } else if self.jeu_actif().is_some() {
                     self.vue_jeu(ui);
+                    bas_barre = self.feuilles.bas_barre;
                 } else {
                     self.viewport(ui);
                     if self.scene.is_some() { bas_barre = self.dessin2d.bas_barre; }

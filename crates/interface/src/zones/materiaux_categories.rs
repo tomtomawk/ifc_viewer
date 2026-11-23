@@ -27,6 +27,21 @@ fn choix_plume(ui: &mut egui::Ui, id: (CategorieMateriau, &str), plume: &mut Opt
     });
 }
 
+/// Liste déroulante d'un type de trait du projet : « Défaut » ou un type.
+fn choix_trait(ui: &mut egui::Ui, id: (CategorieMateriau, &str), choix: &mut Option<String>, projet: &modele::Projet) {
+    let nom = choix.as_ref().map(|t| projet.type_trait(t).nom).unwrap_or_else(|| "Défaut".into());
+    egui::ComboBox::from_id_salt(id).width(110.0).selected_text(nom).show_ui(ui, |ui| {
+        if ui.selectable_label(choix.is_none(), "Défaut").clicked() {
+            *choix = None;
+        }
+        for t in &projet.types_traits {
+            if ui.selectable_label(choix.as_deref() == Some(t.id.as_str()), &t.nom).clicked() {
+                *choix = Some(t.id.clone());
+            }
+        }
+    });
+}
+
 impl Application {
     /// Ouvre la fenêtre sur la table du projet.
     pub(crate) fn ouvrir_materiaux_categories(&mut self, ctx: &egui::Context) {
@@ -48,8 +63,8 @@ impl Application {
         egui::Window::new("Styles d'objets").id(cle()).open(&mut ouvert).resizable(false).collapsible(false).show(ctx, |ui| {
             ui.label(RichText::new("Un élément sans réglage propre prend celui de sa catégorie. Le matériau donne couleur, motif de coupe et motif de surface ; la plume de coupe s'efface devant celle d'une couche réglée.").small().weak());
             ui.add_space(4.0);
-            egui::Grid::new("grille_styles_objets").num_columns(6).spacing([10.0, 4.0]).striped(true).show(ui, |ui| {
-                for titre in ["Catégorie", "", "Matériau", "Plume de coupe", "Plume de projection", "Type de trait"] {
+            egui::Grid::new("grille_styles_objets").num_columns(7).spacing([10.0, 4.0]).striped(true).show(ui, |ui| {
+                for titre in ["Catégorie", "", "Matériau", "Plume de coupe", "Trait de coupe", "Plume de projection", "Trait de projection"] {
                     ui.label(RichText::new(titre).strong());
                 }
                 ui.end_row();
@@ -73,23 +88,14 @@ impl Application {
                         }
                     });
                     choix_plume(ui, (c, "coupe"), &mut s.plume_coupe, &plumes);
+                    choix_trait(ui, (c, "trait_coupe"), &mut s.type_trait_coupe, projet);
                     choix_plume(ui, (c, "projection"), &mut s.plume_projection, &plumes);
-                    let nom_trait = s.type_trait.as_ref().map(|id| projet.type_trait(id).nom).unwrap_or_else(|| "Défaut".into());
-                    egui::ComboBox::from_id_salt((c, "trait")).width(120.0).selected_text(nom_trait).show_ui(ui, |ui| {
-                        if ui.selectable_label(s.type_trait.is_none(), "Défaut").clicked() {
-                            s.type_trait = None;
-                        }
-                        for t in &projet.types_traits {
-                            if ui.selectable_label(s.type_trait.as_deref() == Some(t.id.as_str()), &t.nom).clicked() {
-                                s.type_trait = Some(t.id.clone());
-                            }
-                        }
-                    });
+                    choix_trait(ui, (c, "trait_projection"), &mut s.type_trait_projection, projet);
                     if s == StyleCategorie::default() { table.remove(&c); } else { table.insert(c, s); }
                     ui.end_row();
                 }
             });
-            ui.label(RichText::new("Plume et type de trait de projection : dessins de vue, feuilles et exports ; la vue à l'écran trace les lignes vues à un pixel.").small().weak());
+            ui.label(RichText::new("Coupe : à l'écran et dans les exports. Projection : dessins de vue, feuilles et exports ; la vue à l'écran trace les lignes vues à un pixel.").small().weak());
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 if ui.add_enabled(table != projet.styles_categories, egui::Button::new("Appliquer")).clicked() {

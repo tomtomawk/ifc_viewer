@@ -84,12 +84,15 @@ pub struct StyleCategorie {
     /// Plume (1 à 12) des contours coupés, si la couche n'a pas la sienne.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plume_coupe: Option<u8>,
+    /// Type de trait des contours coupés (id d'un type du projet).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_trait_coupe: Option<String>,
     /// Plume (1 à 12) des lignes vues en projection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plume_projection: Option<u8>,
     /// Type de trait des lignes vues en projection (id d'un type du projet).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub type_trait: Option<String>,
+    pub type_trait_projection: Option<String>,
 }
 
 impl Projet {
@@ -120,10 +123,15 @@ impl Projet {
     /// celle du type de trait) et tirets (mm du papier) ; None sans réglage.
     pub fn trait_projection(&self, categorie: CategorieMateriau) -> Option<(f64, Vec<f64>)> {
         let s = self.styles_categories.get(&categorie)?;
-        let t = s.type_trait.as_deref().map(|id| self.type_trait(id));
+        let t = s.type_trait_projection.as_deref().map(|id| self.type_trait(id));
         if s.plume_projection.is_none() && t.is_none() { return None; }
         let epaisseur = s.plume_projection.map(|p| self.epaisseur_plume(p)).or(t.as_ref().map(|t| t.epaisseur)).unwrap_or(0.0);
         Some((epaisseur, t.map(|t| t.tirets).unwrap_or_default()))
+    }
+
+    /// Tirets (mm du papier) des contours coupés d'une catégorie ; vide : continus.
+    pub fn tirets_coupe(&self, categorie: CategorieMateriau) -> Vec<f64> {
+        self.styles_categories.get(&categorie).and_then(|s| s.type_trait_coupe.as_deref()).map(|id| self.type_trait(id).tirets).unwrap_or_default()
     }
 }
 
@@ -153,7 +161,7 @@ mod tests {
         p.styles_categories.remove(&CategorieMateriau::Poteaux);
         p.styles_categories.insert(CategorieMateriau::Poteaux, StyleCategorie { plume_coupe: Some(13), ..Default::default() });
         assert!(p.verifier().is_err(), "plume hors de 1 à 12");
-        p.styles_categories.insert(CategorieMateriau::Poteaux, StyleCategorie { type_trait: Some("absent".into()), ..Default::default() });
+        p.styles_categories.insert(CategorieMateriau::Poteaux, StyleCategorie { type_trait_coupe: Some("absent".into()), ..Default::default() });
         assert!(p.verifier().is_err(), "type de trait absent");
     }
 
@@ -180,7 +188,7 @@ fn plumes_et_trait_de_la_categorie() {
     assert_eq!(p.trait_coupe(None, CategorieMateriau::Poteaux), defaut);
     assert_eq!(p.trait_coupe(Some(&couche), CategorieMateriau::Murs), p.trait_couche(&couche));
     assert!(p.trait_projection(CategorieMateriau::Murs).is_none());
-    p.styles_categories.insert(CategorieMateriau::Murs, StyleCategorie { plume_coupe: Some(9), plume_projection: Some(2), type_trait: Some("tirets".into()), ..Default::default() });
+    p.styles_categories.insert(CategorieMateriau::Murs, StyleCategorie { plume_coupe: Some(9), plume_projection: Some(2), type_trait_projection: Some("tirets".into()), ..Default::default() });
     p.types_traits.push(crate::documentation::TypeTrait { id: "tirets".into(), nom: "Tirets".into(), epaisseur: 0.25, tirets: vec![3.0, 1.5] });
     let plumes = p.epaisseurs_plumes();
     // la plume réglée sur la couche prime, puis celle de la catégorie
@@ -188,5 +196,9 @@ fn plumes_et_trait_de_la_categorie() {
     assert_eq!(p.trait_coupe(Some(&couche), CategorieMateriau::Murs), plumes[8]);
     assert_eq!(p.trait_coupe(None, CategorieMateriau::Murs), plumes[8]);
     assert_eq!(p.trait_projection(CategorieMateriau::Murs), Some((plumes[1], vec![3.0, 1.5])));
+    // coupe et projection séparées : pas de tirets en coupe sans type de coupe
+    assert!(p.tirets_coupe(CategorieMateriau::Murs).is_empty());
+    p.styles_categories.get_mut(&CategorieMateriau::Murs).unwrap().type_trait_coupe = Some("tirets".into());
+    assert_eq!(p.tirets_coupe(CategorieMateriau::Murs), vec![3.0, 1.5]);
     p.verifier().unwrap();
 }

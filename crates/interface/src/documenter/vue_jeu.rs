@@ -394,7 +394,8 @@ impl Application {
             }
             if resp.double_clicked() {
                 if en_trace {
-                    if let Some(a) = etat.trace.terminer(false) && let Some(k) = k_trace {
+                    let fermee = etat.trace.fermer;
+                    if let Some(a) = etat.trace.terminer(fermee) && let Some(k) = k_trace {
                         let mut f = feuilles[k].clone();
                         f.annotations.push(a);
                         commandes.push(Commande::Feuille { feuille: f });
@@ -418,7 +419,7 @@ impl Application {
             // clavier : Entrée achève la polyligne, Échap annule le tracé puis l'outil
             if en_trace && etat.trace.texte.is_none() && !ui.ctx().egui_wants_keyboard_input() {
                 if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
-                    && let Some(a) = etat.trace.terminer(false) && let Some(k) = k_trace {
+                    && let Some(a) = { let fermee = etat.trace.fermer; etat.trace.terminer(fermee) } && let Some(k) = k_trace {
                         let mut f = feuilles[k].clone();
                         f.annotations.push(a);
                         commandes.push(Commande::Feuille { feuille: f });
@@ -581,15 +582,35 @@ impl Application {
             let r = page_ajout;
             painter.add(egui::Shape::dashed_line(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], egui::Stroke::new(1.5, gris), 8.0, 6.0));
             painter.text(r.center(), egui::Align2::CENTER_CENTER, "+ Ajouter une feuille", egui::FontId::proportional(16.0), gris);
-            if self.error.is_none() {
-                let aide = if feuilles.is_empty() {
-                    "Cliquer sur la page en pointillés pour ajouter une feuille."
-                } else if en_trace {
-                    etat.trace.outil.consigne(etat.trace.points.len())
-                } else {
-                    "Déposer une vue ou une nomenclature · Documenter : Texte, Polyligne, Cercle, Cartouche pour dessiner sur la feuille · Glisser un objet, un cartouche ou le titre pour le déplacer · Suppr pour retirer · Double-clic : ouvrir la vue, modifier la famille du cartouche ou le texte · Molette pour zoomer"
-                };
-                crate::socle::messages::consigne_vue(ui, rect, 0.0, aide);
+            // outil actif : bandeau de dessin (options, Valider, Annuler), consigne et
+            // messages en dessous ; sans outil, ni bandeau ni consigne
+            etat.bas_barre = 0.0;
+            if en_trace {
+                use crate::outils::bandeau::{bandeau, Action, Fin};
+                let trace = &mut etat.trace;
+                let mut options = |ui: &mut egui::Ui| annot::options_bandeau(ui, trace);
+                let avec_options = outil == OutilFeuille::Polyligne;
+                let retour = bandeau(ui, rect, "feuille", Fin::COMPLETE, if avec_options { Some(&mut options) } else { None });
+                etat.bas_barre = retour.bas;
+                match retour.action {
+                    Some(Action::Valider) => {
+                        let fermee = etat.trace.fermer;
+                        if let Some(a) = etat.trace.terminer(fermee) && let Some(k) = k_trace {
+                            let mut f = feuilles[k].clone();
+                            f.annotations.push(a);
+                            commandes.push(Commande::Feuille { feuille: f });
+                        }
+                        terminer_outil = true;
+                    }
+                    Some(Action::Annuler) => {
+                        etat.trace.points.clear();
+                        terminer_outil = true;
+                    }
+                    None => {}
+                }
+                if !self.message_visible() {
+                    crate::socle::messages::consigne_vue(ui, rect, etat.bas_barre, etat.trace.outil.consigne(etat.trace.points.len()));
+                }
             }
             let curseur = if etat.glisse.is_some() || etat.glisse_feuille.is_some() {
                 Some(egui::CursorIcon::Grabbing)
@@ -608,6 +629,11 @@ impl Application {
         } else {
             ui.centered_and_justified(|ui| ui.label("Les feuilles demandent un projet natif."));
         }
+        // réglages du bandeau rendus à leurs outils (création dans les vues comprise)
+        if etat.trace.hauteur_texte > 0.0 {
+            self.ruban_edition.definir_nombre_option(crate::zones::ruban::Outil::Texte, 0, etat.trace.hauteur_texte);
+        }
+        self.dessin2d.trait_creation = etat.trace.type_trait.clone();
         self.feuilles = etat;
         if terminer_outil {
             self.ruban_edition.annuler();

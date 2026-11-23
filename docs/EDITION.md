@@ -198,12 +198,13 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   ossature). Les éléments du type suivent ses couches.
   **Styles d'objets** (Sortie → Graphisme) : pour chaque catégorie (murs, dalles, sols,
   plafonds, toitures, terre-pleins, portes, fenêtres, poteaux, poutres, escaliers,
-  garde-corps, composants, terrain), matériau par défaut, plume de coupe, plume de
-  projection et type de trait ; « Défaut » garde le réglage du logiciel. Un élément sans
+  garde-corps, composants, terrain), matériau par défaut, plume et type de trait de
+  coupe, plume et type de trait de projection ; « Défaut » garde le réglage du logiciel. Un élément sans
   matériau propre (couche, type, paramètre de famille) prend celui de sa catégorie :
   couleur, motif de coupe et motif de surface. La plume de coupe donne l'épaisseur des
   contours coupés (à l'écran et dans les exports), sauf pour une couche dont la plume est
-  réglée dans son type. Plume de projection et type de trait donnent l'épaisseur et les
+  réglée dans son type ; le trait de coupe en donne les tirets. Plume et trait de
+  projection donnent l'épaisseur et les
   tirets des lignes vues dans les dessins de vue, sur les feuilles et dans les exports ;
   la vue à l'écran trace ses lignes vues à un pixel. Un nouveau projet reçoit les
   matériaux du gabarit (béton pour les dalles, poteaux, poutres et escaliers, mur
@@ -614,7 +615,9 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   paysage/portrait, dimensions) ; vue placée (échelle et position).
   **Dessiner sur une feuille** : avec un jeu ouvert, les outils du ruban Documenter
   s'appliquent au papier (mm, origine en bas à gauche) ; ceux qui ne s'y appliquent pas
-  sont grisés. Leurs réglages sont dans la palette de Propriétés, comme ailleurs.
+  sont grisés. Leurs réglages sont dans la palette de Propriétés, comme ailleurs ; un
+  outil actif ouvre le bandeau de dessin en haut à gauche (polyligne : Fermée ; Valider,
+  Annuler), consigne et messages s'affichent dessous. Sans outil, pas de consigne.
   **Texte** : clic, frappe en place, Entrée valide, Maj+Entrée passe à la ligne, Échap
   abandonne ; hauteur réglée dans la palette ; champs `{projet}`, `{feuille}`,
   `{numero}`. **Polyligne** : un clic par sommet, Entrée ou double-clic pour finir, clic

@@ -159,6 +159,8 @@ pub(crate) struct EtatFeuilles {
     pub defiler_vers: Option<String>,
     /// Outil d'annotation actif, tracé et texte en cours.
     pub trace: crate::documenter::annotations_feuille::TraceFeuille,
+    /// Bas du bandeau de dessin (depuis le haut de la vue) : messages en dessous.
+    pub(crate) bas_barre: f32,
     /// Position écran du coin bas gauche de chaque feuille affichée (pilote : `ecran`).
     pub(crate) origines: HashMap<String, egui::Pos2>,
 }

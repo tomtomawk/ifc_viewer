@@ -110,6 +110,8 @@ impl Application {
             (Some(s), Some(p)) => {
                 // objets inchangés depuis la dernière coupe : repris du cache (P1)
                 let prims = moteur2d::coupe_avec_cache(s, &self.visible, affichage, p, self.echelle, poche, &mut self.cache_coupe);
+                // styles d'objets : tirets des contours coupés (dans le plan de coupe)
+                let prims = moteur2d::styler_traits(prims, s, glam::DVec3::X, glam::DVec3::Y, self.echelle);
                 noyau::chrono::chrono_lent(&format!("coupe : coupe des objets ({} recoupés)", self.cache_coupe.recoupes), &mut t_etape);
                 moteur2d::sommets(&|e| s.object_of.get(&e).copied(), &prims, p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
             }
@@ -159,9 +161,9 @@ impl Application {
         primitives.extend(self.primitives_au_dessus_plan());
         let coupe = self.plan_coupe();
         if let Some(p) = coupe {
-            primitives.extend(moteur2d::coupe(s, &self.visible, self.affichage(), p, self.echelle, self.poche_style()));
+            primitives.extend(moteur2d::styler_traits(moteur2d::coupe(s, &self.visible, self.affichage(), p, self.echelle, self.poche_style()), s, droite, haut, self.echelle));
         }
-        primitives.extend(moteur2d::styler_vus(moteur2d::vu(s, &self.visible, self.affichage(), droite, haut, -f, coupe, 4096), s, droite, haut, self.echelle));
+        primitives.extend(moteur2d::styler_traits(moteur2d::vu(s, &self.visible, self.affichage(), droite, haut, -f, coupe, 4096), s, droite, haut, self.echelle));
         primitives = moteur2d::cadrer_primitives(primitives, &self.cadrage_vue(), -f);
         // éléments 2D de la vue Revit ouverte, s'ils sont affichés (repère du fichier →
         // repère de la scène)

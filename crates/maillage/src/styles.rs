@@ -1,17 +1,19 @@
-//! Styles d'objets par catégorie (E1) appliqués aux objets de la scène : épaisseur des
-//! contours coupés sans bande de matériau (ouvertures, composants, garde-corps) et
-//! épaisseur et tirets des lignes vues en projection.
+//! Styles d'objets par catégorie (E1) appliqués aux objets de la scène : contours coupés
+//! (épaisseur des objets sans bande de matériau, tirets) et lignes vues en projection
+//! (épaisseur, tirets).
 use modele::identifiants::id_natif;
 use modele::{CategorieMateriau as Cat, Projet};
 use ifc_base::step::IdMap;
 use scene::TraitVu;
 
 /// Tables de la scène : contour coupé (mm du papier) et lignes vues, par objet.
-pub(crate) fn traits(projet: &Projet) -> (IdMap<f64>, IdMap<TraitVu>) {
+pub(crate) fn traits(projet: &Projet) -> (IdMap<TraitVu>, IdMap<TraitVu>) {
     let (mut coupe, mut vus) = (IdMap::default(), IdMap::default());
     let mut ajouter = |id: u64, cat: Cat| {
-        if projet.styles_categories.get(&cat).is_some_and(|s| s.plume_coupe.is_some()) {
-            coupe.insert(id, projet.trait_coupe(None, cat));
+        let plume = projet.styles_categories.get(&cat).is_some_and(|s| s.plume_coupe.is_some());
+        let tirets = projet.tirets_coupe(cat);
+        if plume || !tirets.is_empty() {
+            coupe.insert(id, TraitVu { epaisseur: if plume { projet.trait_coupe(None, cat) } else { 0.0 }, tirets });
         }
         if let Some((epaisseur, tirets)) = projet.trait_projection(cat) {
             vus.insert(id, TraitVu { epaisseur, tirets });

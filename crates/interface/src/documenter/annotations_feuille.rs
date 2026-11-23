@@ -130,6 +130,16 @@ pub(crate) struct TraceFeuille {
     pub type_trait: String,
     /// Famille des cartouches posés (nom ; vide : cartouche standard).
     pub famille_cartouche: String,
+    /// Polyligne fermée à la fin du tracé (Valider, Entrée, double-clic).
+    pub fermer: bool,
+}
+
+/// Options du bandeau de dessin de la polyligne : fermée ou non. Type de trait et
+/// hauteur de texte restent dans la palette de Propriétés, comme dans les vues.
+pub(crate) fn options_bandeau(ui: &mut egui::Ui, trace: &mut TraceFeuille) {
+    if trace.outil == OutilFeuille::Polyligne {
+        ui.checkbox(&mut trace.fermer, "Fermée").on_hover_text("Relier le dernier sommet au premier à la fin du tracé");
+    }
 }
 
 impl TraceFeuille {

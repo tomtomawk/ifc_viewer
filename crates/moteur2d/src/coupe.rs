@@ -308,7 +308,7 @@ fn coupe_par_solides(scene: &Scene, ob: &scene::SceneObject, affichage: Affichag
             }
         }
         // contour coupé : plume de la catégorie (styles d'objets), sinon trait fort
-        let trait_mm = if translucide { TRAIT_FIN_MM } else { scene.traits_coupe.get(&ob.id).copied().unwrap_or(TRAIT_FORT_MM) };
+        let trait_mm = if translucide { TRAIT_FIN_MM } else { scene.traits_coupe.get(&ob.id).map(|t| t.epaisseur).filter(|e| *e > 0.0).unwrap_or(TRAIT_FORT_MM) };
         for (pts, fermee) in boucles.iter().map(|b| (b, true)).chain(ouvertes.iter().map(|b| (b, false))) {
             prims.push(primitive(Forme::Polyligne { points: pts.iter().map(|p| en_3d(*p)).collect(), fermee }, NOIR, trait_mm, Role::Coupe));
         }
@@ -506,7 +506,7 @@ fn empreinte_objet(scene: &Scene, i: usize) -> u64 {
             if let Some(m) = scene.visibilite.get(k) { h.mot(*m as u64); }
         }
     }
-    if let Some(t) = scene.traits_coupe.get(&ob.id) { h.mot(t.to_bits()); }
+    if let Some(t) = scene.traits_coupe.get(&ob.id) { h.mot(t.epaisseur.to_bits()); }
     if let Some(couches) = scene.couches_coupe.get(&ob.id) {
         for c in couches {
             for p in &c.plans { for x in p.to_array() { h.mot(x.to_bits() as u64); } }

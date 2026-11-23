@@ -300,8 +300,9 @@ pub struct Scene {
     pub partage: Option<ReperePartage>,
     /// Bandes de composition dont la position dans un mur droit est vérifiée.
     pub couches_coupe: IdMap<Vec<CoucheCoupe>>,
-    /// Styles d'objets : épaisseur du contour coupé (mm du papier) des objets sans bande.
-    pub traits_coupe: IdMap<f64>,
+    /// Styles d'objets : contours coupés de l'objet ; épaisseur (0 : celle des bandes ou
+    /// le trait fort) et tirets.
+    pub traits_coupe: IdMap<TraitVu>,
     /// Styles d'objets : lignes vues de l'objet (épaisseur et tirets).
     pub traits_vus: IdMap<TraitVu>,
 }
