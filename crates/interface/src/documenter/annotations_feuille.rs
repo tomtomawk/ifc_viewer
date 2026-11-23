@@ -17,6 +17,11 @@ pub(crate) enum OutilFeuille {
     Cercle,
     /// Pose d'un cartouche de la famille choisie, autant de fois que voulu.
     Cartouche,
+    /// Transformations de l'objet choisi (ruban Modifier).
+    Deplacer,
+    Copier,
+    Tourner,
+    Symetrie,
 }
 
 impl OutilFeuille {
@@ -27,6 +32,10 @@ impl OutilFeuille {
             Some(Outil::Polyligne) => Self::Polyligne,
             Some(Outil::Cercle) => Self::Cercle,
             Some(Outil::Cartouche) => Self::Cartouche,
+            Some(Outil::Deplacer) => Self::Deplacer,
+            Some(Outil::Copier) => Self::Copier,
+            Some(Outil::Tourner) => Self::Tourner,
+            Some(Outil::Symetrie) => Self::Symetrie,
             _ => Self::Selection,
         }
     }
@@ -39,9 +48,62 @@ impl OutilFeuille {
             (Self::Cercle, 0) => "Cercle : cliquer le centre · Échap pour terminer",
             (Self::Cercle, _) => "Cliquer un point du cercle · Échap pour annuler",
             (Self::Cartouche, _) => "Cartouche : famille dans Propriétés, clic pour le poser (aimanté aux marges), autant de fois que voulu · Échap pour terminer",
+            (Self::Deplacer | Self::Copier, 0) => "Choisir l'objet si besoin, puis cliquer le point de départ · Maj : orthogonal · Échap pour terminer",
+            (Self::Deplacer, _) => "Cliquer le point d'arrivée · Échap pour annuler",
+            (Self::Copier, _) => "Cliquer le point où placer la copie · Échap pour annuler",
+            (Self::Tourner, 0) => "Tourner une annotation : choisir l'objet si besoin, puis cliquer le centre · Échap pour terminer",
+            (Self::Tourner, 1) => "Cliquer la direction de départ · Échap pour annuler",
+            (Self::Tourner, _) => "Cliquer la direction d'arrivée · Maj : orthogonal · Échap pour annuler",
+            (Self::Symetrie, 0) => "Symétrie d'une annotation : choisir l'objet si besoin, puis cliquer le premier point de l'axe · Échap pour terminer",
+            (Self::Symetrie, _) => "Cliquer le second point de l'axe · Maj : orthogonal · Échap pour annuler",
             (Self::Selection, _) => "",
         }
     }
+
+    /// Transformation de l'objet choisi.
+    pub(crate) fn transformation(self) -> bool {
+        matches!(self, Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie)
+    }
+
+    /// Nombre de points à cliquer pour une transformation.
+    fn points_requis(self) -> usize {
+        match self {
+            Self::Tourner => 3,
+            _ => 2,
+        }
+    }
+}
+
+/// Transformation `outil` de l'objet `objet` de la feuille `f` selon les points cliqués
+/// (mm du papier) : feuille modifiée et objet obtenu (la copie pour Copier) ; None tant
+/// que tous les points ne sont pas cliqués. Vues et tableaux se déplacent seulement ;
+/// cartouches se déplacent et se copient ; annotations acceptent tout.
+pub(crate) fn transformer(f: &doc::Feuille, objet: crate::documenter::feuilles::ObjetFeuille, outil: OutilFeuille, pts: &[[f64; 2]]) -> Option<Result<(doc::Feuille, crate::documenter::feuilles::ObjetFeuille), String>> {
+    use crate::documenter::feuilles::ObjetFeuille as O;
+    if !outil.transformation() || pts.len() < outil.points_requis() { return None; }
+    let mut g = f.clone();
+    let d = [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]];
+    let decaler = |q: &mut [f64; 2]| { q[0] += d[0]; q[1] += d[1]; };
+    Some(match (outil, objet) {
+        (OutilFeuille::Deplacer, O::Annotation(i)) => g.annotations.get_mut(i).map(|a| { a.translater(d); objet }).ok_or_else(|| "Annotation absente.".to_string()),
+        (OutilFeuille::Copier, O::Annotation(i)) => g.annotations.get(i).cloned().map(|mut a| { a.translater(d); g.annotations.push(a); O::Annotation(g.annotations.len() - 1) }).ok_or_else(|| "Annotation absente.".to_string()),
+        (OutilFeuille::Deplacer, O::Cartouche(i)) => g.cartouches.get_mut(i).map(|c| { decaler(&mut c.position); objet }).ok_or_else(|| "Cartouche absent.".to_string()),
+        (OutilFeuille::Copier, O::Cartouche(i)) => g.cartouches.get(i).cloned().map(|mut c| { decaler(&mut c.position); g.cartouches.push(c); O::Cartouche(g.cartouches.len() - 1) }).ok_or_else(|| "Cartouche absent.".to_string()),
+        (OutilFeuille::Deplacer, O::Place(j)) => {
+            let nv = g.vues.len();
+            let pos = if j < nv { g.vues.get_mut(j).map(|v| &mut v.position) } else { g.nomenclatures.get_mut(j - nv).map(|n| &mut n.position) };
+            pos.map(|q| { decaler(q); objet }).ok_or_else(|| "Objet absent.".to_string())
+        }
+        (OutilFeuille::Copier, O::Place(_)) => Err("Une vue ou une nomenclature ne se pose qu'une fois sur une feuille : la glisser de nouveau depuis l'arborescence.".into()),
+        (OutilFeuille::Tourner, O::Annotation(i)) => {
+            let [c, a, b] = [pts[0], pts[1], pts[2]];
+            let angle = (b[1] - c[1]).atan2(b[0] - c[0]) - (a[1] - c[1]).atan2(a[0] - c[0]);
+            g.annotations.get_mut(i).map(|x| { x.tourner(c, angle); objet }).ok_or_else(|| "Annotation absente.".to_string())
+        }
+        (OutilFeuille::Symetrie, O::Annotation(i)) => g.annotations.get_mut(i).map(|x| { x.symetrie(pts[0], pts[1]); objet }).ok_or_else(|| "Annotation absente.".to_string()),
+        (OutilFeuille::Tourner | OutilFeuille::Symetrie, _) => Err("Sur une feuille, Tourner et Symétrie s'appliquent aux annotations ; vues, tableaux et cartouches se déplacent.".into()),
+        _ => return None,
+    }.map(|o| (g, o)))
 }
 
 /// Texte saisi en place : feuille, rang de l'annotation modifiée (None : nouvelle).
@@ -90,6 +152,10 @@ impl TraceFeuille {
         let hauteur = self.hauteur();
         match (self.outil, self.points.first().copied()) {
             (OutilFeuille::Selection | OutilFeuille::Cartouche, _) => None,
+            (o, _) if o.transformation() => {
+                self.points.push(q);
+                None
+            }
             (OutilFeuille::Texte, _) => {
                 self.texte = Some(TexteFeuille { feuille: feuille.into(), rang: None, point: q, contenu: String::new(), hauteur, focus: true });
                 None
@@ -137,6 +203,8 @@ impl TraceFeuille {
                 vec![(0..=48).map(|k| { let t = k as f64 / 48.0 * std::f64::consts::TAU; [a[0] + r * t.cos(), a[1] + r * t.sin()] }).collect(), vec![a, vise]]
             }
             OutilFeuille::Polyligne => vec![self.points.iter().copied().chain([vise]).collect()],
+            OutilFeuille::Deplacer | OutilFeuille::Copier | OutilFeuille::Symetrie => vec![vec![a, vise]],
+            OutilFeuille::Tourner => self.points.iter().map(|q| vec![a, *q]).skip(1).chain([vec![a, vise]]).collect(),
             _ => Vec::new(),
         }
     }

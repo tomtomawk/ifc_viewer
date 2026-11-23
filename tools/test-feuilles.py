@@ -123,6 +123,21 @@ def run(exe):
                 assert len(feuille()["annotations"]) == 1
                 commande("annuler")
                 assert len(feuille()["annotations"]) == 2
+                # ruban Modifier sur la feuille : copier la polyligne de 40 mm vers le haut,
+                # puis tourner la copie d'un quart de tour autour de son milieu
+                clic(110, 90)
+                assert commande("proprietes_feuille")["selection"]["type"] == "annotation"
+                commande("outil", "copier")
+                clic(110, 90)
+                clic(110, 130)
+                a = feuille()["annotations"]
+                assert len(a) == 3 and abs(a[2]["points"][0][1] - 130) < 1.5 and abs(a[0]["points"][0][1] - 90) < 1.5, a
+                commande("outil", "tourner")
+                clic(110, 130)
+                clic(160, 130)
+                clic(110, 180)
+                q = feuille()["annotations"][2]["points"]
+                assert all(abs(x[0] - 110) < 1.5 for x in q) and abs(abs(q[0][1] - q[1][1]) - 100) < 1.5, q
                 print("Feuilles : OK")
             finally:
                 processus.terminate()

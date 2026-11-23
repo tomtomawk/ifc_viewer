@@ -338,7 +338,37 @@ impl Application {
             if resp.clicked() {
                 self.famille_selectionnee = None;
                 let q = resp.interact_pointer_pos();
-                if pose {
+                if outil.transformation() {
+                    // transformation de l'objet choisi : un clic sur un objet le choisit tant
+                    // qu'aucun point n'est posé ; sinon les points sur la feuille de l'objet
+                    let choisi = etat.selection.objet().and_then(|(fid, o)| feuilles.iter().position(|f| f.id == fid).map(|k| (k, o)));
+                    match choisi {
+                        None => {
+                            etat.selection = q.map_or(SelectionFeuille::Aucune, selection_sous);
+                            if etat.selection.objet().is_none() { self.status = "Choisir d'abord un objet de la feuille (annotation, cartouche, vue, tableau).".into(); }
+                        }
+                        Some((k, objet)) if etat.trace.points.is_empty() && q.and_then(objet_sous).is_some_and(|(kk, o)| (kk, o) != (k, objet)) => {
+                            etat.selection = q.map_or(SelectionFeuille::Aucune, selection_sous);
+                        }
+                        Some((k, objet)) => if let Some(qq) = q {
+                            let pt = etat.trace.viser(sur_feuille(k, qq), &annot::sommets_feuille(p, feuilles[k]), (8.0 / z) as f64, maj);
+                            etat.trace.clic(&feuilles[k].id, pt);
+                            match annot::transformer(feuilles[k], objet, outil, &etat.trace.points) {
+                                Some(Ok((g, o))) => {
+                                    etat.selection = SelectionFeuille::de_objet(&g.id, o);
+                                    etat.trace.points.clear();
+                                    commandes.push(Commande::Feuille { feuille: g });
+                                    terminer_outil = true;
+                                }
+                                Some(Err(e)) => {
+                                    etat.trace.points.clear();
+                                    self.error = Some(e);
+                                }
+                                None => {}
+                            }
+                        }
+                    }
+                } else if pose {
                     // cartouche posé ; l'outil reste actif pour en poser d'autres
                     if let Some((k, b)) = q.and_then(pose_cartouche) {
                         let mut f = feuilles[k].clone();

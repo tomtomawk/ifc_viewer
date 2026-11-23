@@ -51,6 +51,33 @@ impl AnnotationFeuille {
         }
     }
 
+    /// Tourne l'annotation de `angle` (radians, sens trigonométrique) autour de `centre`
+    /// (mm du papier). Un texte garde son orientation : seul son point tourne.
+    pub fn tourner(&mut self, centre: [f64; 2], angle: f64) {
+        let (s, c) = angle.sin_cos();
+        for q in self.points_mut() {
+            let (x, y) = (q[0] - centre[0], q[1] - centre[1]);
+            *q = [centre[0] + x * c - y * s, centre[1] + x * s + y * c];
+        }
+    }
+
+    /// Symétrie par rapport à l'axe (a, b) (mm du papier) ; les arcs des polylignes
+    /// changent de sens. Un texte garde son sens de lecture : seul son point est reflété.
+    pub fn symetrie(&mut self, a: [f64; 2], b: [f64; 2]) {
+        let (ax, ay) = (b[0] - a[0], b[1] - a[1]);
+        let n2 = ax * ax + ay * ay;
+        if n2 <= 0.0 { return; }
+        for q in self.points_mut() {
+            let (x, y) = (q[0] - a[0], q[1] - a[1]);
+            let t = (x * ax + y * ay) / n2;
+            let (px, py) = (a[0] + t * ax, a[1] + t * ay);
+            *q = [2.0 * px - q[0], 2.0 * py - q[1]];
+        }
+        if let AnnotationForme::Polyligne { courbures, .. } = &mut self.forme {
+            for k in courbures.iter_mut() { *k = -*k; }
+        }
+    }
+
     /// Forme admise sur une feuille.
     pub fn admise(&self) -> bool {
         matches!(self.forme, AnnotationForme::Texte { .. } | AnnotationForme::Ligne { .. } | AnnotationForme::Zone { .. } | AnnotationForme::Polyligne { .. } | AnnotationForme::Spline { .. } | AnnotationForme::Cercle { .. } | AnnotationForme::Arc { .. })

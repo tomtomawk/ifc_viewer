@@ -624,6 +624,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   porte autant de cartouches que voulu, aucun possible. Une nouvelle feuille reprend
   les cartouches de la dernière feuille du jeu ; la première feuille d'un jeu reçoit le
   cartouche standard en bas à droite.
+  **Modifier** : Déplacer et Copier (point de départ, point d'arrivée), Tourner (centre,
+  direction de départ, direction d'arrivée) et Symétrie (deux points de l'axe)
+  s'appliquent à l'objet choisi sur la feuille ; sans objet choisi, le premier clic le
+  choisit. Vues placées et tableaux se déplacent seulement, cartouches se déplacent et
+  se copient, annotations acceptent tout (un texte tourné ou reflété garde son sens de
+  lecture). Points accrochés comme pour le dessin, Maj orthogonal, Échap termine.
   En sélection, un cartouche ou une annotation se choisit d'un clic (une annotation par
   son trait, un texte par son cadre), se glisse à la souris, se retire par Suppr ou
   Modifier → Supprimer. Propriétés ne porte que des propriétés : cartouche (famille,

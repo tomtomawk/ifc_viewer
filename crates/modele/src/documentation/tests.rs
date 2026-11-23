@@ -206,3 +206,18 @@ fn cartouches_multiples_et_annotations_de_feuille() {
     p.feuilles[0].annotations[0].translater([f64::NAN, 0.0]);
     assert!(p.verifier().is_err());
 }
+
+#[test]
+fn annotation_de_feuille_tournee_et_reflechie() {
+    let proche = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9;
+    let mut l = AnnotationFeuille { hauteur: 3.5, forme: AnnotationForme::Ligne { debut: [10.0, 0.0], fin: [20.0, 0.0] } };
+    l.tourner([0.0, 0.0], std::f64::consts::FRAC_PI_2);
+    let AnnotationForme::Ligne { debut, fin } = l.forme.clone() else { unreachable!() };
+    assert!(proche(debut, [0.0, 10.0]) && proche(fin, [0.0, 20.0]), "{debut:?} {fin:?}");
+    // symétrie par l'axe x = 5 : points reflétés, arc inversé
+    let mut p = AnnotationFeuille { hauteur: 3.5, forme: AnnotationForme::Polyligne { points: vec![[0.0, 0.0], [4.0, 0.0]], fermee: false, courbures: vec![0.5], remplissage: None, traits: Vec::new() } };
+    p.symetrie([5.0, 0.0], [5.0, 10.0]);
+    let AnnotationForme::Polyligne { points, courbures, .. } = p.forme else { unreachable!() };
+    assert!(proche(points[0], [10.0, 0.0]) && proche(points[1], [6.0, 0.0]), "{points:?}");
+    assert_eq!(courbures, vec![-0.5]);
+}

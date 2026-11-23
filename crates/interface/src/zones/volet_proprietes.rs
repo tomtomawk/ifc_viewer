@@ -15,7 +15,7 @@ impl Application {
         if self.proprietes_motif_selectionne(ui) { return; }
         // jeu de feuilles : palette de l'outil du ruban actif (texte, trait, cartouche),
         // sinon propriétés du jeu et de sa sélection
-        if self.jeu_actif().is_some() && self.ruban_edition.outil().is_some_and(|o| o.sur_feuille()) && self.palette_creation(ui) {
+        if self.jeu_actif().is_some() && self.ruban_edition.outil().is_some_and(|o| matches!(o, crate::zones::ruban::Outil::Texte | crate::zones::ruban::Outil::Polyligne | crate::zones::ruban::Outil::Cercle | crate::zones::ruban::Outil::Cartouche)) && self.palette_creation(ui) {
             return;
         }
         if let Some(jeu) = self.jeu_actif() {

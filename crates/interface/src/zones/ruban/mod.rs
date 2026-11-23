@@ -250,9 +250,10 @@ impl Outil {
     }
 
     /// Outil utilisable dans un jeu de feuilles ouvert : dessin sur la feuille (texte,
-    /// polyligne, cercle), cartouche, suppression, création de vues et documents.
+    /// polyligne, cercle), cartouche, transformations et suppression de l'objet choisi,
+    /// création de vues et documents.
     pub(crate) fn sur_feuille(self) -> bool {
-        matches!(self, Self::Texte | Self::Polyligne | Self::Cercle | Self::Cartouche | Self::Supprimer | Self::Feuilles | Self::Nomenclatures | Self::VuePlan | Self::VueCoupe | Self::VueDessin)
+        matches!(self, Self::Texte | Self::Polyligne | Self::Cercle | Self::Cartouche | Self::Deplacer | Self::Copier | Self::Tourner | Self::Symetrie | Self::Supprimer | Self::Feuilles | Self::Nomenclatures | Self::VuePlan | Self::VueCoupe | Self::VueDessin)
     }
 
     /// Fréquence présumée d'usage : seul le premier rang gagne un grand bouton.
