@@ -468,6 +468,9 @@ fn vues_et_feuilles(m: &Maquette, c: &mut Conversion, id_vue: &dyn Fn(i64) -> St
             cartouche: String::new(),
             vues,
             nomenclatures: Vec::new(),
+            position_cartouche: None,
+            sans_cartouche: false,
+            annotations: Vec::new(),
         });
     }
     for (k, n) in ignorees {

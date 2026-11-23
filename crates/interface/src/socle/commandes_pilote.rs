@@ -526,7 +526,7 @@ impl Application {
                 serde_json::json!({"ok":true, "jeux":jeux}).to_string()
             }
             "selection_feuille" => {
-                let Ok(a) = serde_json::from_str::<serde_json::Value>(argument) else { return erreur("usage : selection_feuille {\"jeu\":\"nom\",\"feuille\":\"id\",\"vue\":0} ; feuille et vue facultatives") };
+                let Ok(a) = serde_json::from_str::<serde_json::Value>(argument) else { return erreur("usage : selection_feuille {\"jeu\":\"nom\",\"feuille\":\"id\",\"vue\":0} ou {…,\"annotation\":0} ou {…,\"cartouche\":true} ; feuille et objet facultatifs") };
                 let Some((p, _)) = &self.natif else { return erreur("aucun projet natif") };
                 let jeu = a.get("jeu").and_then(|v| v.as_str()).map(str::to_string).or_else(|| self.jeu_actif());
                 let Some(jeu) = jeu else { return erreur("indiquer le nom du jeu") };
@@ -536,12 +536,30 @@ impl Application {
                     let Some(i) = v.as_u64().and_then(|n| usize::try_from(n).ok()) else { return erreur("vue doit être un indice entier positif") };
                     Some(i)
                 } else { None };
+                let annotation = match a.get("annotation") {
+                    Some(v) => match v.as_u64().and_then(|n| usize::try_from(n).ok()) {
+                        Some(i) => Some(i),
+                        None => return erreur("annotation doit être un indice entier positif"),
+                    },
+                    None => None,
+                };
+                let cartouche = a.get("cartouche").and_then(|v| v.as_bool()).unwrap_or(false);
                 if let Some(fid) = &fid {
                     let Some(f) = p.feuilles.iter().find(|f| &f.id == fid && f.jeu == jeu) else { return erreur("feuille introuvable dans ce jeu") };
                     if vue.is_some_and(|i| i >= f.vues.len() + f.nomenclatures.len()) { return erreur("indice de vue ou nomenclature placée invalide") }
-                } else if vue.is_some() { return erreur("indiquer la feuille contenant la vue") }
+                    if annotation.is_some_and(|i| i >= f.annotations.len()) { return erreur("indice d'annotation invalide") }
+                    if cartouche && modele::documentation::cadre_cartouche(p, f).is_none() { return erreur("la feuille n'a pas de cartouche") }
+                } else if vue.is_some() || annotation.is_some() || cartouche { return erreur("indiquer la feuille contenant l'objet") }
                 self.ouvrir_jeu(&jeu, fid.clone());
-                if let (Some(fid), Some(i)) = (fid, vue) { self.feuilles.selection = crate::documenter::feuilles::SelectionFeuille::Vue(fid, i); }
+                use crate::documenter::feuilles::SelectionFeuille as S;
+                if let Some(fid) = fid {
+                    match (vue, annotation, cartouche) {
+                        (Some(i), _, _) => self.feuilles.selection = S::Vue(fid, i),
+                        (_, Some(i), _) => self.feuilles.selection = S::Annotation(fid, i),
+                        (_, _, true) => self.feuilles.selection = S::Cartouche(fid),
+                        _ => {}
+                    }
+                }
                 self.commande(ctx, "proprietes_feuille", "")
             }
             "proprietes_feuille" => {
@@ -554,8 +572,12 @@ impl Application {
                         None => return erreur("feuille sélectionnée introuvable"),
                     },
                     crate::documenter::feuilles::SelectionFeuille::Cartouche(id) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
-                        Some(_) => serde_json::json!({"type":"cartouche", "feuille":id, "famille_cartouche": modele::documentation::famille_cartouche(p, id).map_or("Cartouche standard", |f| f.nom.as_str())}),
+                        Some(f) => serde_json::json!({"type":"cartouche", "feuille":id, "famille_cartouche": modele::documentation::famille_cartouche(p, id).map_or("Cartouche standard", |f| f.nom.as_str()), "cadre": modele::documentation::cadre_cartouche(p, f), "position_cartouche": f.position_cartouche}),
                         None => return erreur("feuille du cartouche introuvable"),
+                    },
+                    crate::documenter::feuilles::SelectionFeuille::Annotation(id, i) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu).and_then(|f| f.annotations.get(*i)) {
+                        Some(a) => serde_json::json!({"type":"annotation", "feuille":id, "indice":i, "proprietes":a}),
+                        None => return erreur("annotation sélectionnée introuvable"),
                     },
                     crate::documenter::feuilles::SelectionFeuille::Vue(id, i) => match p.feuilles.iter().find(|f| &f.id == id && f.jeu == jeu) {
                         Some(f) if *i < f.vues.len() => {

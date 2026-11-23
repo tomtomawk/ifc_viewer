@@ -376,6 +376,17 @@ impl Projet {
                     return Err("Nomenclature placée non valide.".into());
                 }
             }
+            if f.position_cartouche.is_some_and(|q| q.iter().any(|x| !x.is_finite())) {
+                return Err("Position de cartouche non valide.".into());
+            }
+            for a in &f.annotations {
+                let mut b = a.clone();
+                let finie = b.points_mut().iter().all(|q| q.iter().all(|x| x.is_finite()));
+                let rayon = match &a.forme { documentation::AnnotationForme::Cercle { rayon, .. } => rayon.is_finite() && *rayon > 0.0, _ => true };
+                if !a.admise() || !finie || !rayon || !a.hauteur.is_finite() || a.hauteur <= 0.0 {
+                    return Err(format!("Annotation de la feuille {} non valide.", f.numero));
+                }
+            }
         }
         Ok(())
     }

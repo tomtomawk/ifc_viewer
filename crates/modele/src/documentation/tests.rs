@@ -161,3 +161,45 @@ fn type_de_trait_des_splines_et_cercles() {
     if let AnnotationForme::Cercle { type_trait, .. } = &mut p.annotations[0].forme { *type_trait = "absent".into(); }
     assert!(p.verifier().is_err());
 }
+
+#[test]
+fn cartouche_deplace_supprime_et_annotations_de_feuille() {
+    let mut p = Projet::nouveau("Projet");
+    let mut f: Feuille = serde_json::from_str(r#"{"id":"f","numero":"A01","nom":"Plan","largeur":420,"hauteur":297,"cartouche":"","vues":[]}"#).unwrap();
+    // place par défaut : en bas à droite, dans la marge
+    let [l, h] = taille_cartouche(&p, &f);
+    assert_eq!(cadre_cartouche(&p, &f), Some([420.0 - MARGE - l, MARGE, 420.0 - MARGE, MARGE + h]));
+    // déplacé : coin bas gauche choisi ; supprimé : plus de cadre ni de primitives
+    f.position_cartouche = Some([15.0, 240.0]);
+    assert_eq!(cadre_cartouche(&p, &f), Some([15.0, 240.0, 15.0 + l, 240.0 + h]));
+    assert!(!cartouche_feuille(&p, &f).is_empty());
+    f.sans_cartouche = true;
+    assert_eq!(cadre_cartouche(&p, &f), None);
+    assert!(cadre_feuille(&p, &f).is_empty());
+    // annotations : texte à champs et rectangle, dessinés, déplacés, repérés
+    let texte = AnnotationFeuille { hauteur: 5.0, forme: AnnotationForme::Texte { point: [50.0, 50.0], texte: "{numero} {feuille}".into() } };
+    let rect = AnnotationFeuille { hauteur: HAUTEUR_TEXTE_FEUILLE, forme: AnnotationForme::Polyligne { points: vec![[100.0, 100.0], [200.0, 100.0], [200.0, 150.0], [100.0, 150.0]], fermee: true, courbures: Vec::new(), remplissage: None, traits: Vec::new() } };
+    f.annotations = vec![texte, rect];
+    assert_eq!(contenu_texte_feuille(&p, &f, "{numero} {feuille}"), "A01 Plan");
+    assert_eq!(cadre_feuille(&p, &f).len(), 2);
+    assert_eq!(f.annotations[0].distance(&f, &p, [51.0, 52.0]), 0.0);
+    assert!((f.annotations[1].distance(&f, &p, [150.0, 98.0]) - 2.0).abs() < 1e-9);
+    f.annotations[1].translater([10.0, -5.0]);
+    assert_eq!(f.annotations[1].etendue(&f, &p), Some([110.0, 95.0, 210.0, 145.0]));
+    // écriture et relecture ; feuille sans ces champs : cartouche par défaut, rien d'annoté
+    p.feuilles.push(f.clone());
+    p.verifier().unwrap();
+    let relu = Projet::lire_json(&p.json().unwrap()).unwrap();
+    assert_eq!(relu.feuilles[0].annotations, f.annotations);
+    assert!(relu.feuilles[0].sans_cartouche);
+    assert_eq!(relu.feuilles[0].position_cartouche, Some([15.0, 240.0]));
+    let json = serde_json::to_string(&Feuille { annotations: Vec::new(), position_cartouche: None, sans_cartouche: false, ..f.clone() }).unwrap();
+    assert!(!json.contains("\"annotations\""));
+    assert!(!json.contains("sans_cartouche") && !json.contains("position_cartouche"));
+    // validation : forme non admise ou point non fini refusés
+    p.feuilles[0].annotations.push(AnnotationFeuille { hauteur: 2.5, forme: AnnotationForme::Cote { debut: PointCote::Fixe { point: [0.0, 0.0] }, fin: PointCote::Fixe { point: [10.0, 0.0] }, decalage: 5.0 } });
+    assert!(p.verifier().is_err());
+    p.feuilles[0].annotations.pop();
+    p.feuilles[0].annotations[0].translater([f64::NAN, 0.0]);
+    assert!(p.verifier().is_err());
+}

@@ -356,6 +356,15 @@ chaque `.rfa` du dossier.
 
 Une feuille porte aussi des nomenclatures posées (`nomenclatures[]` : `nomenclature`,
 `position` du coin haut gauche du tableau, mm du papier).
+Son cartouche se place par `position_cartouche` (coin bas gauche, mm du papier ;
+absent : en bas à droite, dans la marge) ; `sans_cartouche: true` le retire.
+`annotations[]` porte le dessin de la feuille en mm du papier (origine en bas à
+gauche) : `hauteur` des textes (3,5 mm par défaut) et une forme d'annotation
+(`forme` : `texte`, `ligne`, `polyligne`, `spline`, `cercle`, `arc`, `zone`, mêmes
+champs que les annotations de vue) ; les textes remplissent `{projet}`, `{feuille}`,
+`{numero}`. Les cotes et étiquettes sont refusées sur une feuille, comme un point non
+fini, un rayon nul ou une hauteur nulle. Les trois champs sont facultatifs : un projet
+antérieur se relit sans changement.
 Les feuilles appartiennent à un jeu (`jeu`, « Plans » par défaut, y compris pour les
 fichiers antérieurs) ; les feuilles d'un jeu se suivent dans l'ordre de `feuilles[]`.
 Les collections et tables facultatives de l'éditeur (annotations, quadrillages,

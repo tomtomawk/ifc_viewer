@@ -6,6 +6,8 @@ mod cotation;
 pub use cotation::*;
 mod nomenclatures;
 pub use nomenclatures::*;
+mod habillage_feuille;
+pub use habillage_feuille::*;
 #[cfg(test)]
 mod tests;
 pub use super::*;
@@ -378,6 +380,16 @@ pub struct Feuille {
     /// Nomenclatures posées sur la feuille (tableaux).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nomenclatures: Vec<NomenclaturePlacee>,
+    /// Cartouche : coin bas gauche sur le papier (mm) ; absent : en bas à droite, dans la
+    /// marge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_cartouche: Option<[f64; 2]>,
+    /// Feuille sans cartouche.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sans_cartouche: bool,
+    /// Annotations dessinées sur la feuille (mm du papier, origine en bas à gauche).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<AnnotationFeuille>,
 }
 
 /// Nomenclature posée sur une feuille : tableau dont le coin haut gauche est à

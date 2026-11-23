@@ -597,7 +597,26 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   le nom d'un jeu la met à la fin de ce jeu. Ctrl+Z annule. Molette : zoom ; glisser le fond : défiler. Les
   réglages sont dans Propriétés, sans boîte de dialogue : nom du jeu (Entrée pour
   renommer) lorsque rien n'est sélectionné ; feuille (numéro, nom, format A0 à A4,
-  paysage/portrait, dimensions, cartouche) ; vue placée (échelle et position).
+  paysage/portrait, dimensions, cartouche affiché ou non) ; vue placée (échelle et
+  position).
+  Le **cartouche** se choisit d'un clic, se glisse à la souris (aimanté aux marges, aux
+  vues et aux tableaux) et se règle dans Propriétés : famille, position du coin bas
+  gauche (mm du papier), ancrage dans un coin contre la marge, place par défaut (en bas
+  à droite). Suppr, le menu contextuel ou « Supprimer le cartouche » le retire de la
+  feuille ; la case « Cartouche : Afficher » de la feuille le remet à sa position.
+  Double-clic : éditeur de sa famille.
+  **Annoter la feuille** : barre en bas à gauche de la vue (Sélection, Texte, Ligne,
+  Polyligne, Rectangle, Cercle), en mm du papier. Texte : clic, frappe en place, Entrée
+  valide, Maj+Entrée passe à la ligne, Échap abandonne ; champs `{projet}`,
+  `{feuille}`, `{numero}`. Ligne, rectangle, cercle : deux clics ; polyligne : un clic
+  par sommet, Entrée ou double-clic pour finir, clic sur le premier sommet pour la
+  fermer. Les points s'accrochent aux coins du papier, des marges, du cartouche et aux
+  sommets des annotations ; Maj contraint à l'horizontale ou à la verticale. Échap
+  annule le tracé, puis revient à la sélection. En sélection, une annotation se choisit
+  par son trait (un texte par son cadre), se glisse, se retire par Suppr ; double-clic
+  sur un texte le modifie en place. Propriétés : texte, hauteur, points, type de trait
+  (cercle, polyligne), fermeture d'une polyligne. Annotations et cartouche déplacé
+  sont dans les exports PDF, SVG, DXF et DWG de la feuille.
   L'arborescence liste tous les jeux, toutes
   leurs feuilles et, sous chaque feuille, ses vues placées (clic : ouvrir la vue) ; clic
   sur une feuille pour l'amener à l'écran. La recherche garde un jeu entier si son nom
@@ -608,7 +627,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   ajoutent une feuille, exportent un jeu ou une feuille et ouvrent l'éditeur de cartouche.
   Le pilote permet de lister les jeux
   (`feuilles`), sélectionner un jeu ou une feuille (`selection_feuille {"jeu":"Plans","feuille":"id"}` ;
-  ajouter `"vue":0` pour une vue placée) et lire la sélection (`proprietes_feuille`).
+  ajouter `"vue":0` pour une vue placée, `"annotation":0` pour une annotation,
+  `"cartouche":true` pour le cartouche) et lire la sélection (`proprietes_feuille`).
   L'outil MCP `application_modifier_feuille` ou `editer` permet de modifier les données
   d'une feuille ; enregistrer ensuite le projet pour conserver la modification.
 - **Nomenclatures** (Documenter ou l'arborescence) : quantités par catégorie,

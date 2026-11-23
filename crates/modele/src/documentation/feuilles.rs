@@ -59,8 +59,25 @@ pub fn famille_cartouche<'a>(p: &'a Projet, feuille: &str) -> Option<&'a Famille
     p.familles_cartouches.iter().find(|f| f.nom == nom)
 }
 
+/// Taille du cartouche de la feuille (mm) : celle de sa famille, standard sinon.
+pub fn taille_cartouche(p: &Projet, f: &Feuille) -> [f64; 2] {
+    famille_cartouche(p, &f.id).map_or(TAILLE_CARTOUCHE_STANDARD, |c| [c.largeur, c.hauteur])
+}
+
+/// Position par défaut du cartouche (coin bas gauche, mm) : en bas à droite, dans la
+/// marge.
+pub fn position_cartouche_defaut(p: &Projet, f: &Feuille) -> [f64; 2] {
+    [f.largeur - MARGE - taille_cartouche(p, f)[0], MARGE]
+}
+
+/// Cadre du cartouche [x0, y0, x1, y1] (mm du papier) ; None si la feuille n'en a pas,
+/// ou si, à sa place par défaut, il ne tient pas dans les marges.
 pub fn cadre_cartouche(p: &Projet, f: &Feuille) -> Option<[f64; 4]> {
-    let [l, h] = famille_cartouche(p, &f.id).map_or(TAILLE_CARTOUCHE_STANDARD, |c| [c.largeur, c.hauteur]);
+    if f.sans_cartouche { return None; }
+    let [l, h] = taille_cartouche(p, f);
+    if let Some([x, y]) = f.position_cartouche {
+        return (l > 0.0 && h > 0.0).then_some([x, y, x + l, y + h]);
+    }
     let [x, y] = [f.largeur - MARGE - l, MARGE + h];
     (x > MARGE && y < f.hauteur - MARGE).then_some([x, MARGE, f.largeur - MARGE, y])
 }
@@ -99,9 +116,16 @@ pub fn forme_cartouche(p: &Projet, forme: &AnnotationForme) -> Vec<Primitive> {
     }
 }
 
-/// Cartouche d'une feuille, en mètres du papier (origine en bas à gauche).
-/// Le format de papier ne produit aucun cadre imprimé automatique.
+/// Cartouche et annotations d'une feuille, en mètres du papier (origine en bas à
+/// gauche). Le format de papier ne produit aucun cadre imprimé automatique.
 pub fn cadre_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
+    let mut v: Vec<Primitive> = f.annotations.iter().flat_map(|a| primitives_annotation_feuille(p, f, a)).collect();
+    v.extend(cartouche_feuille(p, f));
+    v
+}
+
+/// Cartouche seul d'une feuille, en mètres du papier ; vide sans cartouche.
+pub fn cartouche_feuille(p: &Projet, f: &Feuille) -> Vec<Primitive> {
     let mut v = Vec::new();
     if let Some([x0, y0, _, _]) = cadre_cartouche(p, f) {
         let standard;

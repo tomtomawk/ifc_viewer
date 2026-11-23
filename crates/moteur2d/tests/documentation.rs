@@ -103,7 +103,7 @@ fn coupe_sur_feuille_reste_dans_les_limites_de_la_vue() {
 fn formes_du_cartouche_persistent_et_sont_dessinees_sur_feuille() {
     let mut p = Projet::nouveau("Agence");
     let f = Feuille { id: "f".into(), numero: "A01".into(), nom: "Plan".into(), jeu: JEU_DEFAUT.into(),
-        largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: Vec::new() };
+        largeur: 420.0, hauteur: 297.0, cartouche: String::new(), vues: Vec::new(), nomenclatures: Vec::new(), position_cartouche: None, sans_cartouche: false, annotations: Vec::new() };
     let mut famille = FamilleCartouche { nom: "Cartouche test".into(), ..Default::default() };
     let formes = [AnnotationForme::Cercle { centre: [10.0, 10.0], rayon: 4.0, type_trait: String::new() },
         AnnotationForme::Zone { contour: vec![[20.0, 10.0], [25.0, 10.0], [25.0, 15.0]] },

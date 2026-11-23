@@ -41,6 +41,13 @@ impl Application {
             return Some((|| {
                 let v: Vec<f64> = argument.split_whitespace().map(|s| s.parse::<f64>().map_err(|e| e.to_string())).collect::<Result<_, _>>()?;
                 let [x, y] = v[..] else { return Err("ecran <x> <y> (mm)".into()) };
+                // jeu de feuilles ouvert : mm du papier de la feuille choisie (la première sinon)
+                if let Some(jeu) = self.jeu_actif() {
+                    let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif")?;
+                    let id = self.feuilles.selection.feuille().map(str::to_string).or_else(|| p.feuilles.iter().find(|f| f.jeu == jeu).map(|f| f.id.clone())).ok_or("Jeu sans feuille")?;
+                    let q = self.feuilles.ecran_papier(&id, [x, y]).ok_or("Feuille pas encore affichée")?;
+                    return Ok(json!({"ecran": [q.x, q.y], "feuille": id}));
+                }
                 let q = self.ecran_plan(self.rect_vue, [x, y], self.altitude_vue_native()).ok_or("Point hors de la vue")?;
                 Ok(json!({"ecran": [q.x, q.y]}))
             })());
@@ -528,6 +535,14 @@ impl Application {
             return Ok(json!({}));
         }
         self.pilote_disponible()?;
+        // jeu de feuilles ouvert : outils d'annotation de la feuille
+        if self.jeu_actif().is_some() {
+            use crate::documenter::annotations_feuille::OutilFeuille as F;
+            let outil = F::TOUS.into_iter().find(|o| crate::documenter::annotations_feuille::nom_pilote(*o) == nom)
+                .ok_or("Outils d'une feuille : selection, texte, ligne, polyligne, rectangle, cercle")?;
+            self.feuilles.trace.choisir(outil);
+            return Ok(json!({"outil_feuille": nom}));
+        }
         self.activer_outil_interface(nom)
     }
 
