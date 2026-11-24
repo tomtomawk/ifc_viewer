@@ -254,3 +254,22 @@ fn vegetal_en_element_geographique() {
     let s = exporter(&p).unwrap();
     assert!(s.contains("IFCGEOGRAPHICELEMENT(") && s.contains("'Tilleul',$,'VEGETATION'") && !s.contains("IFCFURNITURE("), "{s}");
 }
+
+/// IFC-TOIT1 : murs attachés à une toiture en croupe, relus en assemblages quelle que soit
+/// la cote d'égout (le mur 4 était relu en élément importé pour 3 cotes sur 4).
+#[test]
+fn murs_sous_croupe_relus_pour_toute_cote_d_egout() {
+    let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")).unwrap();
+    let base = Projet::lire_json(&json).unwrap();
+    for k in 0..24 {
+        let mut p = base.clone();
+        let dec = 2600.155 + k as f64 * 19.37;
+        p.dalles.iter_mut().find(|d| d.id == "toiture").unwrap().decalage = dec;
+        let chemin = std::env::temp_dir().join(format!("bimedit-croupe-{}-{k}.ifc", std::process::id()));
+        std::fs::write(&chemin, exporter(&p).unwrap()).unwrap();
+        let (relu, _) = depuis_ifc::convertir(&chemin, &|_| {}).unwrap();
+        let _ = std::fs::remove_file(&chemin);
+        let importes: Vec<_> = relu.importes.iter().filter(|i| i.nom.starts_with("Mur")).map(|i| (&i.nom, &i.raison)).collect();
+        assert!(importes.is_empty(), "égout {dec} : {importes:?}");
+    }
+}

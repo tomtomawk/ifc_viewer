@@ -97,10 +97,24 @@ pub(super) fn volume_mur(
             // Le lien reste enregistré. Déplacer le toit ou le mur peut le rendre actif.
             continue;
         }
-        // Toutes les sécantes sont >= 1 : ce décalage place le bas du
-        // gabarit de coupe sous le pied du mur pour chaque versant.
-        let dessous = couche(toit, &plans, z, sous_face - (sommet - bas) - 1.0, sous_face);
-        let couvert = appliquer(&prolongement, &dessous, Op::Intersection)?;
+        let couvert = if pente::surface_plus_bas_des_plans(&toit.contours, &plans) {
+            // Surface = plus bas des versants : la partie couverte est l'emprise coupée
+            // sous chaque versant par un bloc convexe fermé. Le volume par morceaux de la
+            // couche a des jonctions en T qui rendent l'intersection instable (IFC-TOIT1).
+            let mut c = emprise.clone();
+            for q in &plans {
+                c = appliquer(&c, &bloc_sous_plan(&emprise, &q.decale(sous_face), z), Op::Intersection)?;
+                if c.is_empty() {
+                    break;
+                }
+            }
+            c
+        } else {
+            // Toutes les sécantes sont >= 1 : ce décalage place le bas du
+            // gabarit de coupe sous le pied du mur pour chaque versant.
+            let dessous = couche(toit, &plans, z, sous_face - (sommet - bas) - 1.0, sous_face);
+            appliquer(&prolongement, &dessous, Op::Intersection)?
+        };
         if signed_volume(&couvert).abs() <= 1e-5 {
             continue;
         }
@@ -130,6 +144,32 @@ pub(super) fn volume_mur(
         (_, true) => Ok(exterieur),
         _ => appliquer(&interieur, &exterieur, Op::Union),
     }
+}
+
+/// Bloc convexe fermé (mm) sous le plan `q` (hauteur au-dessus de `z0`), débordant de
+/// 1 m l'emprise en plan de `solide`, fond plat 1 m sous le plus bas de ses points et du plan.
+fn bloc_sous_plan(solide: &[Tri], q: &Plan, z0: f64) -> Vec<Tri> {
+    use glam::DVec3;
+    let (mut min, mut max) = (DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY));
+    let mut bas = f64::INFINITY;
+    for v in solide.iter().flatten() {
+        min = min.min(v.truncate());
+        max = max.max(v.truncate());
+        bas = bas.min(v.z);
+    }
+    let (min, max) = (min - DVec2::splat(1000.0), max + DVec2::splat(1000.0));
+    let coins = [min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)];
+    let haut = coins.map(|c| z0 + q.hauteur(c));
+    let fond = haut.iter().copied().fold(bas, f64::min) - 1000.0;
+    let h: [DVec3; 4] = std::array::from_fn(|i| coins[i].extend(haut[i]));
+    let b: [DVec3; 4] = std::array::from_fn(|i| coins[i].extend(fond));
+    let mut tris = vec![[h[0], h[1], h[2]], [h[0], h[2], h[3]], [b[0], b[2], b[1]], [b[0], b[3], b[2]]];
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        tris.push([b[i], b[j], h[j]]);
+        tris.push([b[i], h[j], h[i]]);
+    }
+    tris
 }
 
 #[cfg(test)]
@@ -278,5 +318,19 @@ mod tests {
         let tris = mur(&p, &p.murs[0], &jonctions::coupes(&p)).unwrap();
         let attendu = 200.0 * (2500.0 * 2500.0 + 1000.0 * 4000.0 + 500.0 * 3000.0);
         assert!((signed_volume(&tris) - attendu).abs() < 1.0);
+    }
+
+    /// IFC-TOIT1 : sous une toiture en croupe, les murs opposés de la maison d'exemple
+    /// gardent le même volume quelle que soit la cote d'égout.
+    #[test]
+    fn murs_opposes_sous_croupe_symetriques() {
+        let base = Projet::lire_json(include_str!("../../../../samples/maison_native.bem")).unwrap();
+        for k in 0..40 {
+            let mut p = base.clone();
+            p.dalles.iter_mut().find(|d| d.id == "toiture").unwrap().decalage = 2600.155 + k as f64 * 13.7;
+            let v = |id: &str| p.volume_mur(p.murs.iter().find(|m| m.id == id).unwrap()).unwrap();
+            assert!((v("etage-m1") - v("etage-m3")).abs() < 1e3, "égout {k} : {} / {}", v("etage-m1"), v("etage-m3"));
+            assert!((v("etage-m0") - v("etage-m2")).abs() < 1e3);
+        }
     }
 }

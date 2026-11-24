@@ -21,7 +21,7 @@ impl Plan {
     }
 
     /// Plan décalé de l'épaisseur `e` (normale au plan, vers le haut si positive).
-    fn decale(&self, e: f64) -> Plan {
+    pub(crate) fn decale(&self, e: f64) -> Plan {
         Plan { origine: self.origine + e * self.secante, ..*self }
     }
 }
@@ -343,6 +343,9 @@ fn domaines_concaves(contours:&[Vec<[f64;2]>],plans:&[Plan])->Result<Option<Doma
     }
     Ok(Some(faces))
 }
+/// Surface égale au plus bas des plans en tout point (contour convexe ou plan unique) ;
+/// faux pour une toiture concave, construite par squelette droit.
+pub fn surface_plus_bas_des_plans(contours:&[Vec<[f64;2]>],plans:&[Plan])->bool { matches!(domaines_concaves(contours,plans),Ok(None)) }
 pub fn verifier_forme(d:&Dalle)->Result<(),String> { domaines_concaves(&d.contours,&plans(d)).map(|_|()) }
 
 pub fn bandes_contours(contours:&[Vec<[f64;2]>],plans:&[Plan],z0:f64,e0:f64,e1:f64)->Vec<Vec<glam::Vec4>> {
