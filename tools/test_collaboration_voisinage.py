@@ -3,9 +3,10 @@
 Projet : maison_native plus un niveau à 12 m portant un mur de même tracé que rdc-m0.
 Chaque cas modifie un mur sur chaque poste avant de synchroniser A, B puis A.
   a : hauteur de rdc-m0 / nom du mur 12 m plus haut      -> accepté, postes identiques
+  a2 : les mêmes dans l'autre ordre (nom d'abord)        -> accepté
   c : nom de rdc-m0 / nom de rdc-m1 (murs joints)         -> accepté, postes identiques
   d : hauteur de rdc-m0 / hauteur de rdc-m1 (murs joints) -> conflit attendu (protection)
-  b : hauteur de rdc-m0 / hauteur du mur 12 m plus haut   -> conflit relevé (reste de C4)
+  b : hauteur de rdc-m0 / hauteur du mur 12 m plus haut   -> accepté, postes identiques
 
 Usage (Linux sans écran) : xvfb-run -a -s "-screen 0 3200x1200x24" python3 tools/test_collaboration_voisinage.py [exe]
 """
@@ -68,9 +69,10 @@ p["murs"].append(m)
 H, N = "haut/hauteur", "nom"
 cas = [
     ("a", (("rdc-m0", H), 3200), (("haut-m0", N), "Mur haut renommé"), False),
+    ("a2", (("haut-m0", N), "Mur haut 2"), (("rdc-m0", H), 3300), False),
     ("c", (("rdc-m0", N), "Mur A"), (("rdc-m1", N), "Mur B"), False),
     ("d", (("rdc-m0", H), 3100), (("rdc-m1", H), 3150), True),
-    ("b", (("rdc-m0", H), 3400), (("haut-m0", H), 2800), None),
+    ("b", (("rdc-m0", H), 3400), (("haut-m0", H), 2800), False),
 ]
 bilan = {}
 try:

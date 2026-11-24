@@ -8,6 +8,8 @@ pub mod session;
 pub mod stockage;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_voisinage;
 pub mod texte;
 
 use modele::Projet;

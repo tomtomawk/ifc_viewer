@@ -301,28 +301,43 @@ fn references(index: &Index, cle: &str) -> Vec<String> {
 }
 
 /// Protocole 3 : bande autour de l'axe droit, plutôt que tout son rectangle.
-/// Les autres géométries gardent une enveloppe conservatrice.
+/// Les autres géométries gardent une enveloppe conservatrice. `z` : altitudes basse et
+/// haute (mm) quand elles sont connues (murs, ouvertures, dalles sans pente) ; sinon
+/// (anciennes lectures, mur attaché à une toiture, toiture en pente…) l'élément s'étend
+/// sur toute la hauteur.
 #[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum Voisinage {
-    Bande { debut:[f64;2], fin:[f64;2], rayon:f64 },
+    Bande { debut:[f64;2], fin:[f64;2], rayon:f64, #[serde(default, skip_serializing_if = "Option::is_none")] z:Option<[f64;2]> },
     Rectangle(Zone),
+    Volume { zone:Zone, z:[f64;2] },
 }
+/// Écart vertical (mm) au-delà duquel deux murs ne se touchent plus.
+const ECART_VERTICAL: f64 = 10.0;
 impl Voisinage {
     pub fn valide(&self)->bool {
         match self {
-            Self::Bande{debut,fin,rayon}=>debut.iter().chain(fin).all(|x|x.is_finite()) && rayon.is_finite() && *rayon>=0.0,
+            Self::Bande{debut,fin,rayon,z}=>debut.iter().chain(fin).all(|x|x.is_finite()) && rayon.is_finite() && *rayon>=0.0 && z.is_none_or(|z|z.iter().all(|x|x.is_finite()) && z[0]<=z[1]),
             Self::Rectangle(z)=>z.0.iter().all(|x|x.is_finite()) && z.0[0]<=z.0[2] && z.0[1]<=z.0[3],
+            Self::Volume{zone,z}=>Self::Rectangle(*zone).valide() && z.iter().all(|x|x.is_finite()) && z[0]<=z[1],
         }
     }
+    fn altitudes(&self)->Option<[f64;2]> {
+        match self { Self::Bande{z,..}=>*z, Self::Volume{z,..}=>Some(*z), Self::Rectangle(_)=>None }
+    }
     fn touche(self,b:Self)->bool {
-        match (self,b) {
-            (Self::Bande{debut:a,fin:b,rayon:r},Self::Bande{debut:c,fin:d,rayon:s})=>distance_segments(a,b,c,d)<=(r+s).powi(2),
-            (Self::Bande{debut:a,fin:b,rayon:r},Self::Rectangle(z)) | (Self::Rectangle(z),Self::Bande{debut:a,fin:b,rayon:r})=>{
+        if let (Some(p),Some(q))=(self.altitudes(),b.altitudes()) && (p[0]>q[1]+ECART_VERTICAL || q[0]>p[1]+ECART_VERTICAL) {
+            return false;
+        }
+        let plan=|v:Self|match v { Self::Volume{zone,..}=>Self::Rectangle(zone), Self::Bande{debut,fin,rayon,..}=>Self::Bande{debut,fin,rayon,z:None}, r=>r };
+        match (plan(self),plan(b)) {
+            (Self::Bande{debut:a,fin:b,rayon:r,..},Self::Bande{debut:c,fin:d,rayon:s,..})=>distance_segments(a,b,c,d)<=(r+s).powi(2),
+            (Self::Bande{debut:a,fin:b,rayon:r,..},Self::Rectangle(z)) | (Self::Rectangle(z),Self::Bande{debut:a,fin:b,rayon:r,..})=>{
                 let dedans=|p:[f64;2]|p[0]>=z.0[0]&&p[0]<=z.0[2]&&p[1]>=z.0[1]&&p[1]<=z.0[3];
                 let coins=[[z.0[0],z.0[1]],[z.0[2],z.0[1]],[z.0[2],z.0[3]],[z.0[0],z.0[3]]];
                 dedans(a)||dedans(b)||(0..4).any(|i|distance_segments(a,b,coins[i],coins[(i+1)%4])<=r*r)
             }
             (Self::Rectangle(a),Self::Rectangle(b))=>a.touche(b),
+            _=>true,
         }
     }
 }
@@ -346,16 +361,75 @@ fn voisinage(k:&str,v:&Value,o:&Objets)->Option<Voisinage> {
     if k.starts_with("murs/") && v.get("axe")?.get("forme")?.as_str()?=="droit" {
         let axe=&v["axe"];
         let point=|cle:&str|->Option<[f64;2]>{let a=axe.get(cle)?.as_array()?;Some([a.first()?.as_f64()?,a.get(1)?.as_f64()?])};
-        let b=Voisinage::Bande{debut:point("debut")?,fin:point("fin")?,rayon:2.0*largeur(v,o)?+15.0};
+        let b=Voisinage::Bande{debut:point("debut")?,fin:point("fin")?,rayon:2.0*largeur(v,o)?+15.0,z:altitudes_mur(v,o)};
         return b.valide().then_some(b);
     }
-    emprise(k,v,o).map(Voisinage::Rectangle)
+    let zone=emprise(k,v,o)?;
+    Some(match altitudes(k,v,o) { Some(z)=>Voisinage::Volume{zone,z}, None=>Voisinage::Rectangle(zone) })
+}
+fn altitude_niveau(o:&Objets,n:&Value)->Option<f64> {
+    o.get(&format!("niveaux/{}",n.as_str()?))?.get("altitude")?.as_f64()
+}
+/// Altitudes basse et haute (mm) d'un élément autre qu'un mur droit, quand elles se
+/// déduisent sans calcul de forme : ouverture (celles de son hôte), dalle, sol ou
+/// plafond sans pente. None : toute la hauteur.
+fn altitudes(k:&str,v:&Value,o:&Objets)->Option<[f64;2]> {
+    match k.split('/').next()? {
+        "murs"=>altitudes_mur(v,o),
+        "ouvertures"=>{
+            let hote=cle_id(o,v.get("mur")?.as_str()?)?;
+            let h=o.get(&hote)?;
+            if hote.starts_with("assemblages/") {
+                let mut z=[f64::INFINITY,f64::NEG_INFINITY];
+                for id in h.get("couches")?.as_array()? {
+                    let c=altitudes_mur(o.get(&format!("murs/{}",id.as_str()?))?,o)?;
+                    z=[z[0].min(c[0]),z[1].max(c[1])];
+                }
+                z.iter().all(|x|x.is_finite()).then_some(z)
+            } else { altitudes_mur(h,o) }
+        }
+        "dalles"=>{
+            let sorte=v.get("sorte").and_then(Value::as_str).unwrap_or("dalle");
+            let pente=v.get("pentes").and_then(Value::as_array).is_some_and(|p|p.iter().flat_map(|c|c.as_array().into_iter().flatten()).any(|x|!x.is_null()));
+            if pente || !matches!(sorte,"dalle"|"sol"|"plafond") { return None; }
+            let t=o.get(&format!("types_dalles/{}",v.get("type_dalle")?.as_str()?))?;
+            let mut e=0.0;
+            for c in t.get("couches")?.as_array()? { e+=c.get("epaisseur")?.as_f64()?; }
+            let r=altitude_niveau(o,v.get("niveau")?)?+v.get("decalage").and_then(Value::as_f64).unwrap_or(0.0);
+            let z=if sorte=="plafond" {[r,r+e]} else {[r-e,r]};
+            z.iter().all(|x|x.is_finite()).then_some(z)
+        }
+        _=>None,
+    }
+}
+/// Altitudes basse et haute d'un mur (mm) d'après ses niveaux ; None si l'une manque ou
+/// si le mur (ou son assemblage) est attaché à une toiture : son sommet suit alors le toit.
+fn altitudes_mur(v:&Value,o:&Objets)->Option<[f64;2]> {
+    let id=v.get("id")?.as_str()?;
+    let attache=|i:&str|valeur(o,&format!("@/attaches_toitures/{i}")).is_some();
+    if attache(id) || v.get("assemblage").and_then(Value::as_str).is_some_and(attache) { return None; }
+    let altitude=|n:&Value|altitude_niveau(o,n);
+    let bas=altitude(v.get("niveau")?)?+v.get("decalage_bas").and_then(Value::as_f64).unwrap_or(0.0);
+    let haut=v.get("haut")?;
+    let sommet=match haut.get("contrainte")?.as_str()? {
+        "libre"=>bas+haut.get("hauteur")?.as_f64()?,
+        "niveau"=>altitude(haut.get("niveau")?)?+haut.get("decalage").and_then(Value::as_f64).unwrap_or(0.0),
+        _=>return None,
+    };
+    (bas.is_finite() && sommet.is_finite()).then(|| [bas.min(sommet),bas.max(sommet)])
+}
+/// Valeur lue par le voisinage : le nom d'un élément physique n'a pas d'effet
+/// géométrique sur ses voisins (C4).
+fn valeur_voisinage(o:&Objets,k:&str)->Option<Value> {
+    let mut v=valeur(o,k)?.clone();
+    if physique(k) && let Some(m)=v.as_object_mut() { m.remove("nom"); }
+    Some(v)
 }
 pub fn empreinte_voisinage(o:&Objets,zones:&[Voisinage])->String {
     let index=Index::construire(o);
     let mut selection:BTreeSet<String>=o.iter().filter(|(k,v)|physique(k)&&voisinage(k,v,o).is_none_or(|b|zones.iter().any(|z|z.touche(b)))).map(|(k,_)|k.clone()).collect();
     completer_selection(o,&index,&mut selection);
-    hash(&selection.iter().map(|k|(k,valeur(o,k))).collect::<BTreeMap<_,_>>())
+    hash(&selection.iter().map(|k|(k,valeur_voisinage(o,k))).collect::<BTreeMap<_,_>>())
 }
 
 pub fn empreinte_zone(o: &Objets, zones: &[Zone]) -> String {

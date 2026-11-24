@@ -8,6 +8,15 @@ diagonaux ou éloignés ne bloque plus leurs créations indépendantes. Les croi
 voisinages réels, changements d'hôte et modifications du même objet restent contrôlés.
 Les autres géométries gardent leurs enveloppes conservatrices.
 
+Séparation verticale : un mur droit, une ouverture (altitudes de son hôte) et une dalle,
+un sol ou un plafond sans pente portent leurs altitudes basse et haute. Deux éléments dont
+les altitudes sont connues et séparées de plus de 10 mm ne se touchent pas, même de même
+tracé en plan ; un mur posé sur un autre (sommet = base) les touche. Un mur attaché à une
+toiture, une toiture en pente et les autres éléments s'étendent sur toute la hauteur. Le
+nom d'un élément voisin n'entre pas dans la lecture spatiale : renommer un mur ne bloque
+plus la modification géométrique d'un voisin, dans un ordre ou dans l'autre. Les
+modifications d'un même objet restent contrôlées champ par objet.
+
 Pendant un conflit, l’écran part de la dernière version reçue du projet partagé,
 y compris à la réouverture. Une proposition locale reste visible en aperçu si elle
 peut se superposer en entier aux valeurs actuelles et si le projet obtenu est valide.

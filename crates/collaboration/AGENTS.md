@@ -14,6 +14,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `maillage`, `commandes`, 
 | `session.rs` | `Session` : copie de travail persistante et synchronisation |
 | `stockage.rs` | `Depot` (626 lignes : ne pas agrandir) |
 | `concurrence.rs`, `partage.rs`, `texte.rs`, `cli.rs` | décomposition et empreintes, `.bimpartage`, texte `yrs`, CLI |
+| `tests_voisinage.rs` | voisinage spatial : séparation verticale, noms, jonctions protégées (C4) |
 | `tests.rs` | 37 tests ; `course_entre_deux_processus…` et `crash_processus…` relancent le binaire de test par `--exact "tests::enfant_…"` : garder ce chemin si le module change de nom |
 
 `tests/` : aller-retour par `collaboration::projet` et aperçu après synchronisation et réouverture. Les `include_str!` de `samples/` et de `modele/src/lib.rs` sont relatifs à `src/`.

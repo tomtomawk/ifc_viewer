@@ -114,7 +114,6 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
 | C2 | Commande de compactage du registre partagé | P3 | `docs/COLLABORATION.md` |
-| C4 | Reste des refus spatiaux : deux changements de géométrie sur des murs de même tracé en plan, séparés verticalement (cas b de `tools/test_collaboration_voisinage.py` : hauteurs de deux murs à 12 m l'un de l'autre), sont encore refusés (« Dépendance ou collision », voisinage en plan seulement). Les changements de libellé ne sont plus refusés (essai du 24/11/2026) ; préserver la protection des jonctions (cas d) | P1 | `crates/collaboration/src/concurrence.rs` (`voisinage`, `Voisinage::Bande`) |
 
 ## 9. Décisions en attente
 
