@@ -396,9 +396,10 @@ impl Application {
         let mut copier_type: Option<(String, String)> = None;
         let mut nouveau_profil = false;
         let mut charger_profil = false;
+        let mut symbole_choisi: Option<(modele::documentation::GenreSymbole, String)> = None;
         rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
             if let Some(familles) = &familles_natives {
-                for titre in ["Profils", "Cartouches", "Étiquettes de pièce", "Portes", "Fenêtres", "Composants", "Garde-corps"] {
+                for titre in ["Profils", "Cartouches", "Étiquettes de pièce", "Symboles d'annotation", "Portes", "Fenêtres", "Composants", "Garde-corps"] {
                     let liste: Vec<_> = familles.iter().filter(|(f, nom)| f.categorie() == titre && (garde(nom) || garde(titre))).collect();
                     egui::CollapsingHeader::new(format!("{titre} ({})", liste.len())).id_salt(("nav-famille-native", titre)).open(ouvert.then_some(true)).show(ui, |ui| {
                         // portes et fenêtres : types regroupés par famille ; autres : un type par famille
@@ -409,8 +410,8 @@ impl Application {
                                 _ => nom.to_string(),
                             };
                             match groupes.iter_mut().find(|(c, _)| *c == cle) {
-                                Some((_, v)) => v.push((famille, *nom)),
-                                None => groupes.push((cle, vec![(famille, *nom)])),
+                                Some((_, v)) => v.push((famille, nom.as_str())),
+                                None => groupes.push((cle, vec![(famille, nom.as_str())])),
                             }
                         }
                         groupes.sort_by(|x, y| x.0.cmp(&y.0));
@@ -451,6 +452,24 @@ impl Application {
                                             copier_type = Some((tid.clone(), "Nouveau type".into()));
                                         }
                                 });
+                        }
+                        if let (true, Some((p, _))) = (titre == "Symboles d'annotation", &self.natif) {
+                            // famille utilisée par catégorie de symbole (standard par défaut)
+                            ui.separator();
+                            egui::Grid::new("symboles_utilises").num_columns(2).show(ui, |ui| {
+                                for g in modele::documentation::GenreSymbole::TOUS {
+                                    ui.label(g.libelle());
+                                    let actuel = p.symboles.choix(g).cloned().unwrap_or_default();
+                                    let nom = p.familles_symboles.iter().find(|f| f.id == actuel).map_or_else(|| "Standard".to_string(), |f| f.nom.clone());
+                                    egui::ComboBox::from_id_salt(("symbole_utilise", g.libelle())).selected_text(nom).show_ui(ui, |ui| {
+                                        if ui.selectable_label(actuel.is_empty(), "Standard").clicked() { symbole_choisi = Some((g, String::new())); }
+                                        for f in p.familles_symboles.iter().filter(|f| f.genre() == Some(g)) {
+                                            if ui.selectable_label(actuel == f.id, &f.nom).clicked() { symbole_choisi = Some((g, f.id.clone())); }
+                                        }
+                                    }).response.on_hover_text("Famille utilisée dans toutes les vues ; Modifier dans le ruban pour la dessiner");
+                                    ui.end_row();
+                                }
+                            });
                         }
                         if titre == "Profils" {
                             if ui.small_button("Nouveau profil…").clicked() { nouveau_profil = true; }
@@ -551,6 +570,7 @@ impl Application {
                     Err(e) => self.error = Some(e),
                 }
             }
+        if let Some((g, id)) = symbole_choisi && let Err(e) = self.choisir_famille_symbole(g, &id) { self.error = Some(e); }
         if nouveau_profil { self.ouvrir_profil(None); }
         if charger_profil { self.charger_profil_fichier(); }
         if charger_famille

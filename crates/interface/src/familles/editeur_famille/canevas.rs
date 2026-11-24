@@ -136,7 +136,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
         use modele::documentation::AnnotationForme;
         let element = &ed.famille.element_resolu(&r, element);
         if let AnnotationForme::Texte { point, texte } = &element.forme {
-            let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
+            let papier = ed.famille.categorie.documentaire();
             let taille = taille_texte(element.hauteur, papier, ed.navigation[ed.vue as usize].echelle_vue, &cadre);
             let apercu = crate::outils::annoter::outils_texte::apercu_famille(texte, projet, ed.vue.nom(), ed.famille.categorie, ed.cible_feuille.as_deref(), ed.cible_piece.as_deref());
             let largeur = noyau::texte::largeur(&apercu, "Arial", taille as f64, false) as f32;
@@ -275,7 +275,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
     let maj = ui.input(|i| i.modifiers.shift);
     let depart_courant = ed.esquisse.last().map(|(_, p)| *p).or(ed.debut).or(ed.points_transfo.last().copied());
     let curseur_guide = curseur.filter(|_| resp.hovered() && ed.outil != OutilFamille::Selection);
-    let papier = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece);
+    let papier = ed.famille.categorie.documentaire();
     let facteur = if papier { 1.0 } else { modele::unite::unite().facteur() };
     let point_guide = curseur_guide.map(|q| {
         let (h, v) = cadre.modele(q);
@@ -638,7 +638,7 @@ pub(super) fn canevas(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &model
                 use modele::famille::modelee::{CategorieFamille, Element2DFamille};
                 let (h, v) = viser(q, None).0;
                 let texte = if ed.outil == OutilFamille::Texte { "Texte" } else {
-                    match ed.famille.categorie { CategorieFamille::Cartouche => "{numero}", CategorieFamille::EtiquettePiece => "{nom}", _ => "Libellé" }
+                    match ed.famille.categorie { CategorieFamille::Cartouche => "{numero}", c if c.documentaire() => "{nom}", _ => "Libellé" }
                 };
                 ed.famille.elements_2d.push(Element2DFamille::fixe(ed.vue.esquisse(), AnnotationForme::Texte { point: [h, v], texte: texte.into() }, 2.5));
                 let indice = ed.famille.elements_2d.len() - 1;

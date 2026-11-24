@@ -16,13 +16,14 @@ mod guidage;
 mod balayage;
 mod raccord;
 pub use guidage::FormeGuidee;
+mod categorie;
 mod dessin;
 mod orientation;
 mod visibilite;
 mod maillage;
 pub use maillage::{GeometrieMaillage, MaillageFamille};
 pub use orientation::{intersection, tourner, PlanTourne, Repere, SupportForme};
-pub use dessin::{Element2DFamille, points_ancrables_mut};
+pub use dessin::{AlignementTexte, Element2DFamille, points_ancrables_mut};
 pub use visibilite::{Affichage, NiveauDetail, TypeVue, VisibiliteElement, PARTOUT};
 #[cfg(test)]
 mod tests_maillage;
@@ -371,7 +372,8 @@ fn menuiserie() -> Materiau {
 /// Catégorie d'utilisation d'un document de famille unique.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum CategorieFamille { Composant, Porte, Fenetre, Profil, Cartouche, EtiquettePiece, Vegetation }
+pub enum CategorieFamille { Composant, Porte, Fenetre, Profil, Cartouche, EtiquettePiece, Vegetation, TeteNiveau, TeteQuadrillage, RepereCoupe, RepereElevation }
+
 
 /// Nom du paramètre texte qui porte la référence de la géométrie de rendu (style
 /// Réaliste) d'une famille ; vide ou absent : la géométrie de la famille est rendue.

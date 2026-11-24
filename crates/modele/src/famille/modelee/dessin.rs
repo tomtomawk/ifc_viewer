@@ -28,12 +28,31 @@ pub struct Element2DFamille {
     /// Visibilité par niveau de détail et par type de vue (absente : partout).
     #[serde(default, skip_serializing_if = "VisibiliteElement::partout")]
     pub visibilite: VisibiliteElement,
+    /// Alignement d'un texte sur son point (symboles d'annotation) ; absent : centré.
+    #[serde(default, skip_serializing_if = "AlignementTexte::est_centre")]
+    pub alignement: AlignementTexte,
+}
+
+/// Alignement horizontal d'un texte sur son point.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AlignementTexte {
+    Gauche,
+    #[default]
+    Centre,
+    Droite,
+}
+
+impl AlignementTexte {
+    pub fn est_centre(&self) -> bool {
+        *self == Self::Centre
+    }
 }
 
 impl Element2DFamille {
     /// Élément à coordonnées fixes.
     pub fn fixe(vue: VueEsquisse, forme: AnnotationForme, hauteur: f64) -> Self {
-        Self { vue, forme, hauteur, ancrage: Vec::new(), visible: None, visibilite: VisibiliteElement::default() }
+        Self { vue, forme, hauteur, ancrage: Vec::new(), visible: None, visibilite: VisibiliteElement::default(), alignement: AlignementTexte::Centre }
     }
 
     /// Élément ancré : un sommet par point ancrable de la forme ; les coordonnées de
@@ -43,7 +62,7 @@ impl Element2DFamille {
         if let Some(points) = points_ancrables_mut(&mut forme) {
             for (p, a) in points.into_iter().zip(&ancrage) { *p = [a.h.decalage, a.v.decalage]; }
         }
-        Self { vue, forme, hauteur: 2.5, ancrage, visible: None, visibilite: VisibiliteElement::default() }
+        Self { vue, forme, hauteur: 2.5, ancrage, visible: None, visibilite: VisibiliteElement::default(), alignement: AlignementTexte::Centre }
     }
 
     /// Polyligne ancrée (ouverte ou fermée).

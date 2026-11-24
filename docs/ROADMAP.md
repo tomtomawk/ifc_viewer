@@ -55,7 +55,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M7 | Ajuster plusieurs éléments | P2 | §2 |
 | M8 | Menu du clic droit pendant une commande (Valider / Annuler) | P2 | §1 |
 | S3 | Quadrillages et repères des autres coupes non dessinés ni sélectionnables en coupe et élévation ; repère de coupe sélectionnable seulement en plan | P2 | `modele::documentation::niveaux_et_limites_en_coupe` |
-| S4 | Types de niveau (tête, trait) absents du modèle : le sélecteur d'un niveau reste « Générique » | P3 | `docs/MODELE.md` |
+| S4 | Types de niveau : tête choisie par niveau (aujourd'hui une famille de tête pour tout le projet, `symboles.tete_niveau`) et type de trait du niveau ; même chose pour les axes de quadrillage et les repères de coupe ; le sélecteur d'un niveau reste « Générique » | P3 | `docs/MODELE.md` (`familles_symboles`, `symboles`) |
 | O1 | Étiquette d'annotation : une ouverture (porte, fenêtre) n'est pas reconnue et s'affiche « Référence perdue » (`documentation::primitives`, seuls murs, dalles, barres et importés) ; l'exemple `maison_exemple` repère ses menuiseries par des textes | P2 | `crates/modele/src/documentation/mod.rs` |
 | M10 | Décaler et Scinder des lignes d'annotation à la souris | P2 | §2 |
 | M11 | Compléments de fonctions faites : trait de démolition dans les plans imprimés ; Joindre par clic sur la cible ; Coller aligné sur plusieurs niveaux d'un coup ; aperçu glissant de Changer d'hôte ; propriétés grisées d'un élément verrouillé | P2 | §3, §5 |

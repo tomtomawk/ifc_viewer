@@ -125,8 +125,7 @@ pub(super) fn taille_texte(hauteur: f64, papier: bool, echelle_vue: f64, cadre: 
 /// le mur générique n'ayant pas de sens sur le papier.
 pub(super) fn cadrage_vue(ed: &EditeurFamille, r: &Resolution, h: [f64; 2], v: [f64; 2]) -> (f64, f64, f64, f64, f64) {
     use modele::documentation::AnnotationForme;
-    use modele::famille::modelee::CategorieFamille as C;
-    let papier = matches!(ed.famille.categorie, C::Cartouche | C::EtiquettePiece);
+    let papier = ed.famille.categorie.documentaire();
     let mut points = Vec::new();
     for e in ed.famille.elements_2d.iter().filter(|e| e.vue == ed.vue.esquisse()) {
         let e = ed.famille.element_resolu(r, e);
@@ -149,8 +148,7 @@ impl Application {
     /// échelle, niveau de détail, aperçu « comme dans le projet », cadrage.
     pub(crate) fn barre_vue_famille(&mut self, ui: &mut egui::Ui) {
         let Some(ed) = self.famille.as_mut() else { return };
-        use modele::famille::modelee::CategorieFamille as C;
-        let papier = matches!(ed.famille.categorie, C::Cartouche | C::EtiquettePiece);
+        let papier = ed.famille.categorie.documentaire();
         ui.horizontal_wrapped(|ui| {
             let vue_plane = !ed.vue_3d;
             let nav = &mut ed.navigation[ed.vue as usize];

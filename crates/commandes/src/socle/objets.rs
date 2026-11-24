@@ -87,6 +87,7 @@ pub const COLLECTIONS: &[(&str, PolitiqueCollection)] = &[
     ("motifs", PolitiqueCollection::Identifiee),
     ("familles_cartouches", PolitiqueCollection::Identifiee),
     ("familles_etiquettes", PolitiqueCollection::Identifiee),
+    ("familles_symboles", PolitiqueCollection::Identifiee),
     ("types_traits", PolitiqueCollection::Identifiee),
     ("positions_plan", PolitiqueCollection::IdentifieeOrdonnee),
     ("phases", PolitiqueCollection::Atomique),

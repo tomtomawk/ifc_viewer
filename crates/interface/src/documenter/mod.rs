@@ -6,6 +6,7 @@ pub(crate) mod aimantation;
 pub(crate) mod export_jeu;
 pub(crate) mod editeur_hachure;
 pub(crate) mod familles_feuilles;
+pub(crate) mod familles_symboles;
 pub(crate) mod proprietes_feuilles;
 pub(crate) mod annotations_feuille;
 pub(crate) mod vue_jeu;

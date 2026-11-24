@@ -23,9 +23,9 @@ impl Application {
         let (actuelle, modifiable) = if let Some(ed) = self.famille.as_ref().filter(|_| self.famille_active) {
             if ed.selection != SelectionFamille::Aucune || !ed.multiple.is_empty() { return; }
             use modele::famille::modelee::CategorieFamille as C;
-            (match ed.famille.categorie { C::Composant => 0, C::Porte => 1, C::Fenetre => 2, C::Profil => 3, C::Cartouche => 4, C::EtiquettePiece => 5, C::Vegetation => 6 }, ed.type_id.is_none())
+            (C::TOUTES.iter().position(|c| *c == ed.famille.categorie).unwrap_or(0), ed.type_id.is_none())
         } else { return; };
-        let categories = ["Composant", "Porte", "Fenêtre", "Profil", "Cartouche", "Étiquette de pièce", "Végétation"];
+        let categories = modele::famille::modelee::CategorieFamille::TOUTES.map(|c| c.libelle());
         let mut choix = actuelle;
         ui.label("Catégorie de famille");
         ui.add_enabled_ui(modifiable, |ui| {
@@ -36,9 +36,9 @@ impl Application {
         if choix == actuelle { return; }
         use modele::famille::modelee::CategorieFamille as C;
         if let Some(ed) = self.famille.as_mut().filter(|_| self.famille_active) {
-            ed.famille.categorie = [C::Composant, C::Porte, C::Fenetre, C::Profil, C::Cartouche, C::EtiquettePiece, C::Vegetation][choix];
+            ed.famille.categorie = C::TOUTES[choix];
             ed.famille.genre = match ed.famille.categorie { C::Porte => GenreOuverture::Porte, C::Fenetre => GenreOuverture::Fenetre, _ => GenreOuverture::Libre };
-            if matches!(ed.famille.categorie, C::Profil | C::Cartouche | C::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
+            if ed.famille.categorie == C::Profil || ed.famille.categorie.documentaire() { ed.ouvrir_vue(VueFamille::Plan); }
             ed.message = Some("Catégorie modifiée : le contenu de la famille est conservé.".into());
         }
     }
@@ -85,7 +85,11 @@ impl Application {
                         "profil"=>self.ouvrir_profil(None),
                         "cartouche"=>self.editer_cartouche(None, None),
                         "etiquette"=>self.editer_famille_etiquette(None, None),
-                        _=>return Err("genre : porte|fenetre|composant [type]|profil|cartouche|etiquette".into())
+                        "tete_niveau"=>self.editer_famille_symbole(modele::documentation::GenreSymbole::TeteNiveau, ""),
+                        "tete_quadrillage"=>self.editer_famille_symbole(modele::documentation::GenreSymbole::TeteQuadrillage, ""),
+                        "repere_coupe"=>self.editer_famille_symbole(modele::documentation::GenreSymbole::RepereCoupe, ""),
+                        "repere_elevation"=>self.editer_famille_symbole(modele::documentation::GenreSymbole::RepereElevation, ""),
+                        _=>return Err("genre : porte|fenetre|composant [type]|profil|cartouche|etiquette|tete_niveau|tete_quadrillage|repere_coupe|repere_elevation".into())
                     }
                 }
                 "famille_modifier" => {
@@ -341,6 +345,19 @@ impl Application {
                 ed.marquer_enregistree();
             }
             self.status = "Famille de cartouche chargée dans le projet.".into();
+            return Ok(id);
+        }
+        if modele::documentation::GenreSymbole::de_categorie(ed.famille.categorie).is_some() {
+            // symbole d'annotation : enregistré dans le projet et choisi pour sa catégorie
+            let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
+            let famille = modele::documentation::FamilleSymbole { id, nom: ed.nom.trim().into(), document_famille: Box::new(ed.fichier()) };
+            let id = self.enregistrer_famille_symbole(famille, true)?;
+            if let Some(ed) = self.famille.as_mut() {
+                ed.type_id = Some(id.clone());
+                ed.document_famille.document = self.document_actif;
+                ed.document_famille.autonome = false;
+                ed.marquer_enregistree();
+            }
             return Ok(id);
         }
         if ed.famille.categorie == modele::famille::modelee::CategorieFamille::EtiquettePiece {
@@ -689,7 +706,7 @@ impl Application {
         self.editeur_famille(None, None, fichier.largeur, fichier.hauteur, fichier.profondeur, fichier.famille.genre);
         if let Some(ed) = self.famille.as_mut() {
             ed.nom = fichier.nom; ed.famille = fichier.famille;
-            if matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Profil | modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
+            if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil || ed.famille.categorie.documentaire() { ed.ouvrir_vue(VueFamille::Plan); }
             ed.document_famille.autonome = id.is_none(); ed.type_id = id;
             ed.marquer_enregistree(); ed.historique_neuf();
         }
@@ -707,7 +724,7 @@ impl Application {
         self.editeur_famille(None, None, f.largeur, f.hauteur, f.profondeur, f.famille.genre);
         let ed = self.famille.as_mut().ok_or("Aucun projet natif.")?;
         (ed.nom, ed.famille) = (f.nom, f.famille);
-        if matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Profil | modele::famille::modelee::CategorieFamille::Cartouche | modele::famille::modelee::CategorieFamille::EtiquettePiece) { ed.ouvrir_vue(VueFamille::Plan); }
+        if ed.famille.categorie == modele::famille::modelee::CategorieFamille::Profil || ed.famille.categorie.documentaire() { ed.ouvrir_vue(VueFamille::Plan); }
         ed.document_famille.autonome = true;
         ed.document_famille.chemin_fichier = Some(chemin.to_path_buf());
         ed.marquer_enregistree();
@@ -728,6 +745,7 @@ impl Application {
             C::Profil => p.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Cartouche => nom.eq_ignore_ascii_case(modele::documentation::NOM_CARTOUCHE_STANDARD) || p.familles_cartouches.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::EtiquettePiece => nom.eq_ignore_ascii_case("Étiquette standard") || p.familles_etiquettes.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::TeteNiveau | C::TeteQuadrillage | C::RepereCoupe | C::RepereElevation => p.familles_symboles.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)) || modele::documentation::GenreSymbole::TOUS.iter().any(|g| nom.eq_ignore_ascii_case(&g.nom_standard())),
         };
         let base = f.nom.trim().to_string();
         f.nom = (1..).map(|k| if k == 1 { base.clone() } else { format!("{base} ({k})") }).find(|n| !existe(n)).unwrap_or_default();
@@ -746,6 +764,10 @@ impl Application {
             C::EtiquettePiece => {
                 let famille = modele::documentation::FamilleEtiquette { id: String::new(), nom: f.nom.clone(), document_famille: Box::new(f.clone()) };
                 self.enregistrer_famille_etiquette(famille, None, "")?
+            }
+            C::TeteNiveau | C::TeteQuadrillage | C::RepereCoupe | C::RepereElevation => {
+                let famille = modele::documentation::FamilleSymbole { id: String::new(), nom: f.nom.clone(), document_famille: Box::new(f.clone()) };
+                self.enregistrer_famille_symbole(famille, false)?
             }
             C::Composant | C::Vegetation => {
                 let type_composant = modele::TypeComposant { id: String::new(), nom: f.nom.clone(), largeur: f.largeur, profondeur: f.profondeur, hauteur: f.hauteur, modele: f.famille.clone() };
@@ -883,7 +905,6 @@ impl Application {
 
 /// Titre d'onglet d'un éditeur : catégorie, type, « * » si non chargé.
 pub(super) fn titre_editeur(ed: &EditeurFamille) -> String {
-    use modele::famille::modelee::CategorieFamille as C;
-    let genre = match ed.famille.categorie { C::Porte => "Porte", C::Fenetre => "Fenêtre", C::Composant => "Composant", C::Profil => "Profil", C::Cartouche => "Cartouche", C::EtiquettePiece => "Étiquette de pièce", C::Vegetation => "Végétation" };
+    let genre = ed.famille.categorie.libelle();
     format!("{genre} : {}{}", ed.nom, if ed.modifiee() { " *" } else { "" })
 }

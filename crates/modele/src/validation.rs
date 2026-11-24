@@ -57,6 +57,7 @@ impl Projet {
                 return Err(format!("Identifiant vide ou dupliqué : {id}"));
             }
         }
+        self.verifier_symboles()?;
         if self.contextes.keys().any(|id| !ids.contains(id)) {
             return Err("Contexte d'élément sans élément associé.".into());
         }

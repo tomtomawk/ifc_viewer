@@ -96,9 +96,13 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
             let champs = match ed.famille.categorie {
                 CategorieFamille::Cartouche => crate::outils::annoter::outils_texte::CHAMPS_FEUILLE,
                 CategorieFamille::EtiquettePiece => crate::outils::annoter::outils_texte::CHAMPS_PIECE,
+                CategorieFamille::TeteNiveau => crate::outils::annoter::outils_texte::CHAMPS_NIVEAU,
+                CategorieFamille::TeteQuadrillage => crate::outils::annoter::outils_texte::CHAMPS_QUADRILLAGE,
+                CategorieFamille::RepereCoupe | CategorieFamille::RepereElevation => crate::outils::annoter::outils_texte::CHAMPS_REPERE,
                 _ => crate::outils::annoter::outils_texte::CHAMPS_PROJET,
             };
-            let papier = matches!(ed.famille.categorie, CategorieFamille::Cartouche | CategorieFamille::EtiquettePiece);
+            let papier = ed.famille.categorie.documentaire();
+            let symbole = modele::documentation::GenreSymbole::de_categorie(ed.famille.categorie).is_some();
             let f = &mut ed.famille;
             let element = &mut f.elements_2d[k];
             egui::Grid::new(("visibilite_2d", k)).num_columns(2).show(ui, |ui| super::apercu::visibilite_ui(ui, &mut element.visible, &mut element.visibilite, &f.parametres, ("element_2d", k)));
@@ -106,6 +110,16 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
                 AnnotationForme::Texte { point, texte } => {
                     crate::outils::annoter::outils_texte::proprietes_texte(ui, texte, point, papier, champs);
                     crate::outils::annoter::outils_texte::hauteur_texte(ui, &mut element.hauteur);
+                    if symbole {
+                        // symbole d'annotation : texte calé sur son point (gauche, centre, droite)
+                        use modele::famille::modelee::AlignementTexte as A;
+                        ui.horizontal(|ui| {
+                            ui.label("Alignement");
+                            for (a, nom) in [(A::Gauche, "Gauche"), (A::Centre, "Centre"), (A::Droite, "Droite")] {
+                                ui.selectable_value(&mut element.alignement, a, nom);
+                            }
+                        });
+                    }
                 }
                 AnnotationForme::Polyligne { fermee, remplissage, .. } => {
                     if ui.checkbox(fermee, "Fermée").changed() && !*fermee { *remplissage = None; }

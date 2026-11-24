@@ -6,6 +6,9 @@ use eframe::egui;
 pub(crate) const CHAMPS_PROJET: &[(&str, &str)] = &[("{projet}", "Projet"), ("{vue}", "Nom de la vue")];
 pub(crate) const CHAMPS_FEUILLE: &[(&str, &str)] = &[("{projet}", "Projet"), ("{feuille}", "Nom de la feuille"), ("{numero}", "Numéro"), ("{cartouche}", "Texte du cartouche"), ("{echelles}", "Échelles")];
 pub(crate) const CHAMPS_PIECE: &[(&str, &str)] = &[("{nom}", "Nom"), ("{numero}", "Numéro"), ("{surface}", "Surface"), ("{perimetre}", "Périmètre"), ("{niveau}", "Niveau")];
+pub(crate) const CHAMPS_NIVEAU: &[(&str, &str)] = &[("{nom}", "Nom du niveau"), ("{altitude}", "Altitude (m)")];
+pub(crate) const CHAMPS_QUADRILLAGE: &[(&str, &str)] = &[("{nom}", "Nom de l'axe")];
+pub(crate) const CHAMPS_REPERE: &[(&str, &str)] = &[("{repere}", "Rang / feuille"), ("{nom}", "Nom de la vue"), ("{numero}", "Rang sur la feuille"), ("{feuille}", "Numéro de feuille")];
 
 /// Les champs disponibles et l'unité du point dépendent du document.
 pub(crate) fn proprietes_texte(ui: &mut egui::Ui, contenu: &mut String, position: &mut [f64; 2], papier: bool, champs: &[(&str, &str)]) -> bool {

@@ -77,7 +77,7 @@ const SELECTION: [u8; 4] = [230, 120, 20, 255];
 fn primitives_vue(ed: &EditeurFamille, r: &Resolution, projet: &modele::Projet, echelle: f64) -> (Vec<Primitive>, Vec<Primitive>) {
     use modele::documentation::{self as doc, AnnotationForme};
     let pt = |h: f64, v: f64| DVec3::new(h / 1000.0, v / 1000.0, 0.0);
-    let papier = matches!(ed.famille.categorie, C::Cartouche | C::EtiquettePiece);
+    let papier = ed.famille.categorie.documentaire();
     let echelle_vue = if papier { 1.0 } else { ed.navigation[ed.vue as usize].echelle_vue };
     let mut devant = Vec::new();
     for (indice, element) in ed.famille.elements_2d.iter().enumerate().filter(|(k, e)| e.vue == ed.vue.esquisse() && ed.montre_element_2d(r, *k)) {
@@ -198,7 +198,7 @@ impl Application {
         let placer = |prims: Vec<Primitive>, p: f32| prims.iter().map(|x| x.transformer(|q: DVec3| point_vue(axes, q.x * 1000.0, q.y * 1000.0, p).as_dvec3())).collect::<Vec<_>>();
         let mut prims = placer(derriere, loin);
         prims.extend(placer(devant, pres));
-        let papier = matches!(ed.famille.categorie, C::Cartouche | C::EtiquettePiece);
+        let papier = ed.famille.categorie.documentaire();
         let echelle_vue = if papier { 1.0 } else { ed.navigation[indice].echelle_vue };
         let (tris, traits) = moteur2d::sommets(&|_| None, &prims, vers_observateur.as_dvec3(), echelle_vue, self.traits_fins);
         let selection = match ed.selection { SelectionFamille::Volume(k) => Some(k), SelectionFamille::Extrusion(k) => Some(ed.famille.volumes.len() + k), _ => None };

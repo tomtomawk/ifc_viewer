@@ -335,7 +335,8 @@ impl Application {
         }
     }
 
-    /// Repères des coupes natives dans une vue en plan.
+    /// Surbrillance des repères de coupe et des axes de quadrillage sélectionnés dans une
+    /// vue en plan (les repères eux-mêmes sont dessinés avec la vue).
     pub(crate) fn reperes_coupes(&self, ui: &egui::Ui, rect: egui::Rect, z: f64) {
         let Some((projet, _)) = &self.natif else { return };
         let masques = self.vue_native_id().and_then(|id| projet.vues.iter().find(|v| v.id == id)).map(|v| v.elements_masques.as_slice()).unwrap_or(&[]);
@@ -349,10 +350,12 @@ impl Application {
         }
         for v in &projet.vues {
             if masques.contains(&v.id) { continue; }
-            if let modele::GenreVue::Coupe { debut, fin, profondeur, elevation } = &v.genre {
-                let couleur = if self.bim.selection.contains(&v.id) { Color32::from_rgb(230, 120, 20) } else { Color32::from_rgb(40, 90, 170) };
-                self.dessiner_repere_coupe(&painter, rect, *debut, *fin, z, *profondeur, *elevation, &v.nom, couleur);
-            }
+            // repère dessiné avec la vue (familles de symboles) ; sélectionné : surligné,
+            // avec sa profondeur
+            if let modele::GenreVue::Coupe { debut, fin, profondeur, elevation } = &v.genre
+                && self.bim.selection.contains(&v.id) {
+                    self.dessiner_repere_coupe(&painter, rect, *debut, *fin, z, *profondeur, *elevation, &v.nom, Color32::from_rgb(230, 120, 20));
+                }
         }
     }
 

@@ -329,6 +329,7 @@ pub fn sensible(k: &str) -> bool {
             | "motifs"
             | "familles_cartouches"
             | "familles_etiquettes"
+            | "familles_symboles"
             | "types_traits"
             | "gabarits_vues"
             | "profils"

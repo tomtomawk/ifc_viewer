@@ -8,6 +8,8 @@ mod nomenclatures;
 pub use nomenclatures::*;
 mod habillage_feuille;
 pub use habillage_feuille::*;
+mod symboles;
+pub use symboles::*;
 #[cfg(test)]
 mod tests;
 pub use super::*;
@@ -788,15 +790,12 @@ pub fn annotations(p: &Projet, v: &Vue) -> Vec<Primitive> {
             let mut axe = ligne(a, b);
             axe.element = Some(crate::identifiants::id_natif("quadrillage", &g.id));
             out.push(axe);
-            out.push(texte(
-                &g.nom,
-                b,
-                u,
-                h,
-                2.5 * v.echelle * 0.001,
-                [70, 70, 70, 255],
-            ));
+            // tête de quadrillage au bout de l'axe : famille du projet (standard : bulle)
+            let d = (DVec2::from_array(g.fin) - DVec2::from_array(g.debut)).normalize_or_zero();
+            let pose = Pose { origine: b, x: d.extend(0.0), y: d.perp().extend(0.0), echelle: v.echelle, lecture: (u, h) };
+            out.extend(primitives_symbole(p, GenreSymbole::TeteQuadrillage, &pose, &[("{nom}", g.nom.as_str())], [70, 70, 70, 255], Some(crate::identifiants::id_natif("quadrillage", &g.id))));
         }
+        out.extend(reperes_vues_en_plan(p, v));
     }
     if matches!(v.genre, GenreVue::Coupe { .. }) {
         out.extend(niveaux_et_limites_en_coupe(p, v));
@@ -828,7 +827,6 @@ fn niveaux_et_limites_en_coupe(p: &Projet, v: &Vue) -> Vec<Primitive> {
         return Vec::new();
     }
     let (axe_u, axe_n) = (d / longueur, (d / longueur).perp());
-    let taille = 2.5 * v.echelle * 0.001;
     let mut out = Vec::new();
     for n in &p.niveaux {
         if v.elements_masques.contains(&n.id) {
@@ -836,7 +834,10 @@ fn niveaux_et_limites_en_coupe(p: &Projet, v: &Vue) -> Vec<Primitive> {
         }
         let (bleu, element) = ([18, 120, 170, 255], Some(crate::identifiants::id_natif("annotation", &n.id)));
         out.push(Primitive { element, ..trait_couleur(pt(-500.0, n.altitude), pt(longueur + 500.0, n.altitude), bleu, 0.13) });
-        out.push(Primitive { element, ..texte(&format!("{} ({:.2} m)", n.nom, n.altitude / 1000.0), pt(longueur + 700.0, n.altitude), u, h, taille, bleu) });
+        // tête de niveau : famille du projet (standard : nom et cote à droite du trait)
+        let altitude = format!("{:.2}", n.altitude / 1000.0);
+        let pose = Pose { origine: pt(longueur + 500.0, n.altitude), x: u, y: h, echelle: v.echelle, lecture: (u, h) };
+        out.extend(primitives_symbole(p, GenreSymbole::TeteNiveau, &pose, &[("{nom}", n.nom.as_str()), ("{altitude}", altitude.as_str())], bleu, element));
     }
     for l in &p.limites_propriete {
         if v.elements_masques.contains(&l.id) || l.contour.len() < 2 {

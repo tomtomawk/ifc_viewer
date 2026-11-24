@@ -10,6 +10,8 @@ pub(crate) enum FamilleCatalogue {
     Etiquette(String),
     Cartouche(String),
     GardeCorps(String),
+    /// Symbole d'annotation : genre et famille (vide : la standard).
+    Symbole(modele::documentation::GenreSymbole, String),
 }
 
 pub(crate) enum CibleFamille {
@@ -22,7 +24,7 @@ pub(crate) enum CibleFamille {
 }
 
 impl FamilleCatalogue {
-    pub(crate) fn liste(p: &Projet) -> Vec<(Self, &str)> {
+    pub(crate) fn liste(p: &Projet) -> Vec<(Self, String)> {
         let mut familles = vec![
             (Self::Cartouche(String::new()), "Cartouche standard"),
             (Self::Etiquette(String::new()), "Étiquette standard"),
@@ -34,8 +36,11 @@ impl FamilleCatalogue {
         familles.extend(p.familles_etiquettes.iter().map(|t| (Self::Etiquette(t.id.clone()), t.nom.as_str())));
         familles.extend(p.familles_cartouches.iter().map(|t| (Self::Cartouche(t.id.clone()), t.nom.as_str())));
         familles.extend(p.types_garde_corps.iter().map(|t| (Self::GardeCorps(t.id.clone()), t.nom.as_str())));
-        familles.sort_by_key(|(_, nom)| *nom);
-        familles
+        let mut liste: Vec<(Self, String)> = familles.into_iter().map(|(f, n)| (f, n.to_string())).collect();
+        liste.extend(modele::documentation::GenreSymbole::TOUS.iter().map(|g| (Self::Symbole(*g, String::new()), g.nom_standard())));
+        liste.extend(p.familles_symboles.iter().filter_map(|f| Some((Self::Symbole(f.genre()?, f.id.clone()), f.nom.clone()))));
+        liste.sort_by(|a, b| a.1.cmp(&b.1));
+        liste
     }
 
     /// Types de la famille affichés dans l'arborescence : dimensions et nombre d'occurrences.
@@ -51,6 +56,7 @@ impl FamilleCatalogue {
             Self::Etiquette(id) => vec![p.familles_etiquettes.iter().find(|t| &t.id == id).map_or("Standard".into(), |t| t.nom.clone())],
             Self::Cartouche(id) => vec![p.familles_cartouches.iter().find(|t| &t.id == id).map_or("Standard".into(), |t| t.nom.clone())],
             Self::GardeCorps(id) => p.types_garde_corps.iter().find(|t| &t.id == id).map(|t| vec![t.nom.clone()]).unwrap_or_default(),
+            Self::Symbole(g, id) => vec![if p.symboles.choix(*g).map_or(id.is_empty(), |c| c == id) { "utilisée dans le projet".into() } else { "non utilisée".into() }],
         }
     }
 
@@ -63,6 +69,7 @@ impl FamilleCatalogue {
             Self::Etiquette(_) => "Étiquettes de pièce",
             Self::Cartouche(_) => "Cartouches",
             Self::GardeCorps(_) => "Garde-corps",
+            Self::Symbole(..) => "Symboles d'annotation",
         }
     }
 }
@@ -132,7 +139,7 @@ impl Application {
         egui::ComboBox::from_id_salt("famille_catalogue")
             .width((ui.available_width() - 8.0).max(1.0))
             .truncate()
-            .selected_text(*nom)
+            .selected_text(nom.clone())
             .show_ui(ui, |ui| {
                 for (f, nom) in liste.into_iter().filter(|(f, _)| f.categorie() == categorie) {
                     ui.selectable_value(&mut choix, f, nom);
@@ -197,6 +204,7 @@ impl Application {
             Some(C::Catalogue(F::Etiquette(id))) => self.editer_famille_etiquette(Some(id), None),
             Some(C::Catalogue(F::Cartouche(id))) => self.editer_cartouche_catalogue(&id),
             Some(C::Catalogue(F::GardeCorps(id))) => self.ouvrir_type_garde_corps(None, Some(&id), false),
+            Some(C::Catalogue(F::Symbole(g, id))) => self.editer_famille_symbole(g, &id),
             Some(C::CartoucheFeuille(id, i)) => self.editer_cartouche_feuille(&id, i),
             Some(C::Ouverture(id)) => self.ouvrir_editeur_famille(&id),
             Some(C::EtiquettePiece(famille, piece)) => self.editer_famille_etiquette(Some(famille), Some(piece)),

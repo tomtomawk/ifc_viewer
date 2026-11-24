@@ -505,7 +505,7 @@ pub fn empreinte_usagers_terrain(o: &Objets) -> String {
 fn effet_geometrique(c: &Changement) -> bool {
     if matches!(
         c.cle.split('/').next().unwrap_or(""),
-        "materiaux" | "motifs" | "familles_cartouches" | "familles_etiquettes" | "types_traits"
+        "materiaux" | "motifs" | "familles_cartouches" | "familles_etiquettes" | "familles_symboles" | "types_traits"
     ) {
         return false;
     }

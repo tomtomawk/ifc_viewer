@@ -190,6 +190,13 @@ pub struct Projet {
     /// Familles d'étiquettes de pièces ; absence : étiquette standard.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub familles_etiquettes: Vec<documentation::FamilleEtiquette>,
+    /// Familles des symboles d'annotation (têtes de niveau et de quadrillage, repères de
+    /// coupe et d'élévation) ; leur catégorie est celle de leur document.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub familles_symboles: Vec<documentation::FamilleSymbole>,
+    /// Famille choisie pour chaque symbole ; absente : symbole standard.
+    #[serde(default, skip_serializing_if = "documentation::SymbolesVues::est_vide")]
+    pub symboles: documentation::SymbolesVues,
     /// Types de trait du dessin 2D (épaisseur et tirets), affectés aux segments des
     /// polylignes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
