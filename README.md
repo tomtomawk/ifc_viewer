@@ -18,8 +18,12 @@ texte Yrs, conflits, instantanés, récupération et qualification NAS à deux m
 Pour essayer un projet complet :
 
 ```sh
-cargo run --release -- samples/maison_native.bem
+cargo run --release -- samples/maison_exemple.bem
 ```
+
+`samples/maison_exemple.bem` (maison R+1 et son aile, amorcée par le gabarit) est régénéré par
+`cargo run --release -p echanges --example maison_exemple` ; `samples/maison_native.bem` reste le
+projet minimal des tests.
 
 ## Utilisation
 

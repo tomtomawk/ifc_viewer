@@ -24,6 +24,8 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `formats` (de
 
 `tests/` : tests d'intégration dont le projet de départ vient de `depuis_ifc` (commandes, documentation, site, escalier, volumes) ; `import_proprietes.rs` : données des éléments importés et aller-retour IFC -> natif -> IFC ; `import_barres.rs` : poteaux et poutres convertis ; `import_espaces.rs` : espaces convertis en pièces, repli, aller-retour IFC ; `copies_guid.rs` : GlobalId uniques après copie d'éléments importés ; `fusion_ifc.rs` : IFC converti fusionné dans `maison_native` (`Commande::Fusionner`) ; `couches_rvt.rs` lit un fichier hors dépôt (`RVT_ESSAIS`) et est sauté s'il est absent. Les `samples/` se lisent par `concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/...")`.
 
+`examples/maison_exemple.rs` : génère `samples/maison_exemple.bem` depuis le gabarit par défaut (API de création de `modele` et commandes de `commandes`, sans écrire le JSON à la main) ; le relancer après un changement du format ou du gabarit.
+
 ## Quand modifier ici
 
 Import IFC ou Revit vers le modèle natif, export IFC, enregistrement atomique, rapport d'import. La lecture bas niveau des formats est dans `formats` et `ifc_base`.

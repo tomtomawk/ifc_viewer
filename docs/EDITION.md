@@ -712,7 +712,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   schéma, chaque géométrie et la présence du site, des types, de `Pset_WallCommon`
   et de `Qto_WallBaseQuantities`.
 
-L'exemple autonome `samples/maison_native.bem` contient deux niveaux, huit
+L'exemple `samples/maison_exemple.bem` est construit depuis le gabarit par défaut
+(`crates/echanges/examples/maison_exemple.rs`) : volume R+1 en béton et doublage isolé sous
+toiture tuiles à deux pans, aile en ossature bois sous toiture végétalisée, auvent sur poteau,
+terrasse bois et muret ; quatre types de murs, onze types de menuiseries, cloisons, douze
+pièces, escalier et garde-corps, cotes et textes, deux coupes, quatre façades, trois vues
+caméra, quatre nomenclatures et trois feuilles A2. L'exemple minimal `samples/maison_native.bem`, utilisé par les tests, contient deux niveaux, huit
 murs, des ouvertures, deux planchers, une toiture, des murs attachés, des annotations,
 une feuille A3 et une nomenclature. Les fichiers `samples/test_ifc4*.ifc` couvrent
 également les conversions et les murs courbes.
