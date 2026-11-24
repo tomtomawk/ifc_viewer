@@ -329,6 +329,9 @@ pub struct CoucheCoupe {
     pub isolation: bool,
     /// Centre du mur courbe dans le repère du modèle, en mètres.
     pub centre_isolation: Option<[f64; 2]>,
+    /// Axe (début, fin) et épaisseur d'une couche de mur droit, repère du modèle, en
+    /// mètres : en plan, la ligne d'isolant est tracée le long de cet axe.
+    pub axe_isolation: Option<([[f64; 2]; 2], f64)>,
     /// Épaisseur du contour de coupe (mm du papier, plume de la couche).
     pub trait_mm: f64,
     pub motif: Option<Arc<noyau::motif::Motif>>,

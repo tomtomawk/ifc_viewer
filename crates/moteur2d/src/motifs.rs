@@ -249,6 +249,26 @@ pub(super) fn ligne_isolation_morceau(tris: &[[[f64; 2]; 3]], direction: Option<
             u1 = u1.max(d.dot(u));
         }
     }
+    serie_s(tris, c, u, v0, v1, u0, u1)
+}
+
+/// Ligne d'isolant d'une couche dont l'axe (`a` → `b`) et l'épaisseur `e` sont connus
+/// (mur droit en plan) : série de S centrée sur l'axe, sur toute l'étendue de la région
+/// le long de l'axe, découpée à la région (jonctions, baies, travées).
+pub fn ligne_isolation_axe(tris: &[[[f64; 2]; 3]], a: [f64; 2], b: [f64; 2], e: f64) -> Vec<[[f64; 2]; 2]> {
+    use glam::DVec2;
+    let (a, b) = (DVec2::from_array(a), DVec2::from_array(b));
+    let Some(u) = (b - a).try_normalize() else { return Vec::new() };
+    let (u0, u1) = tris.iter().flatten().map(|p| (DVec2::from_array(*p) - a).dot(u)).fold((f64::MAX, f64::MIN), |(x, y), t| (x.min(t), y.max(t)));
+    serie_s(tris, a, u, -0.5 * e, 0.5 * e, u0, u1)
+}
+
+/// Série de S entre les faces `v0` et `v1` (repère : origine `c`, axe `u`, normale
+/// `u.perp()`), de `u0` à `u1`, gardée dans la région `tris`.
+fn serie_s(tris: &[[[f64; 2]; 3]], c: glam::DVec2, u: glam::DVec2, v0: f64, v1: f64, u0: f64, u1: f64) -> Vec<[[f64; 2]; 2]> {
+    use glam::DVec2;
+    let v = u.perp();
+    let e = v1 - v0;
     // NaN compris : épaisseur ou longueur indéterminée refusée
     if e.is_nan() || e <= 1e-6 || (u1 - u0).is_nan() || u1 - u0 < e || (u1 - u0) / (0.25 * e) > BOUCLES_ISOLANT_MAX {
         return Vec::new();

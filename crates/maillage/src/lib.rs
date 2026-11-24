@@ -169,8 +169,15 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         let neutre = Vec4::new(0.0, 0.0, 0.0, 1.0);
         if let Some(x) = &materiau {
             let mut bandes = coupe_materiau(projet, x, vec![neutre, neutre], projet.trait_coupe(type_mur.couches.first(), Cat::Murs));
-            if let modele::Axe::Arc { centre, .. } = m.axe {
-                for bande in &mut bandes { bande.centre_isolation = Some([centre[0] * 0.001, centre[1] * 0.001]); }
+            match m.axe {
+                modele::Axe::Arc { centre, .. } => {
+                    for bande in &mut bandes { bande.centre_isolation = Some([centre[0] * 0.001, centre[1] * 0.001]); }
+                }
+                // mur droit : axe et épaisseur de la couche, pour la ligne d'isolant en plan
+                modele::Axe::Droit { debut, fin } => {
+                    let axe = ([debut[0] * 0.001, debut[1] * 0.001], [fin[0] * 0.001, fin[1] * 0.001]);
+                    for bande in &mut bandes { bande.axe_isolation = Some(([axe.0, axe.1], type_mur.epaisseur() * 0.001)); }
+                }
             }
             // ossature : la couche découpée en membrures et travées de remplissage
             let cases = modele::murs::ossature::bandes_mur(projet, m);
@@ -216,6 +223,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
                 hachure_defaut: true,
                 isolation: false,
                 centre_isolation: None,
+                axe_isolation: None,
                 trait_mm: projet.trait_coupe(type_mur.couches.first(), Cat::Murs),
             }]));
         }

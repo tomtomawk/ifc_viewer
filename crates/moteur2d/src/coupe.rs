@@ -159,7 +159,11 @@ fn coupe_objet(scene: &Scene, i: usize, affichage: Affichage, n: DVec3, d: f64, 
                     // Le dessin de l'isolant calcule ses tolérances en millimètres ;
                     // les coordonnées de la scène sont en mètres.
                     let t2: Vec<_> = tris.iter().map(|t| t.map(|p| [(p-o).dot(e1) * 1000.0,(p-o).dot(e2) * 1000.0])).collect();
-                    let segments = if let Some([x, y]) = couche.centre_isolation.filter(|_| n.z.abs() > 0.999) {
+                    // vue en plan d'un mur droit : le long de l'axe connu de la couche
+                    let plan = |p: [f64; 2]| { let q = DVec3::new(p[0] - scene.origin.x, p[1] - scene.origin.y, o.z); [(q-o).dot(e1)*1000.0,(q-o).dot(e2)*1000.0] };
+                    let segments = if let Some(([a, b], e)) = couche.axe_isolation.filter(|_| n.z.abs() > 0.999) {
+                        motifs::ligne_isolation_axe(&t2, plan(a), plan(b), e * 1000.0)
+                    } else if let Some([x, y]) = couche.centre_isolation.filter(|_| n.z.abs() > 0.999) {
                         let centre = DVec3::new(x - scene.origin.x, y - scene.origin.y, o.z);
                         motifs::ligne_isolation_courbe(&t2, [(centre-o).dot(e1)*1000.0,(centre-o).dot(e2)*1000.0])
                     } else { ligne_isolation(&t2) };
@@ -515,6 +519,7 @@ fn empreinte_objet(scene: &Scene, i: usize) -> u64 {
             h.motif(c.motif_fond.as_deref());
             h.mot(c.isolation as u64);
             if let Some([x, y]) = c.centre_isolation { h.mot(x.to_bits()); h.mot(y.to_bits()); }
+            if let Some((axe, e)) = c.axe_isolation { for x in axe.iter().flatten().chain([&e]) { h.mot(x.to_bits()); } }
             h.mot(c.trait_mm.to_bits());
             h.motif(c.motif.as_deref());
             h.mot(u32::from_le_bytes(c.couleur_motif) as u64);

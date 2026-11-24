@@ -11,7 +11,7 @@ Dépendances internes autorisées : `noyau`, `modele`, `scene`, `maillage` (`com
 | `lib.rs` | `Poche`, `TRAIT_FIN_MM`, `PAS_HACHURE_MM`, `decouper`, `section` ; ré-exports |
 | `coupe.rs` | `coupe`, `coupe_avec_cache` et `CacheCoupe` (poché, hachures, contours ; coupe de chaque objet reprise tant que son empreinte ne change pas ; fusion des matériaux) |
 | `vue.rs` | `vu` (arêtes vues et cachées), `sommets`, `sommets_boite` (sommets GPU des coupes), `cadrer_primitives` |
-| `motifs.rs` | motif d'isolant (`ligne_isolation`) |
+| `motifs.rs` | motif d'isolant : en plan d'un mur droit, le long de l'axe connu de la couche (`ligne_isolation_axe`, `CoucheCoupe::axe_isolation`) ; ailleurs (coupes verticales, éléments importés), d'après la forme de la région coupée (`ligne_isolation`), mur courbe d'après son centre |
 | `dao.rs` | `Trace`, `OutilDessin`, `accrocher`, `lire_saisie`… |
 | `feuilles.rs` | `dessin_vue`, `vue_placee`, `svg_feuille`, `pdf`, `pdf_jeu` |
 | `dxf.rs` | `dxf` : export DXF R12 (LINE, ARC, CIRCLE, SOLID) |

@@ -273,7 +273,7 @@ fn section_box_couches_materiaux_et_cavite() {
     tris.extend(cube().into_iter().map(|t| t.map(|p| p * 0.5 + DVec3::splat(0.25))));
     let mut s = scene_section(tris);
     let bande = |a: f32, b: f32, couleur| scene::CoucheCoupe {
-        plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false, centre_isolation: None, trait_mm: TRAIT_FORT_MM,
+        plans: vec![Vec3::X.extend(-a),Vec3::NEG_X.extend(b)], couleur, fond: [255,255,255,255], motif_fond: None, motif: None, couleur_motif: [70,70,70,255], hachure_defaut: true, isolation: false, centre_isolation: None, axe_isolation: None, trait_mm: TRAIT_FORT_MM,
     };
     s.couches_coupe.insert(1,vec![bande(0.0,0.2,[190,120,120,255]),bande(0.2,1.0,[120,190,120,255])]);
     let p = coupe(&s,&[true], TOUT,Vec3::NEG_Z.extend(0.5),100.0,Poche::Hachure);
@@ -510,4 +510,38 @@ fn lignes_vues_stylees_par_objet() {
     assert_eq!(p[0].style.epaisseur, 0.18);
     // 4 côtés de 1 m au 1:100, tirets de 0,5 m : un tiret par côté
     assert!(matches!(&p[0].forme, Forme::Segments(v) if v.len() == 4), "{:?}", p[0].forme);
+}
+
+/// En plan, la ligne d'isolant d'un mur droit suit l'axe de la couche : symétrique par
+/// rapport à l'axe, dans l'épaisseur, jusqu'aux extrémités, interrompue par une baie.
+#[test]
+fn isolant_en_plan_centre_sur_l_axe_de_la_couche() {
+    use modele::{Couche, FonctionCouche, Projet, TypeCompose};
+    use modele::creation::ParametresMur;
+    let mut projet = Projet::nouveau("Isolant droit");
+    projet.familles_materiaux = modele::gabarit::Gabarit::defaut().materiaux;
+    projet.types_murs.push(TypeCompose { sorte: None, id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 120.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
+    let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
+    let mur = projet.ajouter_mur([0.0, 0.0], [6000.0, 0.0], &options).unwrap();
+    projet.ajouter_mur([6000.0, 0.0], [6000.0, 4000.0], &options).unwrap();
+    projet.ouvertures.push(modele::Ouverture { id: "baie".into(), nom: "Baie".into(), genre: modele::GenreOuverture::Libre, mur, type_ouverture: None, abscisse: 3000.0, largeur: 1000.0, hauteur: 2100.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+    projet.completer_materiaux();
+    let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
+    let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);
+    let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], TOUT, plan, 100.0, Poche::Hachure);
+    let segments: Vec<[DVec3; 2]> = primitives.iter().filter(|p| p.role == Role::Hachure).flat_map(|p| match &p.forme { Forme::Segments(s) => s.clone(), _ => Vec::new() }).collect();
+    let (x, y) = (|p: &DVec3| p.x + scene.origin.x, |p: &DVec3| p.y + scene.origin.y);
+    // mur le long de X : points du motif dans la bande |y| ≤ 60 mm, symétriques
+    let horizontaux: Vec<DVec3> = segments.iter().flatten().copied().filter(|p| x(p) < 5.94).collect();
+    assert!(!horizontaux.is_empty());
+    assert!(horizontaux.iter().all(|p| y(p).abs() <= 0.0601), "motif hors de la couche");
+    let (bas, haut) = horizontaux.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(y(p)), b.max(y(p))));
+    assert!((bas + haut).abs() < 0.002 && haut > 0.055, "motif décentré : {bas} / {haut}");
+    // jusqu'aux extrémités, rien dans la baie (2,5 à 3,5 m)
+    let (debut, fin) = horizontaux.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(x(p)), b.max(x(p))));
+    assert!(debut < -0.03 + 0.06 && fin > 5.9, "motif incomplet : {debut} à {fin}");
+    assert!(!horizontaux.iter().any(|p| (2.51..3.49).contains(&x(p))), "motif dans la baie");
+    // mur le long de Y : centré sur x = 6 m
+    let verticaux: Vec<DVec3> = segments.iter().flatten().copied().filter(|p| y(p) > 0.07).collect();
+    assert!(!verticaux.is_empty() && verticaux.iter().all(|p| (x(p) - 6.0).abs() <= 0.0601));
 }

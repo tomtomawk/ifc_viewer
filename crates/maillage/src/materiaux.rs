@@ -139,6 +139,7 @@ pub(crate) fn coupe_materiau(projet: &Projet, m: &modele::Materiau, plans: Vec<V
         hachure_defaut: false,
         isolation: m.motif == MotifCoupe::Isolation,
         centre_isolation: None,
+        axe_isolation: None,
         trait_mm,
     }]
 }
