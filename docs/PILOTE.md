@@ -76,7 +76,7 @@ zone de coupe sont en m. Les angles de caméra et de pente sont en degrés.
 
 - `nouveau {"chemin":"C:/travail/projet.bem","nom":"Projet"}` : crée et
   ouvre un nouveau document, conserve les précédents ; refuse une destination existante.
-- `ouvrir <chemin>` : IFC, RVT/RFA/RTE, JSON natif ou `.bimpartage` ; attend le chargement.
+- `ouvrir <chemin>` : RVT/RFA/RTE, JSON natif ou `.bimpartage` ; attend le chargement. Un IFC est refusé : `importer` (conversion en projet natif) ou lien IFC.
 - `fermer [abandonner]` : ferme le document ; modifications non enregistrées refusées
   sauf abandon explicite. Refuse une opération en cours.
 - `importer {"source":"C:/source.ifc","sortie":"C:/projet.bem"}` : lance

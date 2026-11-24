@@ -74,8 +74,7 @@ impl Application {
                     }));
                     let _ = tx.send(LoadMsg::Revit(res));
                 } else {
-                    let res = formats::ifc::assemblage::load(&path, &progress).map(Box::new);
-                    let _ = tx.send(LoadMsg::Done(res));
+                    let _ = tx.send(LoadMsg::Natif(Err(format!("{} : format non pris en charge (projet .bem, .bimpartage, famille, Revit ; un IFC s'importe ou se lie).", path.display()))));
                 }
                 }));
                 // une vraie panique (pas un abandon) : le récepteur voit le fil coupé
@@ -136,11 +135,6 @@ impl Application {
                     return;
                 }
                 LoadMsg::Progress(s) => self.status = s,
-                LoadMsg::Done(Ok(scene)) => {
-                    self.loading = None;
-                    self.install_scene(*scene);
-                    return;
-                }
                 LoadMsg::Revit(Ok((info, scene, source))) => {
                     self.loading = None;
                     let head = format!("{} — {} Revit {}", info.file_name, info.kind, info.format().unwrap_or("?"));
@@ -174,7 +168,7 @@ impl Application {
                     self.rvt_sortie = None;
                     return;
                 }
-                LoadMsg::Natif(Err(e)) | LoadMsg::Revit(Err(e)) | LoadMsg::Done(Err(e)) => {
+                LoadMsg::Natif(Err(e)) | LoadMsg::Revit(Err(e)) => {
                     self.loading = None;
                     self.status = "Échec du chargement.".into();
                     self.error = Some(e);

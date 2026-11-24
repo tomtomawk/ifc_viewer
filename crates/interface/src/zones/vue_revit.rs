@@ -43,7 +43,7 @@ impl Application {
                     Err(e) => {
                         ui.label(format!(
                             "Métadonnées seules : pas de murs affichables ({e}). Pour la 3D, exporter le modèle en IFC \
-                             depuis Revit (Fichier › Exporter › IFC), puis ouvrir le fichier .ifc."
+                             depuis Revit (Fichier › Exporter › IFC), puis l’importer (Début › Importer) ou le lier à un projet natif (Modéliser › Lien IFC)."
                         ));
                     }
                 });

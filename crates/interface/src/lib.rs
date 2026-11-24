@@ -39,7 +39,6 @@ enum LoadMsg {
     Partage(Result<(Box<Scene>, modele::Projet, PathBuf, ::collaboration::session::Session), String>, Option<usize>),
     Natif(Result<(Box<Scene>, modele::Projet, PathBuf), String>),
     Progress(String),
-    Done(Result<Box<Scene>, String>),
     /// Métadonnées, puis scène des murs (ou raison de son absence).
     Revit(Result<ChargementRevit, String>),
 }
