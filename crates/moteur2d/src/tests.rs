@@ -545,3 +545,37 @@ fn isolant_en_plan_centre_sur_l_axe_de_la_couche() {
     let verticaux: Vec<DVec3> = segments.iter().flatten().copied().filter(|p| y(p) > 0.07).collect();
     assert!(!verticaux.is_empty() && verticaux.iter().all(|p| (x(p) - 6.0).abs() <= 0.0601));
 }
+
+/// Coupe verticale d'un mur droit isolé : la ligne d'isolant est centrée là où l'axe de la
+/// couche traverse la coupe, dans la largeur apparente (épaisseur / cosinus pour une
+/// coupe oblique), sur toute la hauteur.
+#[test]
+fn isolant_en_coupe_centre_sur_l_axe_de_la_couche() {
+    use modele::{Couche, FonctionCouche, Projet, TypeCompose};
+    use modele::creation::ParametresMur;
+    let mut projet = Projet::nouveau("Isolant en coupe");
+    projet.familles_materiaux = modele::gabarit::Gabarit::defaut().materiaux;
+    projet.types_murs.push(TypeCompose { sorte: None, id: "isolant".into(), nom: "Isolant".into(), couches: vec![Couche { materiau: Some("Laine minérale".into()), epaisseur: 120.0, fonction: FonctionCouche::Isolation, ..Default::default() }], categorie: None, couches_detaillees: true, origine: None });
+    let options = ParametresMur { type_mur: Some("isolant".into()), hauteur: 2500.0, ..Default::default() };
+    projet.ajouter_mur([0.0, 0.0], [6000.0, 0.0], &options).unwrap();
+    projet.completer_materiaux();
+    let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
+    let o = scene.origin;
+    for degres in [0.0f64, 30.0] {
+        // plan vertical passant par (3 m, 0), normale tournée de `degres` depuis X
+        let n = glam::DVec3::new(degres.to_radians().cos(), degres.to_radians().sin(), 0.0);
+        let point = glam::DVec3::new(3.0 - o.x, -o.y, 0.0);
+        let plan = n.as_vec3().extend(-n.dot(point) as f32);
+        let primitives = super::coupe(&scene, &vec![true; scene.objects.len()], TOUT, plan, 50.0, Poche::Hachure);
+        let points: Vec<DVec3> = primitives.iter().filter(|p| p.role == Role::Hachure).flat_map(|p| match &p.forme { Forme::Segments(s) => s.clone(), _ => Vec::new() }).flatten().collect();
+        assert!(points.len() > 50, "{degres}° : motif absent");
+        // distance horizontale au point où l'axe traverse la coupe (3 m, 0)
+        let ecart: Vec<f64> = points.iter().map(|p| glam::DVec2::new(p.x + o.x - 3.0, p.y + o.y).length() * if p.y + o.y < 0.0 { -1.0 } else { 1.0 }).collect();
+        let demi = 0.06 / degres.to_radians().cos();
+        assert!(ecart.iter().all(|e| e.abs() <= demi + 1e-4), "{degres}° : motif hors de la couche");
+        let (a, b) = ecart.iter().fold((f64::MAX, f64::MIN), |(x, y), e| (x.min(*e), y.max(*e)));
+        assert!((a + b).abs() < 0.003 && b > 0.9 * demi, "{degres}° : motif décentré ({a} / {b})");
+        let (zb, zh) = points.iter().fold((f64::MAX, f64::MIN), |(x, y), p| (x.min(p.z + o.z), y.max(p.z + o.z)));
+        assert!(zb < 0.1 && zh > 2.4, "{degres}° : motif incomplet en hauteur ({zb} à {zh})");
+    }
+}

@@ -23,6 +23,25 @@ pub struct CacheCoupe {
     pub recoupes: usize,
 }
 
+/// Coupe verticale d'une couche de mur droit (axe et épaisseur en mètres, repère du
+/// modèle) : abscisse dans le plan (repère `o`, `e1`) où l'axe le traverse, et largeur
+/// apparente de la couche (épaisseur / cosinus de l'angle entre la normale de la coupe
+/// et le mur). None si la coupe est presque parallèle au mur (à moins de 15°).
+fn axe_isolation_verticale((axe, e): ([[f64; 2]; 2], f64), origine: DVec3, o: DVec3, n: DVec3, e1: DVec3) -> Option<(f64, f64)> {
+    let a = DVec3::new(axe[0][0] - origine.x, axe[0][1] - origine.y, o.z);
+    let d = DVec3::new(axe[1][0] - axe[0][0], axe[1][1] - axe[0][1], 0.0).try_normalize()?;
+    // la ligne de coupe (horizontale, normale à n) traverse la bande de la couche sur
+    // e / |n · d| ; coupe presque parallèle au mur (|n · d| petit) : pas de ce calcul
+    let cos = n.dot(d).abs();
+    if cos < 0.26 {
+        return None;
+    }
+    // point de l'axe dans le plan : (a + t d - o) · n = 0
+    let t = (o - a).dot(n) / n.dot(d);
+    let pied = (a + d * t - o).dot(e1);
+    Some((pied, e / cos))
+}
+
 /// `coupe`, en reprenant du cache les objets inchangés (après une édition, seuls les
 /// objets modifiés sont recoupés).
 pub fn coupe_avec_cache(scene: &Scene, visible: &[bool], affichage: Affichage, plan: Vec4, echelle: f64, poche: Poche, cache: &mut CacheCoupe) -> Vec<Primitive> {
@@ -163,6 +182,10 @@ fn coupe_objet(scene: &Scene, i: usize, affichage: Affichage, n: DVec3, d: f64, 
                     let plan = |p: [f64; 2]| { let q = DVec3::new(p[0] - scene.origin.x, p[1] - scene.origin.y, o.z); [(q-o).dot(e1)*1000.0,(q-o).dot(e2)*1000.0] };
                     let segments = if let Some(([a, b], e)) = couche.axe_isolation.filter(|_| n.z.abs() > 0.999) {
                         motifs::ligne_isolation_axe(&t2, plan(a), plan(b), e * 1000.0)
+                    } else if let Some((pied, e)) = couche.axe_isolation.filter(|_| n.z.abs() < 1e-3).and_then(|axe| axe_isolation_verticale(axe, scene.origin, o, n, e1)) {
+                        // coupe verticale d'un mur droit : bande verticale centrée là où l'axe
+                        // de la couche traverse le plan, largeur apparente dans la coupe
+                        motifs::ligne_isolation_axe(&t2, [pied * 1000.0, 0.0], [pied * 1000.0, 1000.0], e * 1000.0)
                     } else if let Some([x, y]) = couche.centre_isolation.filter(|_| n.z.abs() > 0.999) {
                         let centre = DVec3::new(x - scene.origin.x, y - scene.origin.y, o.z);
                         motifs::ligne_isolation_courbe(&t2, [(centre-o).dot(e1)*1000.0,(centre-o).dot(e2)*1000.0])
