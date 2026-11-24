@@ -114,7 +114,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | Id | Tâche | Priorité | Détail |
 |---|---|---|---|
 | C2 | Commande de compactage du registre partagé | P3 | `docs/COLLABORATION.md` |
-| C4 | Réduire les refus spatiaux sur des éléments sans interaction réelle. Prendre en compte la séparation verticale et distinguer un changement de géométrie d’un changement de libellé. Cas reproduit : modifier la hauteur d’un mur et renommer un autre mur situé 12 m plus haut avec le même tracé en plan déclenche un refus. Préserver les protections des jonctions et changements d’hôte | P1 | `crates/collaboration/src/concurrence.rs` et `crates/collaboration/src/lib.rs` |
+| C4 | Reste des refus spatiaux : deux changements de géométrie sur des murs de même tracé en plan, séparés verticalement (cas b de `tools/test_collaboration_voisinage.py` : hauteurs de deux murs à 12 m l'un de l'autre), sont encore refusés (« Dépendance ou collision », voisinage en plan seulement). Les changements de libellé ne sont plus refusés (essai du 24/11/2026) ; préserver la protection des jonctions (cas d) | P1 | `crates/collaboration/src/concurrence.rs` (`voisinage`, `Voisinage::Bande`) |
 
 ## 9. Décisions en attente
 
@@ -123,7 +123,6 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 | U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
 | U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
 | Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
-| Commits | `AGENTS.md` demande de pousser sur `master` ; la session cloud était configurée pour une branche de travail. Les commits du 20/11/2026 ont été poussés sur `master` selon `AGENTS.md` : à confirmer pour les sessions autonomes suivantes |
 
 ## 10. Études des évolutions
 

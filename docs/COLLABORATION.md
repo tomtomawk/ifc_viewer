@@ -313,6 +313,7 @@ cargo build --release
 ./tools/qualifier_collaboration.ps1
 python tools/test_collaboration_ui.py
 python tools/test_partage_ui.py
+python tools/test_collaboration_voisinage.py   # refus spatiaux à deux instances (C4)
 cargo run --release -- --collaboration mesures samples/maison_native.bem rapport.json
 ```
 
