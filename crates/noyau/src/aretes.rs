@@ -55,7 +55,7 @@ pub fn aretes(tris: &[[DVec3; 3]]) -> Aretes {
 /// Arête douce : segment et normales des deux facettes.
 pub type AreteDouce = ([DVec3; 2], DVec3, DVec3);
 /// Arêtes vives et arêtes douces, chacune avec l'indice de l'élément qui la porte.
-pub type AretesProprietaires = (Vec<([DVec3; 2], usize)>, Vec<(AreteDouce, usize)>);
+pub type AretesProprietaires<O = usize> = (Vec<([DVec3; 2], O)>, Vec<(AreteDouce, O)>);
 
 /// Arêtes d'éléments d'un même matériau pris ensemble, chacune rendue à l'élément
 /// (indice de `tris`) qui la porte : deux faces collées l'une contre l'autre (normales
@@ -66,125 +66,157 @@ pub fn aretes_jointes(tris: &[([DVec3; 3], usize)]) -> AretesProprietaires {
     aretes_proprietaires(tris.iter().copied(), true)
 }
 
-fn aretes_proprietaires(tris: impl Iterator<Item = ([DVec3; 3], usize)>, annuler_opposees: bool) -> AretesProprietaires {
-    type Cle = ([i64; 3], [i64; 3]);
-    /// Direction, point et arêtes (t0, t1, normale, sens, élément) d'une droite.
-    type Droite = (DVec3, DVec3, Vec<(f64, f64, DVec3, i32, usize)>);
+/// Clé d'une droite porteuse : direction et pied quantifiés.
+pub type CleDroite = ([i64; 3], [i64; 3]);
+
+/// Côté de triangle rangé sur sa droite : extrémités, normale du triangle, sens de
+/// parcours par rapport à la direction canonique, élément qui le porte.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Cote<O> {
+    pub a: DVec3,
+    pub b: DVec3,
+    pub n: DVec3,
+    pub sens: i32,
+    pub proprietaire: O,
+}
+
+/// Direction canonique (composante de plus grande valeur absolue positive) et sens.
+fn direction(a: DVec3, b: DVec3) -> (DVec3, i32) {
+    let u = (b - a).normalize();
+    let m = if u.x.abs() >= u.y.abs() && u.x.abs() >= u.z.abs() { u.x } else if u.y.abs() >= u.z.abs() { u.y } else { u.z };
+    if m < 0.0 { (-u, -1) } else { (u, 1) }
+}
+
+/// Côtés d'un triangle (triangles dégénérés et côtés nuls écartés), avec la clé de leur
+/// droite porteuse.
+pub fn cotes<O: Copy>(t: &[DVec3; 3], proprietaire: O, mut f: impl FnMut(CleDroite, Cote<O>)) {
     let q = |x: f64, pas: f64| (x / pas).round() as i64;
-    let mut droites: HashMap<Cle, Droite> = HashMap::new();
-    for (t, proprietaire) in tris {
-        let n = (t[1] - t[0]).cross(t[2] - t[0]);
-        if n.length_squared() < 1e-20 {
+    let n = (t[1] - t[0]).cross(t[2] - t[0]);
+    if n.length_squared() < 1e-20 {
+        return;
+    }
+    let n = n.normalize();
+    for k in 0..3 {
+        let (a, b) = (t[k], t[(k + 1) % 3]);
+        if (b - a).length_squared() < PAS * PAS {
             continue;
         }
-        let n = n.normalize();
-        for k in 0..3 {
-            let (a, b) = (t[k], t[(k + 1) % 3]);
-            let l = b - a;
-            if l.length_squared() < PAS * PAS {
-                continue;
-            }
-            let mut u = l.normalize();
-            // direction canonique : composante de plus grande valeur absolue positive
-            let m = if u.x.abs() >= u.y.abs() && u.x.abs() >= u.z.abs() { u.x } else if u.y.abs() >= u.z.abs() { u.y } else { u.z };
-            let sens = if m < 0.0 {
-                u = -u;
-                -1
-            } else {
-                1
-            };
-            let p0 = a - u * a.dot(u);
-            let cle = ([q(u.x, PAS_DIR), q(u.y, PAS_DIR), q(u.z, PAS_DIR)], [q(p0.x, PAS), q(p0.y, PAS), q(p0.z, PAS)]);
-            let e = droites.entry(cle).or_insert((u, p0, Vec::new()));
-            let (ta, tb) = (a.dot(e.0), b.dot(e.0));
-            e.2.push((ta.min(tb), ta.max(tb), n, sens, proprietaire));
-        }
+        let (u, sens) = direction(a, b);
+        let p0 = a - u * a.dot(u);
+        let cle = ([q(u.x, PAS_DIR), q(u.y, PAS_DIR), q(u.z, PAS_DIR)], [q(p0.x, PAS), q(p0.y, PAS), q(p0.z, PAS)]);
+        f(cle, Cote { a, b, n, sens, proprietaire });
+    }
+}
+
+fn aretes_proprietaires(tris: impl Iterator<Item = ([DVec3; 3], usize)>, annuler_opposees: bool) -> AretesProprietaires {
+    let mut droites: HashMap<CleDroite, Vec<Cote<usize>>> = HashMap::new();
+    for (t, proprietaire) in tris {
+        cotes(&t, proprietaire, |cle, c| droites.entry(cle).or_default().push(c));
     }
     let mut out = Vec::new();
     let mut douces = Vec::new();
-    for (u, p0, segs) in droites.into_values() {
-        // bornes des intervalles élémentaires, rapprochées au pas
-        let mut bornes: Vec<f64> = segs.iter().flat_map(|s| [s.0, s.1]).collect();
-        bornes.sort_by(f64::total_cmp);
-        bornes.dedup_by(|a, b| (*a - *b).abs() < PAS);
-        let mut courant: Option<(f64, f64, usize)> = None;
-        // balayage : segments rangés par début ; un segment entre dans les actifs quand
-        // l'intervalle l'atteint et en sort pour de bon quand il se termine avant (les
-        // bornes croissent). Les actifs restent dans l'ordre d'origine, dont dépendent la
-        // normale de référence et l'élément porteur de chaque groupe. Le parcours de tous
-        // les segments à chaque intervalle était quadratique sur les longues droites
-        // (pied des façades).
-        let mut par_debut: Vec<usize> = (0..segs.len()).collect();
-        par_debut.sort_by(|&i, &j| segs[i].0.total_cmp(&segs[j].0));
-        let mut suivant = 0;
-        let mut ouverts: Vec<usize> = Vec::new();
-        for w in bornes.windows(2) {
-            let (a, b) = (w[0], w[1]);
-            while suivant < par_debut.len() && segs[par_debut[suivant]].0 <= a + PAS {
-                let i = par_debut[suivant];
-                let rang = ouverts.partition_point(|&k| k < i);
-                ouverts.insert(rang, i);
-                suivant += 1;
-            }
-            ouverts.retain(|&i| segs[i].1 >= b - PAS);
-            let actifs = ouverts.iter().map(|&i| &segs[i]);
-            // groupes d'orientation : (normale de référence, somme des sens, normale la
-            // plus écartée de la référence, élément)
-            let mut groupes: Vec<(DVec3, i32, DVec3, usize)> = Vec::new();
-            for s in actifs {
-                match groupes.iter_mut().find(|g| g.0.dot(s.2) > COS_VIF) {
-                    Some(g) => {
-                        g.1 += s.3;
-                        if s.2.dot(g.0) < g.2.dot(g.0) {
-                            g.2 = s.2;
-                        }
+    for segs in droites.values() {
+        let (o, d) = balayer(segs, annuler_opposees);
+        out.extend(o);
+        douces.extend(d);
+    }
+    (out, douces)
+}
+
+/// Arêtes vives et douces d'une droite d'après ses côtés de triangles (repère pris sur le
+/// premier côté ; l'ordre des côtés fixe aussi l'élément porteur de chaque arête).
+pub fn balayer<O: Copy + PartialEq>(cotes: &[Cote<O>], annuler_opposees: bool) -> AretesProprietaires<O> {
+    let mut out = Vec::new();
+    let mut douces = Vec::new();
+    let Some(premier) = cotes.first() else { return (out, douces) };
+    let (u, _) = direction(premier.a, premier.b);
+    let p0 = premier.a - u * premier.a.dot(u);
+    let segs: Vec<(f64, f64, DVec3, i32, O)> = cotes.iter().map(|c| {
+        let (ta, tb) = (c.a.dot(u), c.b.dot(u));
+        (ta.min(tb), ta.max(tb), c.n, c.sens, c.proprietaire)
+    }).collect();
+    // bornes des intervalles élémentaires, rapprochées au pas
+    let mut bornes: Vec<f64> = segs.iter().flat_map(|s| [s.0, s.1]).collect();
+    bornes.sort_by(f64::total_cmp);
+    bornes.dedup_by(|a, b| (*a - *b).abs() < PAS);
+    let mut courant: Option<(f64, f64, O)> = None;
+    // balayage : segments rangés par début ; un segment entre dans les actifs quand
+    // l'intervalle l'atteint et en sort pour de bon quand il se termine avant (les
+    // bornes croissent). Les actifs restent dans l'ordre d'origine, dont dépendent la
+    // normale de référence et l'élément porteur de chaque groupe. Le parcours de tous
+    // les segments à chaque intervalle était quadratique sur les longues droites
+    // (pied des façades).
+    let mut par_debut: Vec<usize> = (0..segs.len()).collect();
+    par_debut.sort_by(|&i, &j| segs[i].0.total_cmp(&segs[j].0));
+    let mut suivant = 0;
+    let mut ouverts: Vec<usize> = Vec::new();
+    for w in bornes.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        while suivant < par_debut.len() && segs[par_debut[suivant]].0 <= a + PAS {
+            let i = par_debut[suivant];
+            let rang = ouverts.partition_point(|&k| k < i);
+            ouverts.insert(rang, i);
+            suivant += 1;
+        }
+        ouverts.retain(|&i| segs[i].1 >= b - PAS);
+        let actifs = ouverts.iter().map(|&i| &segs[i]);
+        // groupes d'orientation : (normale de référence, somme des sens, normale la
+        // plus écartée de la référence, élément)
+        let mut groupes: Vec<(DVec3, i32, DVec3, O)> = Vec::new();
+        for s in actifs {
+            match groupes.iter_mut().find(|g| g.0.dot(s.2) > COS_VIF) {
+                Some(g) => {
+                    g.1 += s.3;
+                    if s.2.dot(g.0) < g.2.dot(g.0) {
+                        g.2 = s.2;
                     }
-                    None => groupes.push((s.2, s.3, s.2, s.4)),
                 }
+                None => groupes.push((s.2, s.3, s.2, s.4)),
             }
-            if annuler_opposees {
-                // faces collées : normales opposées, sommes opposées
-                let mut k = 0;
-                while k < groupes.len() {
-                    match (k + 1..groupes.len()).find(|&l| groupes[k].0.dot(groupes[l].0) < -COS_VIF && groupes[k].1 + groupes[l].1 == 0 && groupes[k].1 != 0) {
-                        Some(l) => {
-                            groupes.remove(l);
-                            groupes.remove(k);
-                        }
-                        None => k += 1,
+        }
+        if annuler_opposees {
+            // faces collées : normales opposées, sommes opposées
+            let mut k = 0;
+            while k < groupes.len() {
+                match (k + 1..groupes.len()).find(|&l| groupes[k].0.dot(groupes[l].0) < -COS_VIF && groupes[k].1 + groupes[l].1 == 0 && groupes[k].1 != 0) {
+                    Some(l) => {
+                        groupes.remove(l);
+                        groupes.remove(k);
                     }
-                }
-            }
-            let porteur = groupes.iter().find(|g| g.1 != 0).map(|g| g.3);
-            let vive = porteur.is_some();
-            // une seule face, courbe à cet endroit (plus d'un quart de degré entre les
-            // facettes ; en deçà, coplanaires aux arrondis près)
-            if let [g] = groupes[..]
-                && !vive
-                && g.0.dot(g.2) < 0.99999
-                && b - a > PAS
-            {
-                douces.push((([p0 + u * a, p0 + u * b], g.0, g.2), g.3));
-            }
-            match (&mut courant, porteur) {
-                (Some(c), Some(e)) if (c.1 - a).abs() < PAS && c.2 == e => c.1 = b,
-                (_, Some(e)) => {
-                    if let Some(c) = courant.take() {
-                        out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
-                    }
-                    courant = Some((a, b, e));
-                }
-                (_, None) => {
-                    if let Some(c) = courant.take() {
-                        out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
-                    }
+                    None => k += 1,
                 }
             }
         }
-        if let Some(c) = courant {
-            out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
+        let porteur = groupes.iter().find(|g| g.1 != 0).map(|g| g.3);
+        let vive = porteur.is_some();
+        // une seule face, courbe à cet endroit (plus d'un quart de degré entre les
+        // facettes ; en deçà, coplanaires aux arrondis près)
+        if let [g] = groupes[..]
+            && !vive
+            && g.0.dot(g.2) < 0.99999
+            && b - a > PAS
+        {
+            douces.push((([p0 + u * a, p0 + u * b], g.0, g.2), g.3));
+        }
+        match (&mut courant, porteur) {
+            (Some(c), Some(e)) if (c.1 - a).abs() < PAS && c.2 == e => c.1 = b,
+            (_, Some(e)) => {
+                if let Some(c) = courant.take() {
+                    out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
+                }
+                courant = Some((a, b, e));
+            }
+            (_, None) => {
+                if let Some(c) = courant.take() {
+                    out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
+                }
+            }
         }
     }
+    if let Some(c) = courant {
+        out.push(([p0 + u * c.0, p0 + u * c.1], c.2));
+    }
+
     out.retain(|s| s.0[0].distance_squared(s.0[1]) > PAS * PAS);
     (out, douces)
 }

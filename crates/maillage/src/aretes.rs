@@ -1,38 +1,6 @@
-//! Arêtes des éléments du modèle natif : jointes par matériau, silhouette, traits de terrain.
-use formats::ifc::geom::ProductGeom;
-use glam::DVec3;
+//! Arêtes des éléments du modèle natif : traits de terrain (arêtes jointes par matériau :
+//! `aretes_incrementales`).
 use modele::{Projet, SorteDalle};
-use noyau::Id;
-use rayon::prelude::*;
-
-/// Arêtes des éléments calculées par matériau : là où deux éléments d'un même matériau se
-/// joignent (murs raccordés, dalle sous un mur), pas d'arête sur les faces qui se
-/// prolongent ; les parties sans matériau restent à part. Les éléments de `exclus`
-/// (terrains : leurs arêtes sont calculées autrement) ne sont pas traités.
-pub(crate) fn aretes_jointes(geoms: &[ProductGeom], materiaux: &[Vec<Option<String>>], exclus: &std::collections::HashSet<Id>) -> std::collections::HashMap<Id, noyau::aretes::Aretes> {
-    use std::collections::HashMap;
-    let mut groupes: HashMap<String, Vec<([DVec3; 3], usize)>> = HashMap::new();
-    for (k, (g, noms)) in geoms.iter().zip(materiaux).enumerate().filter(|(_, (g, _))| !exclus.contains(&g.id)) {
-        // parties du style Réaliste seulement (géométrie de rendu) : sans arête
-        for (i, p) in g.parts.iter().enumerate().filter(|(i, _)| !formats::ifc::assemblage::rendu_seul(g, *i)) {
-            let cle = noms.get(i).cloned().flatten().unwrap_or_else(|| format!("\u{0}{k}:{i}"));
-            groupes.entry(cle).or_default().extend(p.tris.iter().map(|t| (*t, k)));
-        }
-    }
-    let mut par_objet: HashMap<Id, noyau::aretes::Aretes> = geoms.iter().map(|g| (g.id, noyau::aretes::Aretes::default())).collect();
-    let resultats: Vec<_> = groupes.into_par_iter().map(|(_, tris)| noyau::aretes::aretes_jointes(&tris)).collect();
-    for (vives, douces) in resultats {
-        for (s, k) in vives {
-            if let Some(a) = par_objet.get_mut(&geoms[k].id) { a.vives.push(s); }
-        }
-        for (d, k) in douces {
-            if let Some(a) = par_objet.get_mut(&geoms[k].id) { a.douces.push(d); }
-        }
-    }
-    // groupes traités dans un ordre quelconque (table de hachage, parallélisme)
-    par_objet.values_mut().for_each(noyau::aretes::Aretes::ordonner);
-    par_objet
-}
 
 /// Traits d'un terrain en plan : périmètre de sa surface et courbes de niveau à un pas
 /// rond (une douzaine au plus). La surface lissée n'a pas d'arête : sans ces traits, la

@@ -10,6 +10,7 @@ use ifc_base::step::{Entity, StepFile, Value};
 use std::path::Path;
 
 mod aretes;
+mod aretes_incrementales;
 mod placement_surface;
 pub mod liens;
 mod materiaux;
@@ -17,7 +18,8 @@ mod styles;
 pub mod textures_gabarit;
 mod navigateur;
 
-use aretes::{aretes_jointes, aretes_terrain};
+use aretes::aretes_terrain;
+use aretes_incrementales::aretes_jointes;
 use materiaux::{coupe_materiau, motif_surface, objet_materiau, opacite, rendu_materiau, Tables};
 use modele::CategorieMateriau as Cat;
 use navigateur::navigateur;

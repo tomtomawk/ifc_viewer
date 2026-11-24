@@ -9,7 +9,8 @@ Dépendances internes autorisées : `noyau`, `modele`, `ifc_base`, `scene`, `for
 | Fichier (`src/`) | Contenu |
 |---|---|
 | `lib.rs` | `depuis_natif`, `depuis_natif_verifie` : objets de scène, `IfcModel` et `StepFile` minimaux (schéma « Modèle natif v0 »), traits |
-| `aretes.rs` | arêtes vives, silhouettes, terrain (`aretes_jointes`, `aretes_silhouette`) |
+| `aretes.rs` | traits de terrain (`aretes_terrain`) |
+| `aretes_incrementales.rs` | `aretes_jointes` : arêtes par matériau gardées d'une construction à l'autre (état global par groupe de matériau) ; seules les droites portant un côté d'élément modifié sont recalculées ; côtés d'une droite en ordre fixe. Mesure : `cargo test -p maillage --release --lib mesure -- --ignored --nocapture` |
 | `materiaux.rs` | `rendu_materiau`, `coupe_materiau`, `motif_surface`, `opacite` |
 | `placement_surface.rs` | transmet le placement des faces planes aux sommets de rendu |
 | `navigateur.rs` | `navigateur` : arborescence du projet pour la scène |
