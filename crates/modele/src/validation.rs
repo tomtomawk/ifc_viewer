@@ -107,6 +107,9 @@ impl Projet {
                 return Err(format!("{} : épaisseur non valide.", t.nom));
             }
         }
+        // index par identifiant : recherches en temps constant (projets de milliers de murs)
+        let murs_par_id: std::collections::HashMap<&str, &Mur> = self.murs.iter().map(|m| (m.id.as_str(), m)).collect();
+        let assemblages_par_id: std::collections::HashMap<&str, &Assemblage> = self.assemblages.iter().map(|a| (a.id.as_str(), a)).collect();
         for a in &self.assemblages {
             if self.type_mur(&a.type_mur).is_none() || a.couches.is_empty() {
                 return Err("Assemblage sans type ou sans couche.".into());
@@ -114,10 +117,7 @@ impl Projet {
             let mut membres = std::collections::HashSet::new();
             for id in &a.couches {
                 if !membres.insert(id)
-                    || !self
-                        .murs
-                        .iter()
-                        .any(|m| &m.id == id && m.assemblage.as_ref() == Some(&a.id))
+                    || !murs_par_id.get(id.as_str()).is_some_and(|m| m.assemblage.as_ref() == Some(&a.id))
                 {
                     return Err("Relation d'assemblage incohérente.".into());
                 }
@@ -128,8 +128,8 @@ impl Projet {
                 return Err(format!("{} : type ou niveau absent.", m.nom));
             }
             if let Some(a) = &m.assemblage
-                && !self
-                    .assemblage(a)
+                && !assemblages_par_id
+                    .get(a.as_str())
                     .is_some_and(|a| a.couches.contains(&m.id))
                 {
                     return Err("Couche sans assemblage.".into());
@@ -144,8 +144,21 @@ impl Projet {
                 f.valider(t.largeur, t.hauteur, 300.0).map_err(|e| format!("{} : {e}", t.nom))?;
             }
         }
+        // hôte d'une ouverture : mur, ou assemblage à première couche, avec son type
+        // (mêmes refus que `solides::hote`)
+        let hote = |id: &str| -> Result<(), String> {
+            let m = match assemblages_par_id.get(id) {
+                Some(a) => {
+                    self.type_mur(&a.type_mur).ok_or("Type d'assemblage absent.")?;
+                    a.couches.first().and_then(|c| murs_par_id.get(c.as_str())).ok_or("Assemblage vide.")?
+                }
+                None => murs_par_id.get(id).ok_or("Hôte de l'ouverture introuvable.")?,
+            };
+            self.type_mur(&m.type_mur).ok_or("Type de mur absent.")?;
+            Ok(())
+        };
         for o in &self.ouvertures {
-            solides::hote(self, &o.mur)?;
+            hote(&o.mur)?;
             if ![o.largeur, o.hauteur, o.abscisse, o.allege]
                 .iter()
                 .all(|x| x.is_finite())
