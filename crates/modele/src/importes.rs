@@ -16,6 +16,10 @@ pub struct DonneesImportees {
     /// Couleur sRGB et opacité (0 à 255) de l'élément dans la source.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub couleur: Option<[u8; 4]>,
+    /// `PredefinedType` de la source (IFC4 : valeur d'énumération sans points, par ex.
+    /// `SOLIDWALL`), réécrit à l'export quand la classe est conservée.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_predefini: Option<String>,
 }
 
 /// Jeu de propriétés (IFC : `IfcPropertySet`) ou de quantités (`IfcElementQuantity`).
@@ -88,7 +92,7 @@ impl ProprieteImportee {
 impl DonneesImportees {
     /// Rien n'a été lu.
     pub fn est_vide(&self) -> bool {
-        self.proprietes.is_empty() && self.materiau.is_none() && self.couleur.is_none()
+        self.proprietes.is_empty() && self.materiau.is_none() && self.couleur.is_none() && self.type_predefini.is_none()
     }
 
     /// Nombre total de propriétés, tous jeux confondus.
@@ -102,6 +106,9 @@ impl DonneesImportees {
     pub fn verifier(&self) -> Result<(), String> {
         if self.materiau.as_ref().is_some_and(|m| m.trim().is_empty()) {
             return Err("matériau importé sans nom.".into());
+        }
+        if self.type_predefini.as_ref().is_some_and(|t| t.is_empty() || !t.bytes().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == b'_')) {
+            return Err("type prédéfini importé non valide (majuscules, chiffres, « _ »).".into());
         }
         let mut jeux = std::collections::HashSet::new();
         for j in &self.proprietes {
@@ -156,6 +163,7 @@ mod tests {
             ],
             materiau: Some("Béton".into()),
             couleur: Some([204, 25, 25, 255]),
+            type_predefini: Some("SOLIDWALL".into()),
         }
     }
 
@@ -197,6 +205,7 @@ mod tests {
             ("booléen non valide", Box::new(|d| d.proprietes[0].proprietes[2].valeur = "Inconnu".into())),
             ("logique sur un texte", Box::new(|d| d.proprietes[0].proprietes[0].logique = Some(TypeLogique::Logique))),
             ("matériau vide", Box::new(|d| d.materiau = Some(String::new()))),
+            ("type prédéfini avec points", Box::new(|d| d.type_predefini = Some(".TABLE.".into()))),
         ];
         for (nom, modifier) in cas {
             let mut d = donnees();

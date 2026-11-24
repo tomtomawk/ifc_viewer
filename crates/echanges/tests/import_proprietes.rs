@@ -90,9 +90,13 @@ fn aller_retour_ifc_natif_ifc() {
         let n: usize = comptes(&source, a).iter().map(|x| x.1).sum();
         assert_eq!(e.donnees.nombre_proprietes(), n, "{}", e.nom);
         assert_eq!(export.ty(b), source.ty(a), "{} : classe d'origine", e.nom);
+        // PredefinedType (A7) : `$` de la source réécrit NOTDEFINED
+        let predefini = |m: &IfcModel, id| m.get(id).and_then(|x| x.args.get(8)).and_then(|v| v.as_enum()).unwrap_or("NOTDEFINED").to_string();
+        assert_eq!(predefini(&export, b), predefini(&source, a), "{} : PredefinedType", e.nom);
     }
     // booléen réécrit typé (X6)
     assert!(texte.contains("'LoadBearing',$,IFCBOOLEAN(.T.)") && !texte.contains("IFCLABEL('Vrai')"));
+    assert_eq!(importe(&p, "Table").donnees.type_predefini.as_deref(), Some("TABLE"));
     // réimport de l'export : mêmes données (valeurs, unités, matériau, couleur)
     let chemin = std::env::temp_dir().join(format!("bimedit-proprietes-{}.ifc", std::process::id()));
     std::fs::write(&chemin, &texte).unwrap();

@@ -12,6 +12,7 @@ Dépendances internes autorisées : `noyau`, `ifc_base`, `scene` (exactement ces
 | `ifc/geom/balayage.rs` | balayages le long d'une directrice (`IfcSurfaceCurveSweptAreaSolid`, `IfcFixedReferenceSweptAreaSolid`, `IfcSectionedSolidHorizontal`) |
 | `ifc/geom/nurbs.rs` | faces B-spline des `IfcAdvancedBrep` échantillonnées ; `ifc/geom/essais.rs` : fichier IFC de test construit en chaîne |
 | `ifc/geom/extrusion.rs` | `rectangulaire` : section rectangulaire extrudée d'un produit (poteaux, poutres convertibles) |
+| `ifc/ifczip.rs` | `contenu_ifc` : `.ifczip` (archive zip d'un `.ifc`, stocké ou deflate, sans ZIP64 ni chiffrement) lu par `load`, l'import et les liens |
 | `ifc/bornes.rs` | bornes des valeurs lues dans le fichier (arcs, B-splines, révolutions, items mappés) : toute taille ou durée tirée du fichier passe par là |
 | `ifc/assemblage.rs` | `load`, `assemble`, `assemble_avec` : fichier IFC -> `Scene` ; masques de visibilité des parties (`ProductGeom::visibilite`) reportés sur les sommets, arêtes calculées par masque |
 | `rvt/mod.rs` | `load`, `is_revit_path`, lecture OLE et métadonnées (`RvtInfo`) |

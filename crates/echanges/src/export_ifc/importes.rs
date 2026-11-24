@@ -23,6 +23,15 @@ pub(super) fn classe(e: &ElementImporte) -> &'static str {
     CLASSES.iter().find(|x| **x == c).copied().unwrap_or("IFCBUILDINGELEMENTPROXY")
 }
 
+/// `PredefinedType` lu à l'import, si la classe écrite est la classe d'origine (une
+/// valeur d'énumération ne vaut que pour sa classe).
+fn type_predefini(e: &ElementImporte) -> Option<&str> {
+    let o = e.origine.as_ref()?;
+    let c = o.classe.to_uppercase();
+    let c = c.strip_suffix("STANDARDCASE").or_else(|| c.strip_suffix("ELEMENTEDCASE")).unwrap_or(&c);
+    (classe(e) == c).then_some(e.donnees.type_predefini.as_deref()).flatten()
+}
+
 /// Réel STEP sans perte (mantisse avec point, exposant).
 fn reel(v: f64) -> String {
     let s = format!("{v:E}");
@@ -122,13 +131,14 @@ impl Importes {
         }
         let rep = w.forme(contexte, &faces, &[]);
         let id = w.add(format!(
-            "{}('{}',$,{},{},{},#{placement},{},$,.NOTDEFINED.)",
+            "{}('{}',$,{},{},{},#{placement},{},$,.{}.)",
             classe(e),
             guid(&e.id, e.origine.as_ref()),
             texte(&e.nom),
             texte(&e.raison),
             texte(&e.categorie),
-            ref_(rep)
+            ref_(rep),
+            type_predefini(e).unwrap_or("NOTDEFINED")
         ));
         jeux(w, &e.id, id, &e.donnees.proprietes);
         if let Some(m) = &e.donnees.materiau {

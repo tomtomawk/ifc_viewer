@@ -38,10 +38,7 @@ type ProduitLu = (Id, Vec<[DVec3; 3]>, Option<[f32; 4]>);
 
 pub fn convertir(chemin: &Path, progress: &dyn Fn(String)) -> Result<(Projet, Vec<modele::Mesure>), String> {
     progress(format!("Lecture de {}…", chemin.display()));
-    let data = std::fs::read(chemin).map_err(|e| format!("Lecture impossible : {e}"))?;
-    if data.starts_with(b"PK") {
-        return Err("Fichier IFC-ZIP (.ifczip) non pris en charge : décompresser d'abord.".into());
-    }
+    let data = formats::ifc::ifczip::contenu_ifc(std::fs::read(chemin).map_err(|e| format!("Lecture impossible : {e}"))?)?;
     let model = IfcModel::new(StepFile::parse(&data)?);
     drop(data);
     progress(format!("Géométrie de {} produits…", model.products.len()));

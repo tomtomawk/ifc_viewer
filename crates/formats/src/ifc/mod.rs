@@ -2,3 +2,4 @@
 mod bornes;
 pub mod geom;
 pub mod assemblage;
+pub mod ifczip;

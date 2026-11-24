@@ -16,10 +16,7 @@ pub fn load(path: &Path, progress: &dyn Fn(String)) -> Result<Scene, String> {
     let t0 = Instant::now();
     let file_name = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     progress(format!("Lecture de {file_name}…"));
-    let data = std::fs::read(path).map_err(|e| format!("Lecture impossible : {e}"))?;
-    if data.starts_with(b"PK") {
-        return Err("Fichier IFC-ZIP (.ifczip) non pris en charge : décompresser d'abord.".into());
-    }
+    let data = super::ifczip::contenu_ifc(std::fs::read(path).map_err(|e| format!("Lecture impossible : {e}"))?)?;
     progress(format!("Analyse STEP ({:.1} Mo)…", data.len() as f64 / 1e6));
     let file = StepFile::parse(&data)?;
     drop(data);

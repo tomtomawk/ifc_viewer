@@ -65,7 +65,18 @@ fn materiau(m: &IfcModel, id: Id) -> Option<String> {
 /// Données de l'élément `id` ; `couleur` : couleur lue de sa géométrie (style ou
 /// matériau), None si elle n'est que la couleur par défaut de sa classe.
 pub(crate) fn lire(m: &IfcModel, id: Id, couleur: Option<[f32; 4]>) -> DonneesImportees {
-    DonneesImportees { proprietes: jeux(m, id), materiau: materiau(m, id), couleur: couleur.map(octets) }
+    DonneesImportees { proprietes: jeux(m, id), materiau: materiau(m, id), couleur: couleur.map(octets), type_predefini: type_predefini(m, id) }
+}
+
+/// `PredefinedType` (9e attribut des éléments physiques) d'une source IFC4 seulement :
+/// les énumérations d'IFC2X3 et d'IFC4X3 diffèrent de celles d'IFC4, format d'export.
+/// `NOTDEFINED` et valeurs mal formées écartées.
+fn type_predefini(m: &IfcModel, id: Id) -> Option<String> {
+    if m.file.schema != "IFC4" {
+        return None;
+    }
+    let v = m.get(id)?.args.get(8)?.as_enum()?;
+    (v != "NOTDEFINED" && !v.is_empty() && v.bytes().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == b'_')).then(|| v.to_string())
 }
 
 /// Complète les éléments importés venus de la source `s1` (origine `#id`) : propriétés,

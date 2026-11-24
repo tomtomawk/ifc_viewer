@@ -72,9 +72,7 @@ pub fn charger(chemin: &Path) -> Result<Arc<FichierLie>, String> {
 
 fn lire(chemin: &Path) -> Result<FichierLie, String> {
     let data = std::fs::read(chemin).map_err(|e| format!("Lien {} : {e}", chemin.display()))?;
-    if data.starts_with(b"PK") {
-        return Err(format!("Lien {} : IFC-ZIP non pris en charge, décompresser d'abord.", chemin.display()));
-    }
+    let data = formats::ifc::ifczip::contenu_ifc(data).map_err(|e| format!("Lien {} : {e}", chemin.display()))?;
     let model = IfcModel::new(StepFile::parse(&data).map_err(|e| format!("Lien {} : {e}", chemin.display()))?);
     drop(data);
     let stats = GeomStats::default();

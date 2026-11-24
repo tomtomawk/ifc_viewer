@@ -126,13 +126,13 @@ impl Application {
     pub(crate) fn importer_dialogue(&mut self, ctx: &egui::Context) {
         let Some(source) = rfd::FileDialog::new()
             .set_title("Importer")
-            .add_filter("IFC / Revit", &["ifc", "rvt", "rfa", "rte"])
+            .add_filter("IFC / Revit", &["ifc", "ifczip", "rvt", "rfa", "rte"])
             .pick_file()
         else {
             return;
         };
         // IFC et projet natif ouvert : fusion dans le projet ou nouveau projet
-        if self.natif.is_some() && source.extension().is_some_and(|e| e.eq_ignore_ascii_case("ifc")) {
+        if self.natif.is_some() && source.extension().is_some_and(|e| e.eq_ignore_ascii_case("ifc") || e.eq_ignore_ascii_case("ifczip")) {
             let (dans, nouveau) = ("Dans le projet ouvert".to_string(), "Nouveau projet".to_string());
             match rfd::MessageDialog::new().set_title("Importer un IFC")
                 .set_description("Importer les éléments du fichier dans le projet ouvert (une transaction, Ctrl+Z pour annuler) ou créer un nouveau projet natif ?")
