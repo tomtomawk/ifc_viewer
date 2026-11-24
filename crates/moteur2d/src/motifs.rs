@@ -259,8 +259,12 @@ pub fn ligne_isolation_axe(tris: &[[[f64; 2]; 3]], a: [f64; 2], b: [f64; 2], e: 
     use glam::DVec2;
     let (a, b) = (DVec2::from_array(a), DVec2::from_array(b));
     let Some(u) = (b - a).try_normalize() else { return Vec::new() };
-    let (u0, u1) = tris.iter().flatten().map(|p| (DVec2::from_array(*p) - a).dot(u)).fold((f64::MAX, f64::MIN), |(x, y), t| (x.min(t), y.max(t)));
-    serie_s(tris, a, u, -0.5 * e, 0.5 * e, u0, u1)
+    // morceaux connexes (baies, travées) traités chacun : le test d'appartenance d'un
+    // point ne parcourt que les triangles de son morceau
+    composantes(tris).iter().flat_map(|c| {
+        let (u0, u1) = c.iter().flatten().map(|p| (DVec2::from_array(*p) - a).dot(u)).fold((f64::MAX, f64::MIN), |(x, y), t| (x.min(t), y.max(t)));
+        serie_s(c, a, u, -0.5 * e, 0.5 * e, u0, u1)
+    }).collect()
 }
 
 /// Série de S entre les faces `v0` et `v1` (repère : origine `c`, axe `u`, normale
@@ -323,7 +327,7 @@ fn serie_s(tris: &[[[f64; 2]; 3]], c: glam::DVec2, u: glam::DVec2, v0: f64, v1: 
         if let Some(e0) = entree {
             let (t0, t1) = ((e0 - ca).to_angle(), (sortie - ca).to_angle());
             let balayage = if sa > 0.0 { (t1 - t0).rem_euclid(std::f64::consts::TAU) } else { -(t0 - t1).rem_euclid(std::f64::consts::TAU) };
-            let pas_arc = ((balayage.abs() / 0.15).ceil() as usize).max(2);
+            let pas_arc = ((balayage.abs() / 0.3).ceil() as usize).max(2);
             for i in 1..=pas_arc {
                 trace.push(ca + DVec2::from_angle(t0 + balayage * i as f64 / pas_arc as f64) * r);
             }
