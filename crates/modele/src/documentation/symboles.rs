@@ -151,6 +151,20 @@ impl Projet {
         self.symboles.choix(g).and_then(|id| self.familles_symboles.iter().find(|f| &f.id == id)).cloned().unwrap_or_else(|| FamilleSymbole::standard(g))
     }
 
+    /// Famille du repère de la coupe ou de l'élévation `v` : celle de son type de vue,
+    /// sinon celle du projet, sinon la standard.
+    pub fn famille_repere(&self, v: &Vue) -> FamilleSymbole {
+        let elevation = matches!(v.genre, GenreVue::Coupe { elevation: true, .. });
+        let g = if elevation { GenreSymbole::RepereElevation } else { GenreSymbole::RepereCoupe };
+        self.types_vues
+            .iter()
+            .find(|t| t.nom == v.type_vue && t.elevation == elevation)
+            .and_then(|t| t.repere.as_ref())
+            .and_then(|id| self.familles_symboles.iter().find(|f| &f.id == id && f.genre() == Some(g)))
+            .cloned()
+            .unwrap_or_else(|| self.famille_symbole(g))
+    }
+
     /// Contrôle des familles de symboles et des choix du projet.
     pub(crate) fn verifier_symboles(&self) -> Result<(), String> {
         let mut ids = std::collections::HashSet::new();
@@ -166,6 +180,13 @@ impl Projet {
             if let Some(id) = self.symboles.choix(g)
                 && !self.familles_symboles.iter().any(|f| &f.id == id && f.genre() == Some(g)) {
                     return Err(format!("{} : famille absente ou d'une autre catégorie.", g.libelle()));
+                }
+        }
+        for t in &self.types_vues {
+            let g = if t.elevation { GenreSymbole::RepereElevation } else { GenreSymbole::RepereCoupe };
+            if let Some(id) = &t.repere
+                && !self.familles_symboles.iter().any(|f| &f.id == id && f.genre() == Some(g)) {
+                    return Err(format!("Type de vue {} : famille de repère absente ou d'une autre catégorie.", t.nom));
                 }
         }
         Ok(())
@@ -186,7 +207,11 @@ pub struct Pose {
 
 /// Primitives du symbole `g` posé en `pose`, champs remplis, à la couleur `couleur`.
 pub fn primitives_symbole(p: &Projet, g: GenreSymbole, pose: &Pose, champs: &[(&str, &str)], couleur: [u8; 4], element: Option<noyau::Id>) -> Vec<Primitive> {
-    let famille = p.famille_symbole(g);
+    primitives_famille_symbole(p, &p.famille_symbole(g), pose, champs, couleur, element)
+}
+
+/// Primitives de la famille de symbole `famille` posée en `pose`.
+pub fn primitives_famille_symbole(p: &Projet, famille: &FamilleSymbole, pose: &Pose, champs: &[(&str, &str)], couleur: [u8; 4], element: Option<noyau::Id>) -> Vec<Primitive> {
     let d = &famille.document_famille;
     let r = d.famille.resoudre_occurrence(d.largeur, d.hauteur, d.profondeur, &p.parametres_partages, &Default::default());
     let papier = pose.echelle * 0.001;
@@ -262,13 +287,15 @@ pub(super) fn reperes_vues_en_plan(p: &Projet, v: &Vue) -> Vec<Primitive> {
         let (x, y) = (DVec3::new(dir.x, dir.y, 0.0), DVec3::new(visee.x, visee.y, 0.0));
         let pose = |origine: DVec2| Pose { origine: pt(origine), x, y, echelle: v.echelle, lecture: (u, h) };
         let couleur = [20, 20, 20, 255];
+        // repère du type de la vue, sinon celui du projet
+        let famille = p.famille_repere(c);
         if *elevation {
-            out.extend(primitives_symbole(p, GenreSymbole::RepereElevation, &pose((a + b) / 2.0), &champs, couleur, None));
+            out.extend(primitives_famille_symbole(p, &famille, &pose((a + b) / 2.0), &champs, couleur, None));
         } else {
             let axe = AnnotationForme::Polyligne { points: vec![debut.to_owned(), fin.to_owned()], fermee: false, courbures: Vec::new(), remplissage: None, traits: if p.types_traits.iter().any(|t| t.id == "trait-axe") { vec!["trait-axe".into()] } else { Vec::new() } };
             out.extend(primitives_forme_dessin(p, &axe, v.echelle, &pt));
             for bout in [a, b] {
-                out.extend(primitives_symbole(p, GenreSymbole::RepereCoupe, &pose(bout), &champs, couleur, None));
+                out.extend(primitives_famille_symbole(p, &famille, &pose(bout), &champs, couleur, None));
             }
         }
     }
@@ -355,5 +382,32 @@ mod tests {
         let posee = p.feuilles.iter().flat_map(|f| f.vues.iter().enumerate().map(move |(k, v)| (v.vue.clone(), k + 1, f.numero.clone()))).next().unwrap();
         assert_eq!(placement_vue(&p, &posee.0), (posee.1.to_string(), posee.2));
         assert_eq!(placement_vue(&p, "absente"), (String::new(), String::new()));
+    }
+
+    #[test]
+    fn repere_propre_au_type_de_vue() {
+        let mut p = projet();
+        let famille = |id: &str, rayon: f64, g: GenreSymbole| {
+            let mut f = FamilleSymbole::standard(g);
+            f.document_famille.famille.elements_2d = vec![Element2DFamille::fixe(VueEsquisse::Plan, AnnotationForme::Cercle { centre: [0.0, 0.0], rayon, type_trait: String::new() }, 2.5)];
+            (f.id, f.nom) = (id.into(), id.into());
+            f
+        };
+        p.familles_symboles = vec![famille("coupe-mur", 3.0, GenreSymbole::RepereCoupe), famille("coupe-projet", 7.0, GenreSymbole::RepereCoupe)];
+        p.symboles.repere_coupe = Some("coupe-projet".into());
+        p.types_vues = vec![
+            crate::gabarit::TypeVue { elevation: false, nom: "Coupe de mur".into(), aide: String::new(), echelle: 20.0, profondeur: 1500.0, repere: Some("coupe-mur".into()) },
+            crate::gabarit::TypeVue { elevation: false, nom: "Coupe de bâtiment".into(), aide: String::new(), echelle: 100.0, profondeur: 15000.0, repere: None },
+            crate::gabarit::TypeVue { elevation: true, nom: "Élévation".into(), aide: String::new(), echelle: 100.0, profondeur: 30000.0, repere: None },
+        ];
+        let mur = p.ajouter_vue_coupe([0.0, 0.0], [5000.0, 0.0], 1500.0, false, "Coupe de mur", 20.0).unwrap();
+        let batiment = p.ajouter_vue_coupe([0.0, 3000.0], [5000.0, 3000.0], 15000.0, false, "Coupe de bâtiment", 100.0).unwrap();
+        p.verifier().unwrap();
+        let vue = |id: &str| p.vues.iter().find(|v| v.id == id).unwrap().clone();
+        assert_eq!(p.famille_repere(&vue(&mur)).id, "coupe-mur");
+        assert_eq!(p.famille_repere(&vue(&batiment)).id, "coupe-projet");
+        // famille de repère d'une autre catégorie sur un type : refusée
+        p.types_vues[2].repere = Some("coupe-mur".into());
+        assert!(p.verifier().is_err());
     }
 }

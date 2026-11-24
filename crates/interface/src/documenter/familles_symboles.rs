@@ -51,6 +51,17 @@ impl Application {
         Ok(id)
     }
 
+    /// Repère du type de vue de rang `k` : famille `id`, ou celui du projet (None).
+    pub(crate) fn choisir_repere_type_vue(&mut self, k: usize, id: Option<String>) -> Result<(), String> {
+        let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
+        let mut q = p.clone();
+        q.types_vues.get_mut(k).ok_or("Type de vue absent.")?.repere = id;
+        self.appliquer_projet(q)?;
+        self.coupe_dirty = true;
+        self.status = "Repère du type de vue modifié — Ctrl+Z pour annuler.".into();
+        Ok(())
+    }
+
     /// Choisit la famille `id` (vide : la standard) pour les symboles `genre`.
     pub(crate) fn choisir_famille_symbole(&mut self, genre: GenreSymbole, id: &str) -> Result<(), String> {
         let (p, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;

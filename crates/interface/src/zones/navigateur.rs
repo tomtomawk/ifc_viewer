@@ -397,6 +397,7 @@ impl Application {
         let mut nouveau_profil = false;
         let mut charger_profil = false;
         let mut symbole_choisi: Option<(modele::documentation::GenreSymbole, String)> = None;
+        let mut repere_type_choisi: Option<(usize, Option<String>)> = None;
         rubrique_nav(ui, LeftTab::Familles, "Familles".into(), false, &mut |ui| {
             if let Some(familles) = &familles_natives {
                 for titre in ["Profils", "Cartouches", "Étiquettes de pièce", "Symboles d'annotation", "Portes", "Fenêtres", "Composants", "Garde-corps"] {
@@ -470,6 +471,25 @@ impl Application {
                                     ui.end_row();
                                 }
                             });
+                            // repère propre à chaque type de coupe ou d'élévation
+                            if !p.types_vues.is_empty() {
+                                ui.label(RichText::new("Repère par type de vue").weak());
+                                egui::Grid::new("reperes_types_vues").num_columns(2).show(ui, |ui| {
+                                    use modele::documentation::GenreSymbole;
+                                    for (k, t) in p.types_vues.iter().enumerate() {
+                                        let g = if t.elevation { GenreSymbole::RepereElevation } else { GenreSymbole::RepereCoupe };
+                                        ui.label(format!("{} : {}", if t.elevation { "Élévation" } else { "Coupe" }, t.nom));
+                                        let nom = t.repere.as_ref().and_then(|id| p.familles_symboles.iter().find(|f| &f.id == id)).map_or_else(|| "Selon le projet".to_string(), |f| f.nom.clone());
+                                        egui::ComboBox::from_id_salt(("repere_type_vue", k)).selected_text(nom).show_ui(ui, |ui| {
+                                            if ui.selectable_label(t.repere.is_none(), "Selon le projet").clicked() { repere_type_choisi = Some((k, None)); }
+                                            for f in p.familles_symboles.iter().filter(|f| f.genre() == Some(g)) {
+                                                if ui.selectable_label(t.repere.as_deref() == Some(f.id.as_str()), &f.nom).clicked() { repere_type_choisi = Some((k, Some(f.id.clone()))); }
+                                            }
+                                        }).response.on_hover_text(format!("{} des vues de ce type ; « Selon le projet » : celui choisi ci-dessus", g.libelle()));
+                                        ui.end_row();
+                                    }
+                                });
+                            }
                         }
                         if titre == "Profils" {
                             if ui.small_button("Nouveau profil…").clicked() { nouveau_profil = true; }
@@ -571,6 +591,7 @@ impl Application {
                 }
             }
         if let Some((g, id)) = symbole_choisi && let Err(e) = self.choisir_famille_symbole(g, &id) { self.error = Some(e); }
+        if let Some((k, id)) = repere_type_choisi && let Err(e) = self.choisir_repere_type_vue(k, id) { self.error = Some(e); }
         if nouveau_profil { self.ouvrir_profil(None); }
         if charger_profil { self.charger_profil_fichier(); }
         if charger_famille

@@ -130,14 +130,18 @@ pub struct TypeVue {
     pub aide: String,
     pub echelle: f64,
     pub profondeur: f64,
+    /// Famille du repère des vues de ce type dans les plans (identifiant d'une famille
+    /// `repere_coupe` ou `repere_elevation` du projet) ; absente : celle du projet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repere: Option<String>,
 }
 
 impl TypeVue {
     /// Types de vues du code (projet sans types de vues) : une coupe et une élévation.
     pub fn par_defaut() -> Vec<TypeVue> {
         vec![
-            TypeVue { elevation: false, nom: "Coupe".into(), aide: "Coupe générale".into(), echelle: 100.0, profondeur: 15_000.0 },
-            TypeVue { elevation: true, nom: "Élévation".into(), aide: "Façade".into(), echelle: 100.0, profondeur: 30_000.0 },
+            TypeVue { elevation: false, nom: "Coupe".into(), aide: "Coupe générale".into(), echelle: 100.0, profondeur: 15_000.0, repere: None },
+            TypeVue { elevation: true, nom: "Élévation".into(), aide: "Façade".into(), echelle: 100.0, profondeur: 30_000.0, repere: None },
         ]
     }
 }
