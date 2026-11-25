@@ -569,6 +569,9 @@ pub struct Application {
     prochaine_tentative_pilote: std::time::Instant,
     requetes: Vec<Requete>,
     saisies_pilote: std::collections::VecDeque<Vec<egui::Event>>,
+    /// Annotations de la vue native, symboles des menuiseries découpés : clé (révision,
+    /// vue, visibilité, scène) et résultat (`annotations_natives`).
+    cache_symboles: std::sync::Mutex<Option<(u64, Vec<noyau::trace2d::Primitive>)>>,
     saisie_pilote_image: bool,
     /// Réponses des ouvertures demandées par le pilote, envoyées en fin de chargement.
     attente_ouverture: Vec<Sender<String>>,
@@ -815,6 +818,7 @@ impl Application {
             prochaine_tentative_pilote: std::time::Instant::now(),
             requetes: Vec::new(),
             saisies_pilote: Default::default(),
+            cache_symboles: Default::default(),
             saisie_pilote_image: false,
             attente_ouverture: Vec::new(),
             rect_vue: egui::Rect::NOTHING,

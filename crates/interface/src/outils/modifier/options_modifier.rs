@@ -255,8 +255,24 @@ impl Application {
             .iter()
             .map(|id| modele::identifiants::id_natif("annotation", id))
             .collect();
-        let annotations = modele::documentation::annotations(p, v);
-        let annotations = match &self.scene { Some(s) => moteur2d::retirer_symboles_caches(p, v, s, &self.visible, annotations), None => annotations };
+        let annotations = match &self.scene {
+            Some(s) => {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                (self.bim.revision, &v.id, &self.visible, s.vertices.len(), s.objects.len()).hash(&mut h);
+                let cle = h.finish();
+                let mut cache = self.cache_symboles.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                match cache.as_ref().filter(|(k, _)| *k == cle) {
+                    Some((_, a)) => a.clone(),
+                    None => {
+                        let a = moteur2d::decouper_symboles_caches(p, v, s, &self.visible, modele::documentation::annotations(p, v));
+                        *cache = Some((cle, a.clone()));
+                        a
+                    }
+                }
+            }
+            None => modele::documentation::annotations(p, v),
+        };
         annotations
             .into_iter()
             .filter(|a| !a.element.is_some_and(|id| v.elements_masques.iter().any(|cle| modele::identifiants::id_natif("annotation", cle) == id)))

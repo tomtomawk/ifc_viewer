@@ -19,7 +19,7 @@ mod coupe;
 pub use coupe::{coupe, coupe_avec_cache, CacheCoupe};
 mod vue;
 mod symboles_caches;
-pub use symboles_caches::{ouverture_visible, retirer_symboles_caches};
+pub use symboles_caches::decouper_symboles_caches;
 pub use vue::{cadrer_primitives, sommets, sommets_boite, styler_traits, vu};
 use noyau::motif::{GrilleMotif, Motif, hachures_plan};
 use scene::{Scene, Vertex};
