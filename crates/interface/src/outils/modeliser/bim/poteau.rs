@@ -21,7 +21,7 @@ impl Application {
             .map(|n| n.id.clone())
             .or(niveau_vue);
         let mut hauteur = b.fin[2] - b.debut[2];
-        ui.label(RichText::new("Section rectangulaire").strong());
+        ui.label(RichText::new("Base et sommet").strong());
         croquis::cadre(ui, |ui| {
             let croquis = CroquisVertical::lignes(ui, |ui, haut| {
                 if haut {
@@ -91,18 +91,6 @@ impl Application {
                 ui.label("Nom");
                 ui.add(egui::TextEdit::singleline(&mut b.nom).desired_width(115.0));
                 ui.end_row();
-                for (nom, dimension) in
-                    [("Largeur", &mut b.largeur), ("Profondeur", &mut b.hauteur)]
-                {
-                    ui.label(nom);
-                    ui.add(
-                        egui::DragValue::new(dimension)
-                            .speed(5.0)
-                            .range(1.0..=100_000.0)
-                            .dimensions(),
-                    );
-                    ui.end_row();
-                }
                 ui.label("Rotation");
                 ui.add(
                     egui::DragValue::new(&mut b.rotation)
@@ -141,6 +129,9 @@ impl Application {
     pub(super) fn poteau_regle(&self, point: [f64; 2]) -> Result<modele::Barre, String> {
         let (projet, _) = self.natif.as_ref().ok_or("Aucun projet natif.")?;
         let mut b = self.bim.barre.clone();
+        if !projet.types_poteaux.iter().any(|t| t.id == b.type_barre) {
+            return Err("Choisissez un type de poteau dans la palette.".into());
+        }
         b.id.clear();
         b.debut[..2].copy_from_slice(&point);
         let z = sommet_poteau(

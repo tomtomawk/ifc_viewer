@@ -23,13 +23,11 @@ impl Application {
         } else if let Some(b) = p.barres.iter().find(|b| &b.id == id) {
             if b.genre == modele::GenreBarre::Poutre {
                 self.bim.poutre = crate::outils::modeliser::poutres::ReglagesPoutre {
-                    type_poutre: b.pose.type_poutre.clone(),
+                    type_barre: b.type_barre.clone(),
                     justification: b.pose.justification,
                     arase: b.pose.arase,
                     niveau: Some(b.niveau.clone()),
                     decalage: b.debut[2],
-                    largeur: b.largeur,
-                    hauteur: b.hauteur,
                 };
             } else {
                 self.bim.barre = b.clone();
@@ -226,6 +224,7 @@ mod tests {
     #[test]
     fn cs_reprend_les_reglages_utilises_par_le_trace_de_poutre() {
         let mut projet = projet();
+        projet.types_poutres.push(modele::elements::poutre::TypeSection { id: "poutre-360".into(), nom: "Poutre 360 × 510".into(), profil: None, largeur: 360.0, hauteur: 510.0, materiau: None });
         projet.barres.push(modele::Barre {
             id: "poutre".into(),
             nom: "Poutre".into(),
@@ -233,12 +232,10 @@ mod tests {
             niveau: "rdc".into(),
             debut: [0.0, 0.0, 2450.0],
             fin: [4000.0, 0.0, 2450.0],
-            largeur: 360.0,
-            hauteur: 510.0,
+            type_barre: "poutre-360".into(),
             rotation: 0.0,
             origine: None,
             pose: PosePoutre {
-                type_poutre: None,
                 justification: Justification::Droite,
                 arase: Arase::Inferieure,
             },
@@ -258,10 +255,7 @@ mod tests {
         let (source, nouvelle) = (&barres[0], &barres[1]);
         assert_ne!(nouvelle.id, source.id);
         assert_eq!(nouvelle.debut, [0.0, 2000.0, 2450.0]);
-        assert_eq!(
-            (nouvelle.largeur, nouvelle.hauteur),
-            (source.largeur, source.hauteur)
-        );
+        assert_eq!(nouvelle.type_barre, source.type_barre);
         assert_eq!(nouvelle.pose.justification, source.pose.justification);
         assert_eq!(nouvelle.pose.arase, source.pose.arase);
     }

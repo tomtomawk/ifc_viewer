@@ -39,8 +39,6 @@ impl Application {
             }
             Outil::Poteau => {
                 let b = &mut self.bim.barre;
-                dim(ui, "Largeur", &mut b.largeur);
-                dim(ui, "Profondeur", &mut b.hauteur);
                 ui.label("Rotation");
                 ui.add(egui::DragValue::new(&mut b.rotation).speed(1.0).suffix(" °"));
             }

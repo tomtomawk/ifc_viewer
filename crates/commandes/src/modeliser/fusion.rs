@@ -262,6 +262,7 @@ fn fusionner_dans(
     rapprocher_types!(cible, imp, types_dalles, table);
     rapprocher_types!(cible, imp, types_ouvertures, table);
     rapprocher_types!(cible, imp, types_poutres, table);
+    rapprocher_types!(cible, imp, types_poteaux, table);
     rapprocher_types!(cible, imp, types_composants, table);
     rapprocher_types!(cible, imp, types_garde_corps, table);
     rapprocher_types!(cible, imp, types_modenatures, table);
@@ -326,6 +327,7 @@ fn fusionner_dans(
         types_dalles,
         types_ouvertures,
         types_poutres,
+        types_poteaux,
         types_composants,
         types_garde_corps,
         types_modenatures,

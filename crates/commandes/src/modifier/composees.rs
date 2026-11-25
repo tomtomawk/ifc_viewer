@@ -51,7 +51,7 @@ impl Modification for Projet {
             return self.ouvertures.iter().filter(|x| x.genre == o.genre && x.type_ouverture == o.type_ouverture && (o.type_ouverture.is_some() || (x.largeur == o.largeur && x.hauteur == o.hauteur))).map(|x| x.id.clone()).collect();
         }
         if let Some(b) = self.barres.iter().find(|b| b.id == id) {
-            return self.barres.iter().filter(|x| x.genre == b.genre && x.largeur == b.largeur && x.hauteur == b.hauteur).map(|x| x.id.clone()).collect();
+            return self.barres.iter().filter(|x| x.genre == b.genre && x.type_barre == b.type_barre).map(|x| x.id.clone()).collect();
         }
         for (liste, nom) in [(self.escaliers.iter().map(|x| x.id.clone()).collect::<Vec<_>>(), "escalier"), (self.garde_corps.iter().map(|x| x.id.clone()).collect(), "garde-corps")] {
             let _ = nom;
@@ -347,8 +347,7 @@ impl ModificationInterne for Projet {
         } else if let Some(b) = self.barres.iter().find(|b| b.id == source).cloned() {
             for c in &cibles {
                 let x = self.barres.iter_mut().find(|x| &x.id == c && x.genre == b.genre).ok_or("Reproduire : la cible doit être une barre du même genre.")?;
-                x.largeur = b.largeur;
-                x.hauteur = b.hauteur;
+                x.type_barre = b.type_barre.clone();
             }
         } else {
             return Err("Reproduire : source non prise en charge (mur simple, dalle, ouverture, poteau ou poutre).".into());

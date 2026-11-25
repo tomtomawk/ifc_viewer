@@ -194,7 +194,7 @@ impl Projet {
         if let Some(b)=self.barres.iter().find(|b|b.id==id) {
             let (a,f)=(DVec2::new(b.debut[0],b.debut[1]),DVec2::new(b.fin[0],b.fin[1]));
             let Some(u)=(f-a).try_normalize() else {return Vec::new()};
-            let n=u.perp()*b.largeur/2.0;
+            let n=u.perp()*self.type_barre(b).map_or(0.0,|t|t.largeur)/2.0;
             let c=[a-n,f-n,f+n,a+n].map(|p|p.to_array());
             return (0..4).map(|i|[c[i],c[(i+1)%4]]).collect();
         }

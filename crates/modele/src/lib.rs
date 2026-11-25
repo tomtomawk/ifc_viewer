@@ -112,7 +112,9 @@ pub struct Projet {
     pub barres: Vec<Barre>,
     /// Types de poutres : profil (ou section rectangulaire), dimensions, matériau.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub types_poutres: Vec<elements::poutre::TypePoutre>,
+    pub types_poutres: Vec<elements::poutre::TypeSection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_poteaux: Vec<elements::poutre::TypeSection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub escaliers: Vec<Escalier>,
     /// Pièces : point placé et contour calculé depuis les murs.
@@ -241,7 +243,7 @@ pub struct ContexteElement {
     pub variante: Option<String>,
 }
 
-/// Élément structurel à section rectangulaire, en millimètres.
+/// Poteau ou poutre : axe et type de section (profil ou rectangle), en millimètres.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Barre {
     pub id: String,
@@ -251,12 +253,12 @@ pub struct Barre {
     /// Extrémités de l'axe, Z relatif au niveau.
     pub debut: [f64; 3],
     pub fin: [f64; 3],
-    pub largeur: f64,
-    pub hauteur: f64,
+    /// Type de section : dans `types_poteaux` ou `types_poutres` selon le genre.
+    pub type_barre: String,
     /// Orientation en degrés de la section d'un poteau.
     #[serde(default)]
     pub rotation: f64,
-    /// Poutre : type, justification horizontale et arase (champs à plat).
+    /// Poutre : justification horizontale et arase (champs à plat).
     #[serde(flatten)]
     pub pose: elements::poutre::PosePoutre,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub origine: Option<Origine>,
@@ -1282,6 +1284,14 @@ impl Projet {
             p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None, famille_nom: None });
         }
         p.types_terrains = g.types_terrains.clone();
+        // types de poteaux et de poutres : profil désigné par son nom dans le gabarit
+        let section = |t: &elements::poutre::TypeSection, sorte: &str| elements::poutre::TypeSection {
+            id: identifiant(sorte, &format!("gabarit:{}", t.nom)),
+            profil: t.profil.as_ref().map(|nom| identifiant("profil", &format!("gabarit:{nom}"))),
+            ..t.clone()
+        };
+        p.types_poteaux = g.types_poteaux.iter().map(|t| section(t, "type-poteau")).collect();
+        p.types_poutres = g.types_poutres.iter().map(|t| section(t, "type-poutre")).collect();
         p.plumes = g.plumes.clone();
         p.motifs = g.motifs.iter().cloned().map(|mut m| { m.id = identifiant("motif", &format!("gabarit:{}", m.nom)); m }).collect();
         p.familles_materiaux = g.materiaux.clone();

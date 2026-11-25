@@ -42,14 +42,7 @@ pub(super) fn about(
         if s < -TOLERANCE || s > portee + TOLERANCE {
             continue;
         }
-        let type_ = voisine
-            .pose
-            .type_poutre
-            .as_deref()
-            .and_then(|id| projet.type_poutre(id));
-        let (l, h) = type_.map_or((voisine.largeur, voisine.hauteur), |t| {
-            (t.largeur, t.hauteur)
-        });
+        let Some((l, h)) = projet.type_barre(voisine).map(|t| (t.largeur, t.hauteur)) else { continue };
         let bas_voisin = voisine.debut[2] + voisine.pose.arase.bas(h);
         if bas.max(bas_voisin) >= (bas + hauteur).min(bas_voisin + h) {
             continue;

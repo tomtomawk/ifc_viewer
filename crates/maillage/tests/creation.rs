@@ -212,7 +212,8 @@ fn motif_de_modele_marque_pour_le_rendu() {
 fn materiau_par_defaut_de_la_categorie() {
     let mut p = Projet::nouveau("Catégories");
     p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
-    let poteau = Barre { id: "p".into(), nom: "Poteau".into(), genre: GenreBarre::Poteau, niveau: "n".into(), debut: [0.0, 0.0, 0.0], fin: [0.0, 0.0, 2500.0], largeur: 200.0, hauteur: 200.0, rotation: 0.0, pose: Default::default(), origine: None };
+    p.types_poteaux.push(modele::elements::poutre::TypeSection { id: "p200".into(), nom: "Poteau 200 × 200".into(), profil: None, largeur: 200.0, hauteur: 200.0, materiau: None });
+    let poteau = Barre { id: "p".into(), nom: "Poteau".into(), genre: GenreBarre::Poteau, niveau: "n".into(), debut: [0.0, 0.0, 0.0], fin: [0.0, 0.0, 2500.0], type_barre: "p200".into(), rotation: 0.0, pose: Default::default(), origine: None };
     p.barres.push(poteau);
     let couleur = |p: &Projet| {
         let s = maillage::depuis_natif(p, std::path::Path::new("c.bem")).unwrap();
@@ -237,7 +238,8 @@ fn materiau_par_defaut_de_la_categorie() {
 fn plumes_et_trait_de_la_categorie_dans_la_scene() {
     let mut p = Projet::nouveau("Plumes");
     p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
-    p.barres.push(Barre { id: "p".into(), nom: "Poteau".into(), genre: GenreBarre::Poteau, niveau: "n".into(), debut: [0.0, 0.0, 0.0], fin: [0.0, 0.0, 2500.0], largeur: 200.0, hauteur: 200.0, rotation: 0.0, pose: Default::default(), origine: None });
+    p.types_poteaux.push(modele::elements::poutre::TypeSection { id: "p200".into(), nom: "Poteau 200 × 200".into(), profil: None, largeur: 200.0, hauteur: 200.0, materiau: None });
+    p.barres.push(Barre { id: "p".into(), nom: "Poteau".into(), genre: GenreBarre::Poteau, niveau: "n".into(), debut: [0.0, 0.0, 0.0], fin: [0.0, 0.0, 2500.0], type_barre: "p200".into(), rotation: 0.0, pose: Default::default(), origine: None });
     p.types_traits.push(documentation::TypeTrait { id: "tirets".into(), nom: "Tirets".into(), epaisseur: 0.25, tirets: vec![3.0, 1.5] });
     p.styles_categories.insert(CategorieMateriau::Poteaux, StyleCategorie { materiau: Some("Béton".into()), plume_coupe: Some(8), plume_projection: Some(3), type_trait_projection: Some("tirets".into()), ..Default::default() });
     p.completer_materiaux();

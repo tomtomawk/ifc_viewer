@@ -47,6 +47,12 @@ pub struct Gabarit {
     /// Profils paramétriques chargés dans les nouveaux projets.
     #[serde(default)]
     pub profils: Vec<crate::famille::profil::Profil>,
+    /// Types de poteaux et de poutres d'un nouveau projet ; `profil` : nom d'un profil
+    /// du gabarit (rectangle sans profil).
+    #[serde(default)]
+    pub types_poteaux: Vec<crate::elements::poutre::TypeSection>,
+    #[serde(default)]
+    pub types_poutres: Vec<crate::elements::poutre::TypeSection>,
     /// Types de terrain (épaisseur, matériau) proposés au sélecteur des terrains.
     #[serde(default)]
     pub types_terrains: Vec<crate::elements::site::TypeTerrain>,

@@ -212,7 +212,8 @@ mod tests {
         let (axe, e, niveau) = modele::volumes::solides::hote(&p, &ouv.mur).unwrap();
         let (c, _) = modele::volumes::solides::repere(&axe, ouv.abscisse);
         let pied = DVec3::new(c.x, c.y, 0.0) + oeil * (e / 2.0 + 300.0);
-        p.barres.push(modele::Barre { id: "poteau-essai".into(), nom: "Poteau".into(), genre: modele::GenreBarre::Poteau, niveau, debut: pied.to_array(), fin: (pied + DVec3::Z * 3000.0).to_array(), largeur: 100.0, hauteur: 100.0, rotation: 0.0, pose: Default::default(), origine: None });
+        p.types_poteaux.push(modele::elements::poutre::TypeSection { id: "poteau-100".into(), nom: "Poteau 100 × 100".into(), profil: None, largeur: 100.0, hauteur: 100.0, materiau: None });
+        p.barres.push(modele::Barre { id: "poteau-essai".into(), nom: "Poteau".into(), genre: modele::GenreBarre::Poteau, niveau, debut: pied.to_array(), fin: (pied + DVec3::Z * 3000.0).to_array(), type_barre: "poteau-100".into(), rotation: 0.0, pose: Default::default(), origine: None });
         let s2 = maillage::depuis_natif(&p, std::path::Path::new("essai.bem")).unwrap();
         let visible2 = vec![true; s2.objects.len()];
         let marque: HashSet<u64> = [id_natif("ouverture", &ouv.id)].into();

@@ -24,7 +24,8 @@ fn poteau_et_poutre_rectangulaires_en_barres() {
     // poteau 300 × 400 tourné de 30°, du niveau à 3 m
     let poteau = barre("Poteau P1");
     assert_eq!(poteau.genre, GenreBarre::Poteau);
-    assert!((poteau.largeur - 300.0).abs() < 1e-6 && (poteau.hauteur - 400.0).abs() < 1e-6, "{poteau:?}");
+    let t = p.type_barre(poteau).unwrap();
+    assert!((t.largeur - 300.0).abs() < 1e-6 && (t.hauteur - 400.0).abs() < 1e-6, "{t:?}");
     assert!((poteau.rotation - 30.0).abs() < 1e-6, "{}", poteau.rotation);
     let proche = |a: [f64; 3], b: [f64; 3]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-6);
     assert!(proche(poteau.debut, [6000.0, 1000.0, 0.0]) && proche(poteau.fin, [6000.0, 1000.0, 3000.0]), "{poteau:?}");
@@ -33,7 +34,8 @@ fn poteau_et_poutre_rectangulaires_en_barres() {
     // poutre 200 × 500 de x = 0 à 4 000, axe à 2 750 (sous-face à 2 500)
     let poutre = barre("Poutre B1");
     assert_eq!(poutre.genre, GenreBarre::Poutre);
-    assert!((poutre.largeur - 200.0).abs() < 1e-6 && (poutre.hauteur - 500.0).abs() < 1e-6, "{poutre:?}");
+    let t = p.type_barre(poutre).unwrap();
+    assert!((t.largeur - 200.0).abs() < 1e-6 && (t.hauteur - 500.0).abs() < 1e-6 && t.nom.starts_with("Poutre"), "{t:?}");
     assert!(proche(poutre.debut, [0.0, -1500.0, 2750.0]) && proche(poutre.fin, [4000.0, -1500.0, 2750.0]), "{poutre:?}");
     let solide = solides::barre(&p, poutre).unwrap();
     assert!((geometrie::volume(&solide) - 4e8).abs() < 1.0);

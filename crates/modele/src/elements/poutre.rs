@@ -1,5 +1,6 @@
-//! Poutres : type (famille de profil ou section rectangulaire, dimensions, matériau),
-//! pose de l'instance (justification horizontale, arase de référence) et solide.
+//! Poteaux et poutres : type de section (famille de profil ou rectangle, dimensions,
+//! matériau ; deux listes, `types_poteaux` et `types_poutres`), pose de l'instance
+//! (justification horizontale, arase de référence) et solide de la poutre.
 //!
 //! Trois niveaux, comme les murs : la famille de profil (`Projet::profils`) donne une
 //! forme de section paramétrée ; le type de poutre choisit un profil (ou une section
@@ -12,11 +13,11 @@ use serde::{Deserialize, Serialize};
 #[path = "raccord_poutre.rs"]
 mod raccord;
 
-/// Type de poutre. Sans profil : section rectangulaire `largeur` × `hauteur` (mm). Avec
-/// profil : contour de la famille de profil, mis à l'échelle de `largeur` × `hauteur`
-/// (encombrement de la section).
+/// Type de poteau ou de poutre. Sans profil : section rectangulaire `largeur` × `hauteur`
+/// (mm). Avec profil : contour de la famille de profil, mis à l'échelle de `largeur` ×
+/// `hauteur` (encombrement de la section).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct TypePoutre {
+pub struct TypeSection {
     pub id: String,
     pub nom: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -113,9 +114,6 @@ impl Arase {
 /// Pose d'une poutre (champs à plat dans le JSON de la barre).
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct PosePoutre {
-    /// Type de poutre ; None : section rectangulaire `largeur` × `hauteur` de la barre.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub type_poutre: Option<String>,
     #[serde(default, skip_serializing_if = "Justification::est_axe")]
     pub justification: Justification,
     #[serde(default, skip_serializing_if = "Arase::est_axe")]
@@ -123,8 +121,14 @@ pub struct PosePoutre {
 }
 
 impl Projet {
-    pub fn type_poutre(&self, id: &str) -> Option<&TypePoutre> {
-        self.types_poutres.iter().find(|t| t.id == id)
+    /// Types de la sorte de barre `genre`.
+    pub fn types_section(&self, genre: GenreBarre) -> &[TypeSection] {
+        match genre { GenreBarre::Poteau => &self.types_poteaux, GenreBarre::Poutre => &self.types_poutres }
+    }
+
+    /// Type de section d'un poteau ou d'une poutre.
+    pub fn type_barre(&self, b: &Barre) -> Option<&TypeSection> {
+        self.types_section(b.genre).iter().find(|t| t.id == b.type_barre)
     }
 
     /// Ligne tracée d'une poutre (poignées) : début, fin (mm, plan) et altitude absolue
@@ -154,31 +158,36 @@ impl Barre {
     }
 }
 
-/// Dimensions (largeur, hauteur) et contour de la section d'une poutre (mm, x vers la
-/// gauche du tracé, y vers le haut ; encombrement centré sur l'origine).
+/// Dimensions (largeur, hauteur) et contour de la section d'un poteau ou d'une poutre
+/// (mm ; poutre : x vers la gauche du tracé, y vers le haut ; poteau : repère du plan
+/// avant rotation ; encombrement centré sur l'origine).
 pub fn section(p: &Projet, b: &Barre) -> Result<(f64, f64, Vec<[f64; 2]>), String> {
-    let t = match &b.pose.type_poutre {
-        Some(id) => Some(p.type_poutre(id).ok_or_else(|| format!("{} : type de poutre absent.", b.nom))?),
-        None => None,
-    };
-    let (l, h) = t.map_or((b.largeur, b.hauteur), |t| (t.largeur, t.hauteur));
+    let t = p.type_barre(b).ok_or_else(|| format!("{} : type de section absent.", b.nom))?;
+    t.contour(p)
+}
+
+impl TypeSection {
+    /// Dimensions et contour de la section (voir `section`).
+    pub fn contour(&self, p: &Projet) -> Result<(f64, f64, Vec<[f64; 2]>), String> {
+    let (l, h) = (self.largeur, self.hauteur);
     if !(l.is_finite() && h.is_finite() && l > 0.0 && h > 0.0) {
-        return Err(format!("{} : dimensions de section non valides.", b.nom));
+        return Err(format!("{} : dimensions de section non valides.", self.nom));
     }
     let rectangle = || vec![[-l / 2.0, -h / 2.0], [l / 2.0, -h / 2.0], [l / 2.0, h / 2.0], [-l / 2.0, h / 2.0]];
-    let contour = match t.and_then(|t| t.profil.as_ref()) {
+    let contour = match self.profil.as_ref() {
         None => rectangle(),
         Some(id) => {
-            let points = p.profils.iter().find(|x| &x.id == id).ok_or_else(|| format!("{} : profil absent.", b.nom))?.points()?;
+            let points = p.profils.iter().find(|x| &x.id == id).ok_or_else(|| format!("{} : profil absent.", self.nom))?.points()?;
             let (mn, mx) = points.iter().fold(([f64::MAX; 2], [f64::MIN; 2]), |(a, b), q| ([a[0].min(q[0]), a[1].min(q[1])], [b[0].max(q[0]), b[1].max(q[1])]));
             let (dl, dh) = (mx[0] - mn[0], mx[1] - mn[1]);
             if !(dl > 1e-9 && dh > 1e-9) {
-                return Err(format!("{} : profil sans surface.", b.nom));
+                return Err(format!("{} : profil sans surface.", self.nom));
             }
             points.iter().map(|q| [(q[0] - mn[0]) / dl * l - l / 2.0, (q[1] - mn[1]) / dh * h - h / 2.0]).collect()
         }
     };
     Ok((l, h, contour))
+    }
 }
 
 /// Ligne de la face gauche, de l'axe et de la face droite d'une poutre posée sur le
@@ -231,19 +240,21 @@ mod tests {
 
     fn projet() -> Projet {
         let mut p = Projet::depuis_gabarit("Poutres", &crate::gabarit::Gabarit::defaut());
-        p.types_poutres.push(TypePoutre { id: "t".into(), nom: "Poutre BA 20×50".into(), profil: None, largeur: 200.0, hauteur: 500.0, materiau: Some("Béton armé".into()) });
+        p.types_poutres.push(TypeSection { id: "t".into(), nom: "Poutre BA 20×50".into(), profil: None, largeur: 200.0, hauteur: 500.0, materiau: Some("Béton armé".into()) });
+        p.types_poutres.push(TypeSection { id: "t100".into(), nom: "Poutre 10×10".into(), profil: None, largeur: 100.0, hauteur: 100.0, materiau: None });
+        p.types_poutres.push(TypeSection { id: "t200".into(), nom: "Poutre 20×10".into(), profil: None, largeur: 200.0, hauteur: 100.0, materiau: None });
         p
     }
 
-    fn poutre(p: &Projet, pose: PosePoutre, z: f64) -> Barre {
-        Barre { id: "b".into(), nom: "P1".into(), genre: GenreBarre::Poutre, niveau: p.niveaux[0].id.clone(), debut: [0.0, 0.0, z], fin: [4000.0, 0.0, z], largeur: 100.0, hauteur: 100.0, rotation: 0.0, pose, origine: None }
+    fn poutre(p: &Projet, type_barre: &str, pose: PosePoutre, z: f64) -> Barre {
+        Barre { id: "b".into(), nom: "P1".into(), genre: GenreBarre::Poutre, niveau: p.niveaux[0].id.clone(), debut: [0.0, 0.0, z], fin: [4000.0, 0.0, z], type_barre: type_barre.into(), rotation: 0.0, pose, origine: None }
     }
 
     /// Poignées : allonger, pivoter autour de l'autre extrémité, hauteurs gardées.
     #[test]
     fn poignees_extremites() {
         let p = projet();
-        let mut b = poutre(&p, PosePoutre::default(), 2800.0);
+        let mut b = poutre(&p, "t100", PosePoutre::default(), 2800.0);
         b.fin[2] = 2900.0;
         let l = b.avec_extremite(true, [6000.0, 0.0]).unwrap();
         assert_eq!((l.debut, l.fin), ([0.0, 0.0, 2800.0], [6000.0, 0.0, 2900.0]));
@@ -267,18 +278,18 @@ mod tests {
     #[test]
     fn type_justification_et_arase() {
         let p = projet();
-        let pose = |justification, arase| PosePoutre { type_poutre: Some("t".into()), justification, arase };
-        let b = poutre(&p, pose(Justification::Axe, Arase::Axe), 2500.0);
+        let pose = |justification, arase| PosePoutre { justification, arase };
+        let b = poutre(&p, "t", pose(Justification::Axe, Arase::Axe), 2500.0);
         let t = solide(&p, &b).unwrap();
         assert!((volume(&t) - 4000.0 * 200.0 * 500.0).abs() < 1.0);
         let (mn, mx) = etendue(&t);
         assert!((mn.y + 100.0).abs() < 1e-6 && (mx.y - 100.0).abs() < 1e-6);
         assert!((mn.z - 2250.0).abs() < 1e-6 && (mx.z - 2750.0).abs() < 1e-6);
         // tracé vers +x : la gauche est +y
-        let (mn, mx) = etendue(&solide(&p, &poutre(&p, pose(Justification::Gauche, Arase::Superieure), 2500.0)).unwrap());
+        let (mn, mx) = etendue(&solide(&p, &poutre(&p, "t", pose(Justification::Gauche, Arase::Superieure), 2500.0)).unwrap());
         assert!((mn.y + 200.0).abs() < 1e-6 && mx.y.abs() < 1e-6, "gauche : la poutre est à droite de la ligne");
         assert!((mx.z - 2500.0).abs() < 1e-6 && (mn.z - 2000.0).abs() < 1e-6);
-        let (mn, mx) = etendue(&solide(&p, &poutre(&p, pose(Justification::Droite, Arase::Inferieure), 2500.0)).unwrap());
+        let (mn, mx) = etendue(&solide(&p, &poutre(&p, "t", pose(Justification::Droite, Arase::Inferieure), 2500.0)).unwrap());
         assert!(mn.y.abs() < 1e-6 && (mx.y - 200.0).abs() < 1e-6);
         assert!((mn.z - 2500.0).abs() < 1e-6 && (mx.z - 3000.0).abs() < 1e-6);
     }
@@ -286,10 +297,10 @@ mod tests {
     #[test]
     fn raccord_en_angle_et_en_t_sur_les_solides() {
         let mut p = projet();
-        let a = poutre(&p, PosePoutre::default(), 2500.);
+        let a = poutre(&p, "t100", PosePoutre::default(), 2500.);
         let mut b = a.clone();
         b.id = "seconde".into();
-        b.largeur = 200.;
+        b.type_barre = "t200".into();
         b.debut = a.fin;
         b.fin = [4000., 3000., 2500.];
         p.barres = vec![a.clone(), b.clone()];
@@ -319,8 +330,8 @@ mod tests {
         let mut p = projet();
         let profil = p.profils.first().cloned().or_else(|| crate::gabarit::Gabarit::defaut().profils.first().cloned()).unwrap();
         if p.profils.is_empty() { p.profils.push(profil.clone()); }
-        p.types_poutres.push(TypePoutre { id: "pf".into(), nom: "Profil".into(), profil: Some(profil.id.clone()), largeur: 150.0, hauteur: 300.0, materiau: None });
-        let b = poutre(&p, PosePoutre { type_poutre: Some("pf".into()), ..Default::default() }, 2500.0);
+        p.types_poutres.push(TypeSection { id: "pf".into(), nom: "Profil".into(), profil: Some(profil.id.clone()), largeur: 150.0, hauteur: 300.0, materiau: None });
+        let b = poutre(&p, "pf", PosePoutre::default(), 2500.0);
         let t = solide(&p, &b).unwrap();
         let (mn, mx) = etendue(&t);
         assert!(((mx.y - mn.y) - 150.0).abs() < 1e-6 && ((mx.z - mn.z) - 300.0).abs() < 1e-6);
@@ -331,14 +342,37 @@ mod tests {
     #[test]
     fn pose_a_plat_dans_le_json() {
         let p = projet();
-        let b = poutre(&p, PosePoutre::default(), 0.0);
+        let b = poutre(&p, "t", PosePoutre::default(), 0.0);
         let j = serde_json::to_value(&b).unwrap();
-        assert!(j.get("justification").is_none() && j.get("type_poutre").is_none());
-        let b = poutre(&p, PosePoutre { type_poutre: Some("t".into()), justification: Justification::Gauche, arase: Arase::Superieure }, 0.0);
+        assert!(j.get("justification").is_none() && j["type_barre"] == "t");
+        let b = poutre(&p, "t", PosePoutre { justification: Justification::Gauche, arase: Arase::Superieure }, 0.0);
         let j = serde_json::to_value(&b).unwrap();
         assert_eq!(j["justification"], "gauche");
         assert_eq!(j["arase"], "superieure");
         let relu: Barre = serde_json::from_value(j).unwrap();
         assert_eq!(relu.pose, b.pose);
+    }
+
+    /// Gabarit : types de poteaux et de poutres, dont des profils, valides et utilisables.
+    #[test]
+    fn types_du_gabarit() {
+        let mut p = Projet::depuis_gabarit("Structure", &crate::gabarit::Gabarit::defaut());
+        assert!(p.types_poteaux.len() >= 2 && p.types_poutres.len() >= 2);
+        assert!(p.types_poteaux.iter().chain(&p.types_poutres).any(|t| t.profil.is_some()));
+        p.verifier().unwrap();
+        for (k, t) in p.types_poteaux.clone().iter().enumerate() {
+            let b = Barre { id: format!("poteau{k}"), nom: "P".into(), genre: GenreBarre::Poteau, niveau: p.niveaux[0].id.clone(), debut: [k as f64 * 1000.0, 0.0, 0.0], fin: [k as f64 * 1000.0, 0.0, 3000.0], type_barre: t.id.clone(), rotation: 30.0, pose: PosePoutre::default(), origine: None };
+            let (mn, mx) = etendue(&crate::volumes::solides::barre(&p, &b).unwrap());
+            assert!((mx.z - mn.z - 3000.0).abs() < 1e-6 && volume(&crate::volumes::solides::barre(&p, &b).unwrap()) > 0.0, "{}", t.nom);
+            p.barres.push(b);
+        }
+        for (k, t) in p.types_poutres.clone().iter().enumerate() {
+            let b = poutre(&p, &t.id, PosePoutre::default(), 2800.0 + k as f64 * 1000.0);
+            assert!(volume(&solide(&p, &b).unwrap()) > 0.0, "{}", t.nom);
+        }
+        p.verifier().unwrap();
+        // type absent : refusé
+        p.barres[0].type_barre = "absent".into();
+        assert!(p.verifier().is_err());
     }
 }

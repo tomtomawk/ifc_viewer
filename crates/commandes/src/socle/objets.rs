@@ -79,6 +79,7 @@ pub const COLLECTIONS: &[(&str, PolitiqueCollection)] = &[
     ("modenatures", PolitiqueCollection::Identifiee),
     ("types_modenatures", PolitiqueCollection::Identifiee),
     ("types_poutres", PolitiqueCollection::Identifiee),
+    ("types_poteaux", PolitiqueCollection::Identifiee),
     ("vues", PolitiqueCollection::IdentifieeOrdonnee),
     ("importes", PolitiqueCollection::Identifiee),
     ("liens", PolitiqueCollection::Identifiee),

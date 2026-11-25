@@ -199,7 +199,7 @@ fn contenu(p: &Projet) -> Result<Step, String> {
     }
     for b in &p.barres {
         let solide = solides::barre(p, b)?;
-        let materiau = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t)).and_then(|t| t.materiau.as_deref());
+        let materiau = p.type_barre(b).and_then(|t| t.materiau.as_deref());
         let rep = styles.forme(&mut w, p, contexte, &[(materiau, &solide)], &[]);
         let (classe, classe_type, predefini) = match b.genre {
             GenreBarre::Poteau => ("IFCCOLUMN", "IFCCOLUMNTYPE", "COLUMN"),
@@ -209,7 +209,7 @@ fn contenu(p: &Projet) -> Result<Step, String> {
         contenus.entry(niveaux[&b.niveau]).or_default().push(id);
         proprietes::barre(&mut w, p, b, id);
         quantites::barre(&mut w, b, &solide, id);
-        if let Some(t) = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t)) {
+        if let Some(t) = p.type_barre(b) {
             types_ifc.lier(classe_type, &t.id, &t.nom, predefini, None, id);
         }
     }

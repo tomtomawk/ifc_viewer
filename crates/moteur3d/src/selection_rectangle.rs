@@ -211,6 +211,7 @@ mod tests {
             altitude: 0.0,
             origine: None,
         });
+        p.types_poteaux.push(modele::elements::poutre::TypeSection { id: "p1000".into(), nom: "Poteau".into(), profil: None, largeur: 1000.0, hauteur: 1000.0, materiau: None });
         for (id, x) in [("a", -2000.0), ("b", 2000.0)] {
             p.barres.push(Barre {
                 id: id.into(),
@@ -219,8 +220,7 @@ mod tests {
                 niveau: "n".into(),
                 debut: [x, 0.0, 0.0],
                 fin: [x, 0.0, 2000.0],
-                largeur: 1000.0,
-                hauteur: 1000.0,
+                type_barre: "p1000".into(),
                 rotation: 0.0,
                 pose: Default::default(),
                 origine: None,

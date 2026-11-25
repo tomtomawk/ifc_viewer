@@ -112,7 +112,7 @@ fn champs(p: &modele::Projet, groupe: &str, variante: &str, objets: &[Value]) ->
         .collect();
     let optionnels: &[&str] = match (groupe, variante) {
         ("Éléments horizontaux", _) => &["sorte", "talus_dessus", "type_remblai"],
-        ("Poutres", _) => &["type_poutre", "arase", "justification"],
+        ("Poutres", _) => &["arase", "justification"],
         ("Escaliers", _) => &["niveau_haut", "decalage_haut", "sous_face", "balance"],
         ("Portes" | "Fenêtres" | "Ouvertures libres", _) => &["retournee", "inversee"],
         ("Vues", "plan") => &[

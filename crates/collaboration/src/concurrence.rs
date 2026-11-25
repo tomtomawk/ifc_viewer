@@ -256,7 +256,10 @@ fn emprise(k: &str, v: &Value, o: &Objets) -> Option<Zone> {
         "barres" => {
             points(v.get("debut")?, &mut p);
             points(v.get("fin")?, &mut p);
-            marge += v.get("largeur")?.as_f64()?.max(v.get("hauteur")?.as_f64()?);
+            // section du type (poteau ou poutre), sinon une marge courante
+            let types = if v.get("genre")?.as_str()? == "poteau" { "types_poteaux" } else { "types_poutres" };
+            let t = o.get(&format!("{types}/{}", v.get("type_barre")?.as_str()?));
+            marge += t.and_then(|t| Some(t.get("largeur")?.as_f64()?.max(t.get("hauteur")?.as_f64()?))).unwrap_or(1500.0);
         }
         "composants" => {
             points(v.get("position")?, &mut p);

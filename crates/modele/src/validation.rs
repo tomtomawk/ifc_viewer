@@ -200,10 +200,13 @@ impl Projet {
                 return Err("Pente hors de l'intervalle ]0, 89[ degrés.".into());
             }
         }
-        let mut types_poutres = std::collections::HashSet::new();
-        for t in &self.types_poutres {
-            if t.id.is_empty() || !types_poutres.insert(&t.id) {
-                return Err(format!("Type de poutre : identifiant vide ou dupliqué : {}", t.id));
+        for (types, nom) in [(&self.types_poteaux, "poteau"), (&self.types_poutres, "poutre")] {
+            let mut ids = std::collections::HashSet::new();
+            for t in types {
+                if t.id.is_empty() || !ids.insert(&t.id) {
+                    return Err(format!("Type de {nom} : identifiant vide ou dupliqué : {}", t.id));
+                }
+                t.contour(self)?;
             }
         }
         for b in &self.barres {

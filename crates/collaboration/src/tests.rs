@@ -1095,6 +1095,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
         },
     ];
     p.types_murs.push(multi);
+    p.types_poutres.push(modele::elements::poutre::TypeSection { id: "type-poutre-essai".into(), nom: "Poutre 200 × 300".into(), profil: None, largeur: 200.0, hauteur: 300.0, materiau: None });
     for genre in [
         "barre",
         "escalier",
@@ -1182,8 +1183,7 @@ fn creations_independantes_barres_escaliers_gardes_terrains_importes_et_types() 
                     niveau: niveau.clone(),
                     debut: [20000.0, y, 0.0],
                     fin: [25000.0, y, 0.0],
-                    largeur: 200.0,
-                    hauteur: 300.0,
+                    type_barre: "type-poutre-essai".into(),
                     rotation: 0.0,
                     pose: Default::default(),
                     origine: None,

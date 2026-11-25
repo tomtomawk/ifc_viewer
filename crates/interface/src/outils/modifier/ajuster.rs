@@ -501,7 +501,7 @@ mod tests {
         let niveau = p.niveaux[0].id.clone();
         let b: modele::Barre = serde_json::from_value(serde_json::json!({
             "id": "poutre-1", "nom": "Poutre", "genre": "poutre", "niveau": niveau,
-            "debut": [0.0, 0.0, 2500.0], "fin": [2000.0, 0.0, 2500.0], "largeur": 200.0, "hauteur": 400.0
+            "debut": [0.0, 0.0, 2500.0], "fin": [2000.0, 0.0, 2500.0], "type_barre": p.types_poutres[0].id
         })).unwrap();
         p.barres.push(b);
         let arete = p.aretes_plan(&mur).into_iter().find(|e| (e[0][0] - e[1][0]).abs() < 1e-6).unwrap();

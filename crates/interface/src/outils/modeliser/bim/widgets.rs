@@ -71,7 +71,8 @@ pub(crate) fn dupliquer_type_composant(p: &mut modele::Projet, source: &modele::
     id
 }
 
-pub(crate) fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, niveaux: &[modele::Niveau]) {
+pub(crate) fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, p: &modele::Projet) {
+    let niveaux = &p.niveaux;
     use modele::GenreBarre;
     ui.horizontal(|ui| {
         ui.label("Nom");
@@ -126,27 +127,10 @@ pub(crate) fn barre_ui(ui: &mut egui::Ui, b: &mut modele::Barre, niveaux: &[mode
             });
         }
     }
-    for (nom, valeur) in [
-        ("Largeur", &mut b.largeur),
-        (
-            if b.genre == GenreBarre::Poteau {
-                "Profondeur"
-            } else {
-                "Hauteur de section"
-            },
-            &mut b.hauteur,
-        ),
-    ] {
-        ui.horizontal(|ui| {
-            ui.label(nom);
-            ui.add(
-                egui::DragValue::new(valeur)
-                    .speed(5.0)
-                    .range(1.0..=100000.0)
-                    .dimensions(),
-            );
-        });
-    }
+    ui.horizontal(|ui| {
+        ui.label("Type");
+        crate::outils::modeliser::types_section::choix_type_section(ui, p, b.genre, &mut b.type_barre);
+    });
 }
 
 pub(crate) fn points_ui(ui: &mut egui::Ui, points: &mut [[f64; 2]; 2]) {

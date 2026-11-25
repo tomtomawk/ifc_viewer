@@ -214,8 +214,9 @@ fn construire() -> R<Projet> {
     let mut attaches = ext_r1.clone();
     attaches.extend(cloisons_r1.iter().cloned());
     cmd(&mut m.p, json!({"action": "attacher", "ids": attaches, "toiture": toit}))?;
+    let poteau_bois = m.p.types_poteaux.iter().find(|t| t.nom == "Poteau bois 150 × 150").map(|t| t.id.clone()).ok_or("type de poteau absent du gabarit")?;
     cmd(&mut m.p, json!({"action": "barre", "barre": {"id": "", "nom": "Poteau de l'auvent", "genre": "poteau", "niveau": rdc,
-        "debut": [14550.0, -150.0, 0.0], "fin": [14550.0, -150.0, 2500.0], "largeur": 120.0, "hauteur": 120.0}}))?;
+        "debut": [14550.0, -150.0, 0.0], "fin": [14550.0, -150.0, 2500.0], "type_barre": poteau_bois}}))?;
 
     // ---- menuiseries
     let (of2, of100, ob, fixe, coul, pf, entree, p83, p73, imposte) = ("Fenêtre OF 2 vantaux", "Fenêtre OF 2 vantaux 100×125", "Fenêtre oscillo-battante 60×75", "Châssis fixe 180×60",

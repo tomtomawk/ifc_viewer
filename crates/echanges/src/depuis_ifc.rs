@@ -302,7 +302,10 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
             continue;
         };
         match barres_ifc::barre(m, id, ident("barre", id), nom.clone(), niv.clone(), alt, origine(id)) {
-            Ok(b) => c.projet.barres.push(b),
+            Ok((mut b, section)) => {
+                b.type_barre = barres_ifc::type_section(&mut c.projet, b.genre, section);
+                c.projet.barres.push(b);
+            }
             Err(raison) => c.importer(nom, pretty_type(m.ty(id)), Some(niv), tris(id), raison, origine(id)),
         }
     }
@@ -367,7 +370,7 @@ mod tests {
         assert!(p.importes.is_empty());
         assert_eq!(p.barres.len(), 1);
         let b = &p.barres[0];
-        assert!(b.genre == modele::GenreBarre::Poteau && b.largeur == 300.0 && b.hauteur == 300.0 && b.debut == [3000.0, 2000.0, 0.0] && b.fin == [3000.0, 2000.0, 2700.0], "{b:?}");
+        assert!(b.genre == modele::GenreBarre::Poteau && p.type_barre(b).is_some_and(|t| t.largeur == 300.0 && t.hauteur == 300.0) && b.debut == [3000.0, 2000.0, 0.0] && b.fin == [3000.0, 2000.0, 2700.0], "{b:?}");
         // mur droit et dalle exacts ; mur courbe : la géométrie lue est facettée, les
         // paramètres donnent l'arc exact (écart de l'ordre du pour cent)
         assert!(mesures.iter().all(|x| x.retenu), "{mesures:?}");

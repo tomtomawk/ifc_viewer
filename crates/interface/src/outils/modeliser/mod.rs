@@ -5,6 +5,7 @@ pub(crate) mod garde_corps;
 pub(crate) mod modenatures;
 pub(crate) mod escalier;
 pub(crate) mod poutres;
+pub(crate) mod types_section;
 pub(crate) mod liens;
 pub(crate) mod quadrillage;
 pub(crate) mod niveau;

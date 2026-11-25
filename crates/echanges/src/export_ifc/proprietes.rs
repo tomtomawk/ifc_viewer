@@ -71,7 +71,7 @@ pub(super) fn ouverture(w: &mut Step, p: &Projet, o: &Ouverture, porte: bool, ob
 
 /// Poutre ou poteau : nom du type de poutre, s'il est typé.
 pub(super) fn barre(w: &mut Step, p: &Projet, b: &Barre, objet: usize) {
-    let t = b.pose.type_poutre.as_deref().and_then(|t| p.type_poutre(t));
+    let t = p.type_barre(b);
     let jeu = match b.genre {
         GenreBarre::Poteau => "Pset_ColumnCommon",
         GenreBarre::Poutre => "Pset_BeamCommon",

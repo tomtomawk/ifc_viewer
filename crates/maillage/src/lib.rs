@@ -368,8 +368,8 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.parent.insert(id, parent);
         model.children.entry(parent).or_default().push(id);
         let tris = modele::volumes::solides::barre(projet, b)?.into_iter().map(|t| t.map(|v| v * 0.001)).collect();
-        // poutre typée : matériau de son type, sinon celui de la catégorie (poteau, poutre)
-        let propre = b.pose.type_poutre.as_ref().and_then(|t| projet.type_poutre(t)).and_then(|t| t.materiau.as_deref());
+        // matériau du type, sinon celui de la catégorie (poteau, poutre)
+        let propre = projet.type_barre(b).and_then(|t| t.materiau.as_deref());
         let materiau = projet.materiau_resolu(propre, Cat::de_barre(b.genre));
         let mut t = Tables { couches_coupe: &mut couches_coupe, materiaux_parts: &mut materiaux_parts, apparences: &mut table_apparences, motifs: &mut table_motifs };
         geoms.push(objet_materiau(projet, id, tris, materiau.as_ref(), [0.65, 0.68, 0.72, 1.0], projet.trait_coupe(None, Cat::de_barre(b.genre)), &mut t));

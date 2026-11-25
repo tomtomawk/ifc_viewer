@@ -148,6 +148,7 @@ pub fn copier_selection(source: &Projet, ids: &[String]) -> Result<Projet, Strin
         types_dalles,
         types_ouvertures,
         types_poutres,
+        types_poteaux,
         types_composants,
         types_garde_corps,
         types_modenatures,

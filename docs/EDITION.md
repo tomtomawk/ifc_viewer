@@ -12,8 +12,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   propriétés s'il y en a plusieurs), pilotée par les plans, cotes et paramètres de
   la famille. Charger dans le projet, ou enregistrer un fichier `.bef`. Le
   gabarit embarqué fournit un rectangle, une cornière, un profilé T et un profilé I.
-  Ces familles de profils sont éditables indépendamment ; un type de poutre peut
-  en prendre une comme section (`TypePoutre::profil`).
+  Ces familles de profils sont éditables indépendamment ; un type de poteau ou de
+  poutre peut en prendre une comme section (`TypeSection::profil`).
 
 - **Début → Phases et variantes**, ou le lien sous les champs de contexte dans
   Propriétés, ouvre le gestionnaire des phases, sous-projets et variantes. Il permet
@@ -123,12 +123,17 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   Les axes sont visibles dans les plans natifs. Les dimensions du modèle sont saisies en
   centimètres par défaut ; Début → Options permet de choisir mm, cm ou m. Le JSON,
   les commandes CLI/MCP et les tailles sur papier restent en millimètres.
-- **Modéliser → Poteau / Poutre** crée des poteaux rectangulaires et des poutres
-  (section rectangulaire ou profil de leur type). La palette du poteau reprend le
+- **Modéliser → Poteau / Poutre** crée des poteaux et des poutres toujours typés :
+  le volet commence par le sélecteur de type commun (types de poteaux et types de
+  poutres, deux listes ; détail : profil et dimensions ; Dupliquer au survol,
+  « + Nouveau type »), suivi des champs du type choisi (nom, profil ou rectangulaire,
+  largeur, profondeur ou hauteur, matériau), qui changent tous les éléments du type.
+  Le gabarit fournit des types béton, acier (profilé I, cornière) et bois ; un projet
+  sans type de la sorte en reçoit un par défaut. La palette du poteau reprend le
   croquis Haut/Bas du mur. Réglez le niveau et le décalage de base, puis un sommet
   libre (hauteur) ou un niveau haut avec décalage. Le niveau haut est résolu en
-  cote au placement du poteau. Les dimensions et la rotation se règlent sous le
-  croquis. Placez le poteau d’un clic dans la vue ou utilisez « Placement par
+  cote au placement du poteau. La rotation se règle sous le croquis ; la
+  section est celle du type. Placez le poteau d’un clic dans la vue ou utilisez « Placement par
   coordonnées ». La palette de la poutre montre sa section, l’arase et la
   justification par rapport au tracé. Cliquez le départ puis l’arrivée de la
   poutre avec les accrochages. Maj contraint le tracé aux axes du plan ; Échap,
@@ -860,8 +865,8 @@ utilise ces identifiants, **pas** les identifiants numériques de la scène.
 
 ```text
 editer {"action":"niveau","nom":"Étage","altitude":3000}
-editer {"action":"barre","barre":{"id":"","nom":"Poteau","genre":"poteau","niveau":"rdc","debut":[0,0,0],"fin":[0,0,2800],"largeur":300,"hauteur":300,"rotation":0}}
-editer {"action":"barre","barre":{"id":"","nom":"Poutre","genre":"poutre","niveau":"rdc","debut":[0,0,2600],"fin":[3000,0,2600],"largeur":200,"hauteur":400}}
+editer {"action":"barre","barre":{"id":"","nom":"Poteau","genre":"poteau","niveau":"rdc","debut":[0,0,0],"fin":[0,0,2800],"type_barre":"<id d'un type de poteau>","rotation":0}}
+editer {"action":"barre","barre":{"id":"","nom":"Poutre","genre":"poutre","niveau":"rdc","debut":[0,0,2600],"fin":[3000,0,2600],"type_barre":"<id d'un type de poutre>"}}
 editer {"action":"deplacer","ids":["rdc-m0"],"delta":[1000,0,0]}
 editer {"action":"copier","ids":["rdc-m0"],"delta":[0,3000,0]}
 editer {"action":"tourner","ids":["rdc-m0"],"centre":[0,0],"angle":90}

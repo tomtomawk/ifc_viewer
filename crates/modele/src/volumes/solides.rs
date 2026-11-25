@@ -12,26 +12,19 @@ pub fn barre(p: &Projet, b: &Barre) -> Result<Vec<Tri>, String> {
         .niveau(&b.niveau)
         .ok_or("Niveau de la structure absent.")?
         .altitude;
-    if b.debut
-        .iter()
-        .chain(&b.fin)
-        .chain([&b.largeur, &b.hauteur, &b.rotation])
-        .any(|v| !v.is_finite())
-        || b.largeur <= 0.0
-        || b.hauteur <= 0.0
-    {
+    if b.debut.iter().chain(&b.fin).chain([&b.rotation]).any(|v| !v.is_finite()) {
         return Err("Dimensions de structure non valides.".into());
     }
-    // poteau : vertical, section largeur × hauteur tournée de `rotation`
+    // poteau : vertical, section du type tournée de `rotation`
     let a = DVec2::new(b.debut[0], b.debut[1]);
     let f = DVec2::new(b.fin[0], b.fin[1]);
     if a.distance(f) > 1e-6 || b.fin[2] <= b.debut[2] {
         return Err("Le poteau doit être vertical et avoir une hauteur positive.".into());
     }
     let r = b.rotation.to_radians();
-    let u = DVec2::new(r.cos(), r.sin()) * (b.largeur / 2.0);
-    let v = DVec2::new(-r.sin(), r.cos()) * (b.hauteur / 2.0);
-    let contour = vec![(a - u - v).to_array(), (a + u - v).to_array(), (a + u + v).to_array(), (a - u + v).to_array()];
+    let (u, v) = (DVec2::new(r.cos(), r.sin()), DVec2::new(-r.sin(), r.cos()));
+    let (_, _, section) = crate::elements::poutre::section(p, b)?;
+    let contour: Vec<[f64; 2]> = section.iter().map(|q| (a + u * q[0] + v * q[1]).to_array()).collect();
     Ok(prisme(&contour, z + b.debut[2], z + b.fin[2]))
 }
 

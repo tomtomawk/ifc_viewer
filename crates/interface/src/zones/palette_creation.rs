@@ -124,9 +124,9 @@ selecteurs_generiques! {
     selecteur_symbole => "Symbole",
     selecteur_legende => "Légende",
 }
-/// Poteau : section rectangulaire (pas encore de types de poteau).
-fn selecteur_poteau(_: &mut Application, ui: &mut egui::Ui) {
-    selecteur::entete_fixe(ui, "Poteau · Section rectangulaire", "Cet objet n'a pas de type à choisir.");
+/// Poteau : types de poteaux (sélecteur commun avec les poutres).
+fn selecteur_poteau(a: &mut Application, ui: &mut egui::Ui) {
+    a.selecteur_section(ui, modele::GenreBarre::Poteau);
 }
 
 fn selecteur_mur(a: &mut Application, ui: &mut egui::Ui) {

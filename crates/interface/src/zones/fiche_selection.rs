@@ -523,7 +523,7 @@ fn parametres_poteau(a: &mut Application, ui: &mut egui::Ui, id: &str) {
         ui.scope(|ui| {
             let Some(b) = a.bim.barre_editee.as_mut() else { return };
             let avant = serde_json::to_string(&*b).ok();
-            barre_ui(ui, b, &p.niveaux);
+            barre_ui(ui, b, p);
             if serde_json::to_string(&*b).ok() != avant {
                 commande = Some(Commande::Barre { barre: b.clone() });
             }

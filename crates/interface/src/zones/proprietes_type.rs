@@ -11,7 +11,8 @@ enum CleType {
     Mur(String),
     Dalle(String),
     Ouverture(String),
-    Poutre(String),
+    /// Type de poteau ou de poutre.
+    Section(modele::GenreBarre, String),
     Composant(String),
     GardeCorps(String),
     Terrain(String),
@@ -40,7 +41,7 @@ fn type_de(p: &Projet, id: &str) -> Option<CleType> {
         return o.type_ouverture.clone().map(CleType::Ouverture);
     }
     if let Some(b) = p.barres.iter().find(|b| b.id == id) {
-        return b.pose.type_poutre.clone().map(CleType::Poutre);
+        return Some(CleType::Section(b.genre, b.type_barre.clone()));
     }
     if let Some(c) = p.composants.iter().find(|c| c.id == id) {
         return Some(CleType::Composant(c.type_composant.clone()));
@@ -72,7 +73,7 @@ fn nom_et_occurrences(p: &Projet, cle: &CleType) -> Option<(String, usize)> {
         }
         CleType::Dalle(id) => (p.type_dalle(id)?.nom.clone(), p.dalles.iter().filter(|d| &d.type_dalle == id).count()),
         CleType::Ouverture(id) => (p.types_ouvertures.iter().find(|t| &t.id == id)?.nom.clone(), p.ouvertures.iter().filter(|o| o.type_ouverture.as_ref() == Some(id)).count()),
-        CleType::Poutre(id) => (p.types_poutres.iter().find(|t| &t.id == id)?.nom.clone(), p.barres.iter().filter(|b| b.pose.type_poutre.as_ref() == Some(id)).count()),
+        CleType::Section(g, id) => (p.types_section(*g).iter().find(|t| &t.id == id)?.nom.clone(), p.barres.iter().filter(|b| b.genre == *g && &b.type_barre == id).count()),
         CleType::Composant(id) => (p.types_composants.iter().find(|t| &t.id == id)?.nom.clone(), p.composants.iter().filter(|c| &c.type_composant == id).count()),
         CleType::GardeCorps(id) => (p.types_garde_corps.iter().find(|t| &t.id == id)?.nom.clone(), p.garde_corps.iter().filter(|g| g.type_garde_corps.as_ref() == Some(id)).count()),
         CleType::Terrain(id) => (p.types_terrains_disponibles().into_iter().find(|t| &t.id == id)?.nom, p.terrains.iter().filter(|t| p.type_terrain(t).id == *id).count()),
@@ -137,7 +138,7 @@ fn couches(ui: &mut egui::Ui, p: &Projet, t: &mut modele::TypeCompose) {
 pub(crate) enum TypeEdite {
     Compose(modele::TypeCompose),
     Ouverture(Box<modele::TypeOuverture>),
-    Poutre(modele::elements::poutre::TypePoutre),
+    Section(modele::elements::poutre::TypeSection),
     Composant(Box<modele::TypeComposant>),
     GardeCorps(Box<modele::elements::garde_corps::TypeGardeCorps>),
     Terrain(modele::elements::site::TypeTerrain),
@@ -156,7 +157,7 @@ impl TypeEdite {
         match self {
             Self::Compose(t) => serde_json::to_value(t),
             Self::Ouverture(t) => serde_json::to_value(t),
-            Self::Poutre(t) => serde_json::to_value(t),
+            Self::Section(t) => serde_json::to_value(t),
             Self::Composant(t) => serde_json::to_value(t),
             Self::GardeCorps(t) => serde_json::to_value(t),
             Self::Terrain(t) => serde_json::to_value(t),
@@ -172,7 +173,7 @@ fn extraire(p: &Projet, cle: &CleType) -> Option<TypeEdite> {
         CleType::Mur(id) => TypeEdite::Compose(p.type_mur(id)?.clone()),
         CleType::Dalle(id) => TypeEdite::Compose(p.type_dalle(id)?.clone()),
         CleType::Ouverture(id) => TypeEdite::Ouverture(Box::new(p.types_ouvertures.iter().find(|t| &t.id == id)?.clone())),
-        CleType::Poutre(id) => TypeEdite::Poutre(p.types_poutres.iter().find(|t| &t.id == id)?.clone()),
+        CleType::Section(g, id) => TypeEdite::Section(p.types_section(*g).iter().find(|t| &t.id == id)?.clone()),
         CleType::Composant(id) => TypeEdite::Composant(Box::new(p.types_composants.iter().find(|t| &t.id == id)?.clone())),
         CleType::GardeCorps(id) => TypeEdite::GardeCorps(Box::new(p.types_garde_corps.iter().find(|t| &t.id == id)?.clone())),
         CleType::Terrain(id) => TypeEdite::Terrain(p.types_terrains_disponibles().into_iter().find(|t| &t.id == id)?),
@@ -188,7 +189,10 @@ fn ecrire(p: &Projet, cle: &CleType, t: TypeEdite) -> Projet {
         (CleType::Mur(id), TypeEdite::Compose(t)) => if let Some(x) = q.types_murs.iter_mut().find(|x| &x.id == id) { *x = t },
         (CleType::Dalle(id), TypeEdite::Compose(t)) => if let Some(x) = q.types_dalles.iter_mut().find(|x| &x.id == id) { *x = t },
         (CleType::Ouverture(id), TypeEdite::Ouverture(t)) => if let Some(x) = q.types_ouvertures.iter_mut().find(|x| &x.id == id) { *x = *t },
-        (CleType::Poutre(id), TypeEdite::Poutre(t)) => if let Some(x) = q.types_poutres.iter_mut().find(|x| &x.id == id) { *x = t },
+        (CleType::Section(g, id), TypeEdite::Section(t)) => {
+            let liste = match g { modele::GenreBarre::Poteau => &mut q.types_poteaux, modele::GenreBarre::Poutre => &mut q.types_poutres };
+            if let Some(x) = liste.iter_mut().find(|x| &x.id == id) { *x = t }
+        }
         (CleType::Composant(id), TypeEdite::Composant(t)) => if let Some(x) = q.types_composants.iter_mut().find(|x| &x.id == id) { *x = *t },
         (CleType::GardeCorps(id), TypeEdite::GardeCorps(t)) => if let Some(x) = q.types_garde_corps.iter_mut().find(|x| &x.id == id) { *x = *t },
         (CleType::Terrain(id), TypeEdite::Terrain(t)) => {
@@ -231,8 +235,15 @@ fn champs(ui: &mut egui::Ui, p: &Projet, t: &mut TypeEdite) {
                 }
             });
         }
-        TypeEdite::Poutre(t) => {
+        TypeEdite::Section(t) => {
             egui::Grid::new("type_poutre").num_columns(2).striped(true).show(ui, |ui| {
+                ui.label("Profil");
+                let nom = t.profil.as_ref().and_then(|id| p.profils.iter().find(|x| &x.id == id)).map_or("Rectangulaire", |x| x.nom.as_str());
+                egui::ComboBox::from_id_salt("type_section_profil").selected_text(nom).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut t.profil, None, "Rectangulaire");
+                    for x in &p.profils { ui.selectable_value(&mut t.profil, Some(x.id.clone()), &x.nom); }
+                });
+                ui.end_row();
                 longueur(ui, "Largeur", &mut t.largeur);
                 longueur(ui, "Hauteur", &mut t.hauteur);
                 materiau(ui, p, "Matériau", &mut t.materiau, "type_poutre_materiau");
@@ -452,7 +463,7 @@ mod tests {
             let t = match extraire(p, &cle).unwrap() {
                 TypeEdite::Compose(mut t) => { t.couches[0].epaisseur += 100.0; TypeEdite::Compose(t) }
                 TypeEdite::Ouverture(mut t) => { t.largeur += 200.0; t.hauteur += 100.0; TypeEdite::Ouverture(t) }
-                TypeEdite::Poutre(mut t) => { t.hauteur += 200.0; TypeEdite::Poutre(t) }
+                TypeEdite::Section(mut t) => { t.hauteur += 200.0; TypeEdite::Section(t) }
                 TypeEdite::Composant(mut t) => { t.largeur *= 1.5; t.hauteur *= 1.5; TypeEdite::Composant(t) }
                 TypeEdite::GardeCorps(mut t) => { t.hauteur += 300.0; TypeEdite::GardeCorps(t) }
                 TypeEdite::Terrain(mut t) => { t.epaisseur += 1000.0; TypeEdite::Terrain(t) }
@@ -492,9 +503,9 @@ mod tests {
         (tg.id, tg.nom) = ("tgc".into(), "Garde-corps".into());
         p.types_garde_corps.push(tg);
         for g in p.garde_corps.iter_mut() { g.type_garde_corps = Some("tgc".into()); }
-        p.types_poutres.push(modele::elements::poutre::TypePoutre { id: "tp".into(), nom: "Poutre".into(), largeur: 200.0, hauteur: 300.0, profil: None, materiau: None });
+        p.types_poutres.push(modele::elements::poutre::TypeSection { id: "tp".into(), nom: "Poutre".into(), largeur: 200.0, hauteur: 300.0, profil: None, materiau: None });
         let b = p.barres.first_mut().unwrap();
-        (b.genre, b.pose.type_poutre) = (modele::GenreBarre::Poutre, Some("tp".into()));
+        (b.genre, b.type_barre) = (modele::GenreBarre::Poutre, "tp".into());
         b.debut[2] = 2500.0;
         b.fin = [b.debut[0] + 3000.0, b.debut[1], 2500.0];
         // profilé en relief sur le premier mur composé

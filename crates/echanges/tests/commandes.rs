@@ -15,6 +15,8 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
     // sans le poteau converti de l'échantillon : les barres créées ici sont les seules
     let mut p = projet();
     p.barres.clear();
+    p.types_poteaux.push(modele::elements::poutre::TypeSection { id: "poteau-300x400".into(), nom: "Poteau 300 × 400".into(), profil: None, largeur: 300.0, hauteur: 400.0, materiau: None });
+    p.types_poutres.push(modele::elements::poutre::TypeSection { id: "poutre-200x400".into(), nom: "Poutre 200 × 400".into(), profil: None, largeur: 200.0, hauteur: 400.0, materiau: None });
     let n = p.niveaux[0].id.clone();
     let poteau = Barre {
         id: String::new(),
@@ -23,8 +25,7 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
         niveau: n.clone(),
         debut: [100.0, 200.0, 0.0],
         fin: [100.0, 200.0, 3000.0],
-        largeur: 300.0,
-        hauteur: 400.0,
+        type_barre: "poteau-300x400".into(),
         rotation: 0.0,
         pose: Default::default(),
         origine: None,
@@ -62,8 +63,7 @@ fn structures_creation_copie_rotation_suppression_et_validation() {
         niveau: n,
         debut: [0.0, 0.0, 2500.0],
         fin: [3000.0, 0.0, 2500.0],
-        largeur: 200.0,
-        hauteur: 400.0,
+        type_barre: "poutre-200x400".into(),
         rotation: 0.0,
         pose: Default::default(),
         origine: None,

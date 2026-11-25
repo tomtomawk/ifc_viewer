@@ -7,7 +7,7 @@ pub(super) fn libelle(champ: &str) -> String {
     match champ {
         "niveau" => "Niveau de base".into(),
         "niveau_haut" => "Contrainte haute".into(),
-        "type_poutre" => "Type de poutre".into(),
+        "type_barre" => "Type".into(),
         "type_remblai" => "Type de remblai".into(),
         "decalage" => "Décalage".into(),
         "decalage_bas" => "Décalage de la base".into(),
@@ -78,9 +78,11 @@ pub(super) fn options(p: &modele::Projet, champ: &str, objets: &[Value]) -> Choi
             use modele::famille::modelee::NiveauDetail;
             options_enum(NiveauDetail::TOUS, NiveauDetail::libelle)
         }
-        "type_poutre" => std::iter::once((Value::Null, "Rectangulaire".into()))
-            .chain(p.types_poutres.iter().map(|t| (json!(t.id), t.nom.clone())))
-            .collect(),
+        "type_barre" => {
+            let poteaux = objets.iter().any(|v| v["genre"] == "poteau");
+            let types = if poteaux { &p.types_poteaux } else { &p.types_poutres };
+            types.iter().map(|t| (json!(t.id), t.nom.clone())).collect()
+        }
         "type_remblai" => std::iter::once((Value::Null, "Par défaut".into()))
             .chain(
                 p.types_terrains_disponibles()

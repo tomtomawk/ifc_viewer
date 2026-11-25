@@ -1,27 +1,25 @@
 //! Outil Poutre : tracé par le dessin commun (polyligne enchaînée ou rectangle, bandeau
 //! de dessin commun), comme les murs ; niveau de référence et décalage ; justification
-//! horizontale (Ctrl pendant le tracé) et arase ; type choisi dans Propriétés ; aperçu
+//! horizontale (Ctrl pendant le tracé) et arase ; type choisi dans la palette ; aperçu
 //! de l'emprise réelle, raccords compris.
 use crate::*;
 use glam::DVec2;
-use modele::elements::poutre::{axe_reel, Arase, Justification, PosePoutre, TypePoutre};
+use modele::elements::poutre::{axe_reel, Arase, Justification, PosePoutre};
 
 /// Réglages des prochaines poutres.
 pub(crate) struct ReglagesPoutre {
-    pub type_poutre: Option<String>,
+    /// Type des prochaines poutres (`types_poutres`).
+    pub type_barre: String,
     pub justification: Justification,
     pub arase: Arase,
     /// Niveau de référence (None : niveau de la vue) et cote de l'arase au-dessus (mm).
     pub niveau: Option<String>,
     pub decalage: f64,
-    /// Section sans type (mm).
-    pub largeur: f64,
-    pub hauteur: f64,
 }
 
 impl Default for ReglagesPoutre {
     fn default() -> Self {
-        ReglagesPoutre { type_poutre: None, justification: Justification::Axe, arase: Arase::Superieure, niveau: None, decalage: 2800.0, largeur: 200.0, hauteur: 400.0 }
+        ReglagesPoutre { type_barre: String::new(), justification: Justification::Axe, arase: Arase::Superieure, niveau: None, decalage: 2800.0 }
     }
 }
 
@@ -34,10 +32,9 @@ impl ReglagesPoutre {
             niveau,
             debut: [a.x, a.y, self.decalage],
             fin: [b.x, b.y, self.decalage],
-            largeur: self.largeur,
-            hauteur: self.hauteur,
+            type_barre: self.type_barre.clone(),
             rotation: 0.0,
-            pose: PosePoutre { type_poutre: self.type_poutre.clone(), justification: self.justification, arase: self.arase },
+            pose: PosePoutre { justification: self.justification, arase: self.arase },
             origine: None,
         }
     }
@@ -131,7 +128,7 @@ pub(crate) fn emprise(points: &[DVec2], largeur: f64, justification: Justificati
 impl Application {
     fn largeur_poutre(&self) -> f64 {
         let r = &self.bim.poutre;
-        r.type_poutre.as_ref().and_then(|t| self.natif.as_ref()?.0.type_poutre(t)).map_or(r.largeur, |t| t.largeur)
+        self.natif.as_ref().and_then(|(p, _)| p.types_poutres.iter().find(|t| t.id == r.type_barre)).map_or(200.0, |t| t.largeur)
     }
 
     /// Crée une poutre par segment des formes tracées (une seule étape d'annulation).
@@ -142,6 +139,10 @@ impl Application {
             self.error = Some("Choisissez un niveau pour la poutre.".into());
             return;
         };
+        if !p.types_poutres.iter().any(|t| t.id == r.type_barre) {
+            self.error = Some("Choisissez un type de poutre dans la palette.".into());
+            return;
+        }
         let mut q = p.clone();
         let contexte = modele::ContexteElement {
             phase: self.ruban_edition.phase_creation.clone(),
@@ -212,87 +213,9 @@ impl Application {
         if inverser { *j = match *j { Justification::Gauche => Justification::Droite, Justification::Droite => Justification::Gauche, x => x }; }
     }
 
-    /// Propriétés de l'outil Poutre : type (profil, dimensions, matériau), niveau de
-    /// référence, décalage de l'arase.
-    /// Emplacement « sélecteur » de la poutre : type (section libre ou type du projet) et son édition.
+    /// Emplacement « sélecteur » de la poutre : types de poutres (sélecteur commun).
     pub(crate) fn selecteur_poutre(&mut self, ui: &mut egui::Ui) {
-        let Some((p, _)) = &self.natif else { return };
-        let (types, profils, materiaux, niveaux) = (p.types_poutres.clone(), p.profils.clone(), p.materiaux.iter().map(|m| m.nom.clone()).collect::<Vec<_>>(), p.niveaux.clone());
-        let r = &mut self.bim.poutre;
-        if r.type_poutre.as_ref().is_some_and(|id| !types.iter().any(|t| &t.id == id)) {
-            r.type_poutre = None;
-        }
-        if r.niveau.as_ref().is_some_and(|id| !niveaux.iter().any(|n| &n.id == id)) {
-            r.niveau = None;
-        }
-        let mut nouveau_type = None;
-        let nom = r.type_poutre.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).map_or_else(|| format!("Section {} × {} mm", r.largeur, r.hauteur), |t| t.nom.clone());
-        {
-            use crate::zones::ruban::selecteur;
-            let u = modele::unite::unite();
-            let details: Vec<String> = types.iter().map(|t| format!("{} × {}", u.afficher(t.largeur), u.afficher(t.hauteur))).collect();
-            let actions: &[(selecteur::ActionType, &str)] = &[(selecteur::ActionType::Dupliquer, "Dupliquer : nouveau type d'après celui-ci")];
-            let mut lignes = vec![selecteur::Ligne { nom: "Section rectangulaire libre", courant: r.type_poutre.is_none(), etiquette: None, sous_titre: None, detail: Some(format!("{} × {}", u.afficher(r.largeur), u.afficher(r.hauteur))), actions }];
-            lignes.extend(types.iter().zip(&details).map(|(t, d)| selecteur::Ligne { nom: &t.nom, courant: r.type_poutre.as_ref() == Some(&t.id), etiquette: None, sous_titre: None, detail: Some(d.clone()), actions }));
-            // sections : ligne 0 = section libre, puis les types
-            let sections: Vec<(f64, f64)> = std::iter::once((r.largeur, r.hauteur)).chain(types.iter().map(|t| (t.largeur, t.hauteur))).collect();
-            let vignette = |pe: &egui::Painter, z: egui::Rect, k: usize, c: Color32| crate::zones::ruban::vignettes::poutre(pe, z, sections[k].0, sections[k].1, c);
-            let titre = format!("Poutre · {nom}");
-            let choix = selecteur::simple(ui, &titre, None, &format!("{titre}\nType de poutre : profil, dimensions, matériau."), &lignes, None, Some(&vignette));
-            if let Some(k) = choix.ligne {
-                r.type_poutre = k.checked_sub(1).map(|i| types[i].id.clone());
-            }
-            // Dupliquer : nouveau type au nom libre, d'après la section libre ou un type
-            if let Some((k, _)) = choix.action {
-                let base = k.checked_sub(1).map(|i| types[i].clone()).unwrap_or(TypePoutre { id: String::new(), nom: format!("Poutre {} × {}", r.largeur, r.hauteur), profil: None, largeur: r.largeur, hauteur: r.hauteur, materiau: None });
-                let nom = (2..).map(|n| format!("{} {n}", base.nom)).find(|n| types.iter().all(|t| &t.nom != n)).unwrap_or_default();
-                nouveau_type = Some(TypePoutre { id: format!("type-poutre-{}", noyau::uuid::uuid()), nom, ..base });
-            }
-        }
-        let type_courant = r.type_poutre.as_ref().and_then(|id| types.iter().find(|t| &t.id == id)).cloned();
-        match type_courant {
-            None => {
-                ui.horizontal(|ui| {
-                    ui.label("Section");
-                    ui.add(egui::DragValue::new(&mut r.largeur).range(10.0..=5000.0).dimensions());
-                    ui.label("×");
-                    ui.add(egui::DragValue::new(&mut r.hauteur).range(10.0..=5000.0).dimensions());
-                });
-                if ui.button("Créer un type d'après cette section…").clicked() {
-                    nouveau_type = Some(TypePoutre { id: format!("type-poutre-{}", noyau::uuid::uuid()), nom: format!("Poutre {} × {}", r.largeur, r.hauteur), profil: None, largeur: r.largeur, hauteur: r.hauteur, materiau: None });
-                }
-            }
-            Some(mut t) => {
-                let avant = t.clone();
-                ui.horizontal(|ui| { ui.label("Nom"); ui.text_edit_singleline(&mut t.nom); });
-                egui::ComboBox::from_label("Profil").selected_text(t.profil.as_ref().and_then(|id| profils.iter().find(|x| &x.id == id)).map_or("Rectangulaire", |x| x.nom.as_str())).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut t.profil, None, "Rectangulaire");
-                    for x in &profils { ui.selectable_value(&mut t.profil, Some(x.id.clone()), &x.nom); }
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Largeur");
-                    ui.add(egui::DragValue::new(&mut t.largeur).range(10.0..=5000.0).dimensions());
-                    ui.label("Hauteur");
-                    ui.add(egui::DragValue::new(&mut t.hauteur).range(10.0..=5000.0).dimensions());
-                });
-                egui::ComboBox::from_label("Matériau").selected_text(t.materiau.clone().unwrap_or_else(|| "Par défaut".into())).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut t.materiau, None, "Par défaut");
-                    for m in &materiaux { ui.selectable_value(&mut t.materiau, Some(m.clone()), m); }
-                });
-                if t != avant { nouveau_type = Some(t); }
-            }
-        }
-        if let Some(t) = nouveau_type && let Some((projet, _)) = self.natif.as_ref() {
-            let mut q = projet.clone();
-            match q.types_poutres.iter_mut().find(|x| x.id == t.id) {
-                Some(x) => *x = t.clone(),
-                None => q.types_poutres.push(t.clone()),
-            }
-            match self.appliquer_projet(q) {
-                Ok(()) => self.bim.poutre.type_poutre = Some(t.id),
-                Err(e) => self.error = Some(e),
-            }
-        }
+        self.selecteur_section(ui, modele::GenreBarre::Poutre);
     }
 
     /// Emplacement « schéma » de la poutre : coupe de la poutre avec ses cotes.
