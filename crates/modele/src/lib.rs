@@ -127,6 +127,11 @@ pub struct Projet {
     pub garde_corps: Vec<GardeCorps>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub types_garde_corps: Vec<TypeGardeCorps>,
+    /// Profilés de mur (relief ou creux) et leurs types (`elements::modenature`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modenatures: Vec<elements::modenature::Modenature>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types_modenatures: Vec<elements::modenature::TypeModenature>,
     /// Contexte des éléments dont le format ne porte pas ces propriétés directement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub contextes: BTreeMap<String, ContexteElement>,

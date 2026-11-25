@@ -14,6 +14,7 @@ mod aretes_incrementales;
 mod placement_surface;
 pub mod liens;
 mod materiaux;
+mod modenatures;
 mod styles;
 pub mod textures_gabarit;
 mod navigateur;
@@ -89,6 +90,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
     for g in &projet.garde_corps {
         entite(id_natif("garde_corps", &g.id), "IFCRAILING", &g.id, &g.nom, 9)?;
     }
+    for m in &projet.modenatures { entite(id_natif("modenature", &m.id), "IFCBUILDINGELEMENTPROXY", &m.id, &m.nom, 9)?; }
     for o in &projet.importes {
         // topographie de Revit : élément géographique, comme un terrain natif (visible dans
         // les plans de tous les niveaux dont la plage de vue la touche)
@@ -447,6 +449,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         materiaux_parts.push(vec![None; parts.len()]);
         geoms.push(ProductGeom { visibilite: Vec::new(), id, parts, lignes: Vec::new(), rendu: Vec::new(), motifs: Vec::new() });
     }
+    modenatures::ajouter(projet, &mut model, &mut geoms, &mut Tables { couches_coupe: &mut couches_coupe, materiaux_parts: &mut materiaux_parts, apparences: &mut table_apparences, motifs: &mut table_motifs })?;
     // terrains : solide de l'épaisseur du type, sous la surface (cotes NGF ramenées à
     // l'origine du projet) ; couleur et poché du matériau du type
     for t in &projet.terrains {

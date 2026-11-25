@@ -16,6 +16,7 @@ Rôle : zones d'écran autour de la vue.
 | `navigateur.rs` | navigateur de projet, matériaux, arborescence IFC |
 | `proprietes.rs`, `communes.rs` | propriétés individuelles, terrains et dessins 2D |
 | `proprietes_type.rs` | section « Propriétés du type » (`proprietes_type`) : grisée, déverrouillée par double-clic (`type_deverrouille`), brouillon pendant la saisie (`type_brouillon`), écriture puis propagation (`repercuter` : `ActualiserType` par assemblage, dimensions des ouvertures) |
+| `proprietes_modenature.rs` | propriétés d'un profilé de mur sélectionné (face, hauteur, début, fin) |
 | `proprietes_multiples.rs`, `proprietes_multiples/` | champs communs et par catégorie, comparaison « Varié », application explicite sur les occurrences sélectionnées |
 | `donnees_importees.rs` | propriétés, matériau et couleur lus d'un élément importé (lecture seule, appelé depuis `proprietes.rs`) |
 | `menu_vue.rs` | clic droit dans la vue, poignée de milieu de mur |

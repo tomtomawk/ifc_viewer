@@ -32,6 +32,7 @@ impl Application {
         let mode_ouverture = self.onglet_ruban == OngletRuban::Modeliser
             && self.natif.is_some() && self.loading.is_none()
             && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Ouverture);
+        let mode_modenature = self.onglet_ruban == OngletRuban::Modeliser && self.natif.is_some() && self.loading.is_none() && self.ruban_edition.outil() == Some(crate::zones::ruban::Outil::Modenature);
         let mode_mur = self.onglet_ruban == OngletRuban::Modeliser && self.ruban_edition.mur_actif() && self.natif.is_some() && self.loading.is_none();
         // dalle (ou sol) : contour cliqué sur le plan de son dessus
         let dalle = if matches!(self.onglet_ruban, OngletRuban::Modeliser | OngletRuban::Modifier) && self.natif.is_some() && self.loading.is_none() { self.ruban_edition.dalle_active() } else { None };
@@ -224,6 +225,8 @@ impl Application {
             } else if self.interaction_motif_surface(ui, rect, &resp) {
             } else if mode_ouverture {
                 ouverture_visee = self.interaction_ouverture(&resp, pick);
+            } else if mode_modenature {
+                self.interaction_modenature(&resp, pick);
             } else if mode_attache {
                 // clic droit : retire le dernier mur choisi, sinon quitte l'outil (comme Échap)
                 if resp.clicked_by(PointerButton::Secondary) && !self.reculer_attache_toiture() { self.ruban_edition.annuler(); }

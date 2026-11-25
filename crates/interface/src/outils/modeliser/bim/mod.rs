@@ -25,6 +25,8 @@ pub(crate) struct EtatBim {
     decalage_haut_poteau: f64,
     /// Réglages des prochaines poutres (outil Poutre, n° 6 à 10).
     pub(crate) poutre: crate::outils::modeliser::poutres::ReglagesPoutre,
+    /// Réglages des prochains profilés de mur.
+    pub(crate) modenature: crate::outils::modeliser::modenatures::ReglagesModenature,
     pub(crate) depart_structure: Option<[f64; 2]>,
     /// Départ de la ligne de quadrillage en cours (outil Quadrillage).
     pub(crate) depart_quadrillage: Option<[f64; 2]>,
@@ -61,6 +63,7 @@ impl Default for EtatBim {
             delta: [1000.0, 0.0, 0.0],
             abscisse: 1500.0,
             poutre: Default::default(),
+            modenature: Default::default(),
             barre: modele::Barre {
                 id: String::new(),
                 nom: "Structure".into(),

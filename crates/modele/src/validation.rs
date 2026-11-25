@@ -295,6 +295,7 @@ impl Projet {
             }
         }
         crate::murs::profil::verifier(self)?;
+        crate::elements::modenature::verifier(self)?;
         for g in &self.quadrillages {
             if g.nom.trim().is_empty()
                 || g.debut == g.fin

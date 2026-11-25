@@ -41,6 +41,7 @@ pub fn copier_selection(source: &Projet, ids: &[String]) -> Result<Projet, Strin
         barres,
         escaliers,
         garde_corps,
+        modenatures,
         pieces,
         composants,
         importes,
@@ -149,6 +150,7 @@ pub fn copier_selection(source: &Projet, ids: &[String]) -> Result<Projet, Strin
         types_poutres,
         types_composants,
         types_garde_corps,
+        types_modenatures,
         familles_etiquettes,
         types_traits
     );

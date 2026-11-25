@@ -66,6 +66,7 @@ pub(super) fn bouton_outil(
     });
     resp.on_hover_text(match outil {
         Outil::ModifierContour => "Modifier l'élément sélectionné : tracé d'un contour, d'une polyligne, d'un terrain, d'un garde-corps ou d'une limite de propriété ; famille d'une ouverture, d'un composant ou d'une étiquette (MT)",
+        Outil::Modenature => "Profilé de mur : bandeau, corniche, soubassement (relief) ou engravure (creux) le long d'un mur ; cliquer un mur",
         Outil::CopierNiveau => "Copier la sélection sur un niveau en conservant la position en plan",
         Outil::Jonctions => "Priorité des jonctions entre murs",
         Outil::AttacherToiture => "Attacher les murs à une ou plusieurs toitures : sélectionner les murs, cliquer les toitures puis Terminer",
@@ -423,6 +424,16 @@ pub(super) fn icone(p: &egui::Painter, r: egui::Rect, o: Outil, c: Color32) {
             }
             seg((0.07, 0.84), (0.55, 0.84));
             seg((0.55, 0.84), (0.94, 0.18));
+        }
+        Modenature => {
+            // Mur en élévation traversé d'un bandeau en saillie.
+            seg((0.15, 0.10), (0.15, 0.90));
+            seg((0.85, 0.10), (0.85, 0.90));
+            seg((0.15, 0.90), (0.85, 0.90));
+            seg((0.08, 0.40), (0.92, 0.40));
+            seg((0.08, 0.52), (0.92, 0.52));
+            seg((0.08, 0.40), (0.08, 0.52));
+            seg((0.92, 0.40), (0.92, 0.52));
         }
         GardeCorps => {
             // Main courante en perspective, avec retour et platines distinctes.

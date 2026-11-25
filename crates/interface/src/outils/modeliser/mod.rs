@@ -2,6 +2,7 @@
 pub(crate) mod bim;
 pub(crate) mod murs_courbes;
 pub(crate) mod garde_corps;
+pub(crate) mod modenatures;
 pub(crate) mod escalier;
 pub(crate) mod poutres;
 pub(crate) mod liens;

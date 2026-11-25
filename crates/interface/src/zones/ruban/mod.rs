@@ -43,6 +43,8 @@ pub(crate) enum Outil {
     Poutre,
     Escalier,
     GardeCorps,
+    /// Profilé de mur (relief ou creux) posé sur un mur.
+    Modenature,
     Ouverture,
     Composant,
     Piece,
@@ -119,6 +121,7 @@ impl Outil {
         Self::Poutre,
         Self::Escalier,
         Self::GardeCorps,
+        Self::Modenature,
         Self::Ouverture,
         Self::Composant,
         Self::Piece,
@@ -195,6 +198,7 @@ impl Outil {
             Self::Poutre => "Poutre",
             Self::Escalier => "Escalier",
             Self::GardeCorps => "Garde-corps",
+            Self::Modenature => "Profilé",
             Self::Ouverture => "Ouverture",
             Self::Composant => "Composant",
             Self::Piece => "Pièce",
@@ -450,7 +454,7 @@ fn groupes(menu: Menu) -> &'static [(&'static str, &'static [Outil])] {
     const DESSIN_2D: (&str, &[Outil]) = ("Dessin 2D", &[Polyligne, Spline, Cercle]);
     match menu {
         Menu::Modeliser => &[
-            ("Construire", &[Mur, Surfaces]),
+            ("Construire", &[Mur, Surfaces, Modenature]),
             ("Site", &[Terrain, TerrePlein, LimitePropriete, Arbre]),
             ("Structure et accès", &[Poteau, Poutre, Escalier, GardeCorps]),
             ("Placer", &[Ouverture, Composant, Piece]),
@@ -704,7 +708,7 @@ fn champs(o: Outil) -> Vec<Champ> {
             Nombre("Décalage (dessus)", 0.0, " mm"),
             Choix("Talus", &["100 %", "67 %", "50 %", "33 %", "150 %", "Sans talus"]),
         ],
-        Poteau | Poutre => vec![],
+        Poteau | Poutre | Modenature => vec![],
         Escalier => vec![
             Nombre("Largeur", 1000.0, " mm"),
             Nombre("Hauteur de marche", 175.0, " mm"),

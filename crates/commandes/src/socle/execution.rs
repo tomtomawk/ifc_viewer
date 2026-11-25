@@ -73,6 +73,7 @@ impl Execution for Projet {
             .chain(self.composants.iter().map(|x| x.id.clone()))
             .chain(self.escaliers.iter().map(|x| x.id.clone()))
             .chain(self.garde_corps.iter().map(|x| x.id.clone()))
+            .chain(self.modenatures.iter().map(|x| x.id.clone()))
             .chain(self.ouvertures.iter().map(|x| x.id.clone()))
             .chain(self.importes.iter().map(|x| x.id.clone()))
             .chain(self.liens.iter().map(|x| x.id.clone()))
@@ -124,6 +125,12 @@ impl ExecutionInterne for Projet {
                 out.insert(o.id.clone());
             }
         }
+        // profilés : suivent leur mur hôte
+        for m in &self.modenatures {
+            if out.contains(&m.mur) {
+                out.insert(m.id.clone());
+            }
+        }
         // garde-corps hébergés : suivent leur escalier
         for g in &self.garde_corps {
             if g.escalier.as_ref().is_some_and(|e| out.contains(e)) {
@@ -141,6 +148,8 @@ impl ExecutionInterne for Projet {
             | Commande::CoordonneesOrigine { .. }
             | Commande::Escalier { .. }
             | Commande::GardeCorps { .. }
+            | Commande::Modenature { .. }
+            | Commande::TypeModenature { .. }
             | Commande::Piece { .. }
             | Commande::TypeComposant { .. }
             | Commande::Composant { .. }

@@ -5,6 +5,7 @@ use crate::socle::interne::*;
 use fusion::ExecutionFusion;
 
 pub(crate) mod fusion;
+mod modenature;
 
 /// Exécution des commandes de modélisation.
 pub(crate) trait ExecutionModeliser {
@@ -62,6 +63,8 @@ impl ExecutionModeliser for Projet {
                 }
                 Ok(vec![id])
             }
+            Commande::Modenature { modenature } => modenature::executer(self, modenature),
+            Commande::TypeModenature { type_modenature } => modenature::executer_type(self, type_modenature),
             Commande::GardeCorps { mut garde_corps } => {
                 if garde_corps.id.is_empty() {
                     garde_corps.id = identite(self, "garde-corps");

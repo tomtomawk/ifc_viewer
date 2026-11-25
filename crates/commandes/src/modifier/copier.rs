@@ -124,6 +124,12 @@ impl ExecutionCopier for Projet {
                         baies.push(x);
                     }
                 }
+                let modenatures: Vec<_> = self.modenatures.iter().filter(|x| set.contains(&x.id)).map(|x| {
+                    let mut x = x.clone();
+                    x.id = map[&x.id].clone();
+                    x.mur = map.get(&x.mur).cloned().unwrap_or(x.mur);
+                    x
+                }).collect();
                 let mut dalles = Vec::new();
                 for x in &self.dalles {
                     if set.contains(&x.id) {
@@ -229,6 +235,7 @@ impl ExecutionCopier for Projet {
                 self.murs.extend(murs);
                 self.assemblages.extend(assems);
                 self.ouvertures.extend(baies);
+                self.modenatures.extend(modenatures);
                 self.dalles.extend(dalles);
                 let terrains: Vec<_> = self.terrains.iter().filter(|t| set.contains(&t.id)).map(|t| { let mut t = t.clone(); t.id = map[&t.id].clone(); t }).collect();
                 let limites: Vec<_> = self.limites_propriete.iter().filter(|l| set.contains(&l.id)).map(|l| { let mut l = l.clone(); l.id = map[&l.id].clone(); l }).collect();

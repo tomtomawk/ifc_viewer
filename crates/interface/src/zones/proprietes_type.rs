@@ -15,6 +15,7 @@ enum CleType {
     Composant(String),
     GardeCorps(String),
     Terrain(String),
+    Modenature(String),
     /// Type de coupe ou d'élévation (rang dans `types_vues`).
     Vue(usize),
 }
@@ -47,6 +48,9 @@ fn type_de(p: &Projet, id: &str) -> Option<CleType> {
     if let Some(g) = p.garde_corps.iter().find(|g| g.id == id) {
         return g.type_garde_corps.clone().map(CleType::GardeCorps);
     }
+    if let Some(m) = p.modenatures.iter().find(|m| m.id == id) {
+        return Some(CleType::Modenature(m.type_modenature.clone()));
+    }
     if let Some(t) = p.terrains.iter().find(|t| t.id == id) {
         return Some(CleType::Terrain(p.type_terrain(t).id));
     }
@@ -72,6 +76,7 @@ fn nom_et_occurrences(p: &Projet, cle: &CleType) -> Option<(String, usize)> {
         CleType::Composant(id) => (p.types_composants.iter().find(|t| &t.id == id)?.nom.clone(), p.composants.iter().filter(|c| &c.type_composant == id).count()),
         CleType::GardeCorps(id) => (p.types_garde_corps.iter().find(|t| &t.id == id)?.nom.clone(), p.garde_corps.iter().filter(|g| g.type_garde_corps.as_ref() == Some(id)).count()),
         CleType::Terrain(id) => (p.types_terrains_disponibles().into_iter().find(|t| &t.id == id)?.nom, p.terrains.iter().filter(|t| p.type_terrain(t).id == *id).count()),
+        CleType::Modenature(id) => (p.type_modenature(id)?.nom.clone(), p.modenatures.iter().filter(|m| &m.type_modenature == id).count()),
         CleType::Vue(k) => {
             let t = p.types_vues.get(*k)?;
             (t.nom.clone(), p.vues.iter().filter(|v| v.type_vue == t.nom && matches!(v.genre, modele::GenreVue::Coupe { elevation, .. } if elevation == t.elevation)).count())
@@ -81,8 +86,13 @@ fn nom_et_occurrences(p: &Projet, cle: &CleType) -> Option<(String, usize)> {
 
 /// Longueur en mm (unité du projet à l'affichage).
 fn longueur(ui: &mut egui::Ui, etiquette: &str, v: &mut f64) {
+    longueur_bornee(ui, etiquette, v, 1.0..=f64::MAX);
+}
+
+/// Longueur dans `bornes` (décalage : négatif permis ; retrait : nul permis).
+fn longueur_bornee(ui: &mut egui::Ui, etiquette: &str, v: &mut f64, bornes: std::ops::RangeInclusive<f64>) {
     ui.label(etiquette);
-    ui.add(egui::DragValue::new(v).range(1.0..=f64::MAX).speed(5.0).dimensions());
+    ui.add(egui::DragValue::new(v).range(bornes).speed(5.0).dimensions());
     ui.end_row();
 }
 
@@ -131,6 +141,7 @@ pub(crate) enum TypeEdite {
     Composant(Box<modele::TypeComposant>),
     GardeCorps(Box<modele::elements::garde_corps::TypeGardeCorps>),
     Terrain(modele::elements::site::TypeTerrain),
+    Modenature(Box<modele::elements::modenature::TypeModenature>),
     Vue(modele::gabarit::TypeVue),
 }
 
@@ -149,6 +160,7 @@ impl TypeEdite {
             Self::Composant(t) => serde_json::to_value(t),
             Self::GardeCorps(t) => serde_json::to_value(t),
             Self::Terrain(t) => serde_json::to_value(t),
+            Self::Modenature(t) => serde_json::to_value(t),
             Self::Vue(t) => serde_json::to_value(t),
         }
         .ok()
@@ -164,6 +176,7 @@ fn extraire(p: &Projet, cle: &CleType) -> Option<TypeEdite> {
         CleType::Composant(id) => TypeEdite::Composant(Box::new(p.types_composants.iter().find(|t| &t.id == id)?.clone())),
         CleType::GardeCorps(id) => TypeEdite::GardeCorps(Box::new(p.types_garde_corps.iter().find(|t| &t.id == id)?.clone())),
         CleType::Terrain(id) => TypeEdite::Terrain(p.types_terrains_disponibles().into_iter().find(|t| &t.id == id)?),
+        CleType::Modenature(id) => TypeEdite::Modenature(Box::new(p.type_modenature(id)?.clone())),
         CleType::Vue(k) => TypeEdite::Vue(p.types_vues.get(*k)?.clone()),
     })
 }
@@ -183,6 +196,7 @@ fn ecrire(p: &Projet, cle: &CleType, t: TypeEdite) -> Projet {
             if let Some(x) = q.types_terrains.iter_mut().find(|x| &x.id == id) { *x = t }
         }
         (CleType::Vue(k), TypeEdite::Vue(t)) => if let Some(x) = q.types_vues.get_mut(*k) { *x = t },
+        (CleType::Modenature(id), TypeEdite::Modenature(t)) => if let Some(x) = q.types_modenatures.iter_mut().find(|x| &x.id == id) { *x = *t },
         _ => {}
     }
     q
@@ -248,6 +262,30 @@ fn champs(ui: &mut egui::Ui, p: &Projet, t: &mut TypeEdite) {
             egui::Grid::new("type_terrain").num_columns(2).striped(true).show(ui, |ui| {
                 longueur(ui, "Profondeur", &mut t.epaisseur);
                 materiau(ui, p, "Matériau", &mut t.materiau, "type_terrain_materiau");
+            });
+        }
+        TypeEdite::Modenature(t) => {
+            egui::Grid::new("type_modenature").num_columns(2).striped(true).show(ui, |ui| {
+                ui.label("Genre");
+                egui::ComboBox::from_id_salt("type_modenature_genre").selected_text(if t.creux { "Creux (retiré du mur)" } else { "Relief" }).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut t.creux, false, "Relief");
+                    ui.selectable_value(&mut t.creux, true, "Creux (retiré du mur)");
+                });
+                ui.end_row();
+                ui.label("Profil");
+                let nom = t.profil.as_ref().and_then(|id| p.profils.iter().find(|x| &x.id == id)).map_or("Rectangulaire", |x| x.nom.as_str());
+                egui::ComboBox::from_id_salt("type_modenature_profil").selected_text(nom).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut t.profil, None, "Rectangulaire");
+                    for x in &p.profils { ui.selectable_value(&mut t.profil, Some(x.id.clone()), &x.nom); }
+                });
+                ui.end_row();
+                if t.profil.is_none() {
+                    longueur(ui, if t.creux { "Profondeur" } else { "Saillie" }, &mut t.largeur);
+                    longueur(ui, "Hauteur", &mut t.hauteur);
+                }
+                longueur_bornee(ui, "Décalage", &mut t.decalage, -1e5..=1e5);
+                longueur_bornee(ui, "Retrait aux bouts", &mut t.retrait, 0.0..=1e5);
+                if !t.creux { materiau(ui, p, "Matériau", &mut t.materiau, "type_modenature_materiau"); }
             });
         }
         TypeEdite::Vue(t) => {
@@ -418,6 +456,7 @@ mod tests {
                 TypeEdite::Composant(mut t) => { t.largeur *= 1.5; t.hauteur *= 1.5; TypeEdite::Composant(t) }
                 TypeEdite::GardeCorps(mut t) => { t.hauteur += 300.0; TypeEdite::GardeCorps(t) }
                 TypeEdite::Terrain(mut t) => { t.epaisseur += 1000.0; TypeEdite::Terrain(t) }
+                TypeEdite::Modenature(mut t) => { t.hauteur += 100.0; TypeEdite::Modenature(t) }
                 TypeEdite::Vue(_) => continue,
             };
             let q = repercuter(ecrire(p, &cle, t), p, &cle).unwrap();
@@ -458,9 +497,13 @@ mod tests {
         (b.genre, b.pose.type_poutre) = (modele::GenreBarre::Poutre, Some("tp".into()));
         b.debut[2] = 2500.0;
         b.fin = [b.debut[0] + 3000.0, b.debut[1], 2500.0];
+        // profilé en relief sur le premier mur composé
+        p.types_modenatures.push(modele::elements::modenature::TypeModenature { id: "tm".into(), nom: "Bandeau".into(), creux: false, profil: None, largeur: 50.0, hauteur: 200.0, materiau: None, decalage: 0.0, retrait: 0.0 });
+        let mur = p.assemblages[0].id.clone();
+        p.modenatures.push(modele::elements::modenature::Modenature { id: "pm".into(), nom: "Bandeau".into(), mur, type_modenature: "tm".into(), interieur: false, hauteur: 1000.0, depuis_haut: false, debut: None, fin: None });
         p.verifier().unwrap();
-        let ids: Vec<String> = p.garde_corps.iter().map(|g| g.id.clone()).chain(p.barres.iter().map(|b| b.id.clone())).collect();
-        assert_eq!(verifier_propagation(&p, &ids), 2);
+        let ids: Vec<String> = p.garde_corps.iter().map(|g| g.id.clone()).chain(p.barres.iter().map(|b| b.id.clone())).chain(p.modenatures.iter().map(|m| m.id.clone())).collect();
+        assert_eq!(verifier_propagation(&p, &ids), 3);
         // la hauteur recopiée sur l'occurrence suit le type (nomenclatures)
         let cle = CleType::GardeCorps("tgc".into());
         let Some(TypeEdite::GardeCorps(mut t)) = extraire(&p, &cle) else { panic!() };

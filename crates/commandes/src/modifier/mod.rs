@@ -169,6 +169,7 @@ impl ExecutionModifier for Projet {
                 self.composants.retain(|x| !set.contains(&x.id));
                 self.escaliers.retain(|x| !set.contains(&x.id));
                 self.garde_corps.retain(|x| !set.contains(&x.id));
+                self.modenatures.retain(|x| !set.contains(&x.id));
                 self.importes.retain(|x| !set.contains(&x.id));
                 self.liens.retain(|x| !set.contains(&x.id));
                 self.terrains.retain(|x| !set.contains(&x.id));

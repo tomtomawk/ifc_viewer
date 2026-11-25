@@ -28,6 +28,7 @@ pub(crate) fn traits(projet: &Projet) -> (IdMap<TraitVu>, IdMap<TraitVu>) {
     for b in &projet.barres { ajouter(id_natif("barre", &b.id), Cat::de_barre(b.genre)); }
     for e in &projet.escaliers { ajouter(id_natif("escalier", &e.id), Cat::Escaliers); }
     for g in &projet.garde_corps { ajouter(id_natif("garde_corps", &g.id), Cat::GardeCorps); }
+    for m in &projet.modenatures { ajouter(id_natif("modenature", &m.id), Cat::Murs); }
     for c in &projet.composants { ajouter(id_natif("composant", &c.id), Cat::Composants); }
     for t in &projet.terrains { ajouter(id_natif("terrain", &t.id), Cat::Terrain); }
     (coupe, vus)

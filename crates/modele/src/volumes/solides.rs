@@ -219,7 +219,7 @@ fn mur_brut(
     if ![bas, haut, e].iter().all(|v| v.is_finite()) || haut <= bas || m.axe.longueur() < 1.0 {
         return Err("Dimensions du mur non valides.".into());
     }
-    let mut tris = super::attache_toiture::volume_mur(p, m, jonctions, (bas, haut), e, booleen)?;
+    let mut tris = crate::elements::modenature::creuser(p, m, super::attache_toiture::volume_mur(p, m, jonctions, (bas, haut), e, booleen)?, booleen)?;
     // ouvertures qui percent le mur, avec leur hôte élargi s'il est déjà calculé
     type Hote = Result<crate::murs::retours::HoteElargi, String>;
     let ouvertures: Vec<(&Ouverture, Option<&Hote>)> = match percements {

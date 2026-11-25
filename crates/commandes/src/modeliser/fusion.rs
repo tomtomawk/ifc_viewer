@@ -264,6 +264,7 @@ fn fusionner_dans(
     rapprocher_types!(cible, imp, types_poutres, table);
     rapprocher_types!(cible, imp, types_composants, table);
     rapprocher_types!(cible, imp, types_garde_corps, table);
+    rapprocher_types!(cible, imp, types_modenatures, table);
     rapprocher_types!(cible, imp, types_terrains, table);
     rapprocher_types!(cible, imp, familles_etiquettes, table);
     rapprocher_types!(cible, imp, types_traits, table);
@@ -327,6 +328,7 @@ fn fusionner_dans(
         types_poutres,
         types_composants,
         types_garde_corps,
+        types_modenatures,
         types_terrains,
         familles_etiquettes,
         types_traits
@@ -343,6 +345,7 @@ fn fusionner_dans(
         pieces,
         composants,
         garde_corps,
+        modenatures,
         importes,
         quadrillages
     );

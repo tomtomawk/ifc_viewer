@@ -169,6 +169,18 @@ plan (jonctions comprises) coupé par le profil ; un mur à profil ignore
 `attaches_toitures`. Champ absent : rectangle base-haut. Ajout compatible (champ
 facultatif).
 
+`modenatures` et `types_modenatures` : profilés de mur (bandeau, corniche,
+soubassement en relief ; engravure en creux). Type : `nom`, `creux`, `profil`
+(identifiant d'un profil du projet, sinon rectangle `largeur` × `hauteur`), `materiau`,
+`decalage` (depuis la face, vers l'extérieur du mur), `retrait` (aux deux bouts).
+Occurrence : `mur` (mur indépendant ou assemblage), `type_modenature`, `interieur`
+(face de la dernière couche, sinon de la première), `hauteur` de l'origine de la
+section depuis la base (ou depuis le haut si `depuis_haut`), `debut` et `fin` le long
+de la face (absents : bouts du mur). Section : `x` perpendiculaire à la face (vers
+l'extérieur pour un relief, dans le mur pour un creux), `y` vers le haut. Un relief est
+un élément à part (`IfcBuildingElementProxy` à l'export) ; un creux est retiré du volume
+des couches qu'il traverse. Ajout compatible (champs facultatifs).
+
 ### Pente par arête
 
 Comme une toiture par tracé de Revit : une arête qui « définit la pente » porte un

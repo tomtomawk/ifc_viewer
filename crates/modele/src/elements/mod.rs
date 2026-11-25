@@ -8,6 +8,7 @@ pub mod piece;
 pub mod escalier;
 pub mod escalier_balance;
 pub mod garde_corps;
+pub mod modenature;
 pub mod pente;
 pub mod poutre;
 pub mod site;

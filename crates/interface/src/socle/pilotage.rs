@@ -568,6 +568,7 @@ impl Application {
             "poutre" => (O::Poutre, OngletRuban::Modeliser),
             "escalier" => (O::Escalier, OngletRuban::Modeliser),
             "garde_corps" => (O::GardeCorps, OngletRuban::Modeliser),
+            "profile" => (O::Modenature, OngletRuban::Modeliser),
             "ouverture" => (O::Ouverture, OngletRuban::Modeliser),
             "composant" => (O::Composant, OngletRuban::Modeliser),
             "piece" => (O::Piece, OngletRuban::Modeliser),

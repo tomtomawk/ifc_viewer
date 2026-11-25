@@ -11,6 +11,7 @@ pub(crate) mod volet_arborescence;
 pub(crate) mod navigateur;
 pub(crate) mod proprietes;
 pub(crate) mod proprietes_type;
+pub(crate) mod proprietes_modenature;
 pub(crate) mod donnees_importees;
 pub(crate) mod communes;
 mod proprietes_multiples;

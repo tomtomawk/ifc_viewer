@@ -66,7 +66,7 @@ impl Application {
         let sorte = self.natif.as_ref().and_then(|(p, _)| crate::socle::document_bim::elements_natifs(p).find(|(g, c)| modele::identifiants::id_natif(g, c) == id).map(|(g, _)| g)).map(|g| match g {
             "mur" => "Mur", "assemblage" => "Mur composé", "dalle" => "Élément horizontal", "terrain" => "Terrain",
             "limite_propriete" => "Limite", "barre" => "Poteau ou poutre", "composant" => "Composant",
-            "escalier" => "Escalier", "garde_corps" => "Garde-corps", "ouverture" => "Ouverture", "niveau" => "Niveau", _ => "Élément",
+            "escalier" => "Escalier", "garde_corps" => "Garde-corps", "modenature" => "Profilé de mur", "ouverture" => "Ouverture", "niveau" => "Niveau", _ => "Élément",
         }.to_string());
         let classe = sorte.unwrap_or_else(|| pretty_type(s.model.ty(id)).trim_start_matches("Ifc").to_string());
         let nom = s.model.name(id);

@@ -44,6 +44,14 @@ pub enum Commande {
     GardeCorps {
         garde_corps: GardeCorps,
     },
+    /// Crée (identifiant vide) ou remplace un profilé de mur (relief ou creux).
+    Modenature {
+        modenature: modele::elements::modenature::Modenature,
+    },
+    /// Crée (identifiant vide) ou remplace un type de profilé de mur.
+    TypeModenature {
+        type_modenature: modele::elements::modenature::TypeModenature,
+    },
     ModifierVue {
         vue: Vue,
     },

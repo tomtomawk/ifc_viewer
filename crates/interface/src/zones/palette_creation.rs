@@ -62,6 +62,7 @@ pub(crate) fn definition(outil: Outil) -> Definition {
         Surfaces | Dalle | Sol | Toiture | Plafond | TerrePlein => palette(MODELISER, selecteur_surface, Some(schema_surface), Propres(parametres_surface), true),
         Escalier => palette(MODELISER, selecteur_escalier, Some(schema_escalier), Champs, false),
         GardeCorps => palette(MODELISER, selecteur_garde_corps, None, Champs, false),
+        Modenature => palette(MODELISER, Application::selecteur_modenature, None, Propres(Application::parametres_modenature), true),
         Ouverture => palette(MODELISER, selecteur_ouverture, None, Propres(Application::parametres_ouverture), true),
         Poutre => palette(MODELISER, Application::selecteur_poutre, Some(Application::schema_poutre), Propres(Application::parametres_poutre), true),
         Poteau => palette(MODELISER, selecteur_poteau, Some(Application::schema_poteau), Propres(Application::parametres_poteau), true),

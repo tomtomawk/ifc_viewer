@@ -292,6 +292,7 @@ impl Application {
                     .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
+                .chain(p.modenatures.iter().map(|x| ("modenature", &x.id)))
                     .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                     .chain(p.importes.iter().map(|x| ("importe", &x.id))) {
                     if selection.contains(cle.as_str()) {
@@ -365,6 +366,7 @@ impl Application {
                             .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
+                .chain(p.modenatures.iter().map(|x| ("modenature", &x.id)))
                             .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                             .chain(p.importes.iter().map(|x| ("importe", &x.id)))
                             .filter(|(_, id)| cles.contains(id.as_str())).map(|(genre, id)| modele::identifiants::id_natif(genre, id)));
@@ -406,6 +408,7 @@ impl Application {
                 .chain(p.barres.iter().map(|x| ("barre", &x.id))).chain(p.composants.iter().map(|x| ("composant", &x.id)))
                 .chain(p.escaliers.iter().map(|x| ("escalier", &x.id)))
                 .chain(p.garde_corps.iter().map(|x| ("garde_corps", &x.id)))
+                .chain(p.modenatures.iter().map(|x| ("modenature", &x.id)))
                 .chain(p.ouvertures.iter().map(|x| ("ouverture", &x.id)))
                 .chain(p.importes.iter().map(|x| ("importe", &x.id)))
                 .filter(|(genre, id)| recherches.contains(&modele::identifiants::id_natif(genre, id)))

@@ -259,6 +259,15 @@ fn contenu(p: &Projet) -> Result<Step, String> {
             types_ifc.lier("IFCRAILINGTYPE", &t.id, &t.nom, "GUARDRAIL", None, id);
         }
     }
+    // profilés en relief : éléments à part (les creux sont retirés des murs)
+    for m in p.modenatures.iter().filter(|m| p.type_modenature(&m.type_modenature).is_some_and(|t| !t.creux)) {
+        let t = p.type_modenature(&m.type_modenature).ok_or("Type de profilé absent.")?;
+        let solide = modele::elements::modenature::solide(p, m)?;
+        let rep = styles.forme(&mut w, p, contexte, &[(t.materiau.as_deref(), solide.as_slice())], &[]);
+        let id = w.add(format!("IFCBUILDINGELEMENTPROXY('{}',$,{},$,$,#{placement},{},$,.ELEMENT.)", guid(&m.id, None), texte(&m.nom), ref_(rep)));
+        let niveau = solides::hote(p, &m.mur)?.2;
+        contenus.entry(niveaux[&niveau]).or_default().push(id);
+    }
     for o in &p.ouvertures {
         let (axe, e, niveau) = solides::hote(p, &o.mur)?;
         let z = p.niveau(&niveau).ok_or("Niveau de l'ouverture introuvable.")?.altitude + o.allege;

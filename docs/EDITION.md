@@ -327,6 +327,20 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   toitures et ne s'y attache plus ; Scinder est refusé tant que le profil n'est pas
   réinitialisé. Hauteur des nomenclatures et quantités IFC : hauteur nominale
   (base-haut) ; volume : celui du profil.
+- **Profilés de mur** (comme « Balayage » et « Profil en creux » de Revit) :
+  **Modéliser → Construire → Profilé**. Le volet montre le sélecteur de type commun
+  (relief ou creux, profil ou rectangle ; Dupliquer au survol, « + Nouveau type de
+  profilé », et sans type « + Bandeau (relief) » ou « + Engravure (creux) »), puis la
+  hauteur de pose et « Depuis le haut du mur ». Cliquer un mur (ou une de ses
+  ouvertures) : le profilé court sur toute la longueur de la face du côté cliqué ; en 3D,
+  en coupe ou en élévation à la hauteur du point cliqué, en plan à la hauteur des
+  paramètres. Sans type dans le projet, le premier clic crée « Bandeau 200 × 50 ».
+  Propriétés d'un profilé : nom, face, hauteur, depuis la base ou le haut, début, fin
+  (« Toute la longueur du mur ») ; Propriétés du type : genre, profil, saillie ou
+  profondeur et hauteur du rectangle, décalage, retrait aux bouts, matériau (relief),
+  grisées et déverrouillées par double-clic. Un relief se sélectionne comme un
+  élément ; un creux, retiré du mur, garde un volume invisible sélectionnable en 3D.
+  Le profilé suit son mur (copie, suppression, mur déplacé ou modifié).
 - **Raccords des murs droits** : l'onglet se forme quand les extrémités des lignes
   de contrôle se touchent, y compris avec une implantation sur une face et un angle
   aigu. Une tolérance de 0,01 mm absorbe seulement l'arrondi des coordonnées ;
@@ -853,6 +867,8 @@ editer {"action":"copier","ids":["rdc-m0"],"delta":[0,3000,0]}
 editer {"action":"tourner","ids":["rdc-m0"],"centre":[0,0],"angle":90}
 editer {"action":"ouverture","mur":"rdc-m0","genre":"porte","abscisse":2000,"largeur":900,"hauteur":2100,"allege":0}
 editer {"action":"attacher","ids":["etage-m0"],"toiture":"toiture"}
+editer {"action":"type_modenature","type_modenature":{"id":"","nom":"Bandeau 200 × 50","creux":false,"largeur":50,"hauteur":200}}
+editer {"action":"modenature","modenature":{"id":"","nom":"Bandeau","mur":"rdc-m0","type_modenature":"<id du type>","hauteur":1000}}
 editer {"action":"profil_mur","id":"rdc-m0","profil":{"contours":[[[0,0],[4000,0],[4000,2700],[2000,4000],[0,2700]]]}}
 editer {"action":"supprimer","ids":["porte"]}
 annuler

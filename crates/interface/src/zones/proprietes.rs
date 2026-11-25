@@ -334,6 +334,8 @@ impl Application {
                     nouveau = Some(p);
                 }
             }
+        } else if let Some(m) = projet.modenatures.iter().find(|m| modele::identifiants::id_natif("modenature", &m.id) == id) {
+            nouveau = crate::zones::proprietes_modenature::proprietes(ui, projet, m);
         } else if let Some(g) = projet.garde_corps.iter().find(|g| modele::identifiants::id_natif("garde_corps", &g.id) == id) {
             let mut g = g.clone();
             let mut change = false;
