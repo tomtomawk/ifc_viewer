@@ -293,6 +293,15 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   étiquettes de l'élément sont conservées, détachées (cote figée en points fixes,
   étiquette devenue texte) ; Ctrl+Z rétablit. Un niveau
   encore utilisé ne peut pas être supprimé.
+- **Propriétés du type** : sous les propriétés de l'occurrence, une section montre
+  celles du type de la sélection (couches d'un mur composé ou d'un élément horizontal,
+  dimensions et matériaux d'une porte ou fenêtre, poutre, composant, garde-corps,
+  terrain, type de coupe ou d'élévation). Un type est partagé : la section est grisée ;
+  un double-clic la rend modifiable, avec « Modifie les N éléments de ce type » et
+  Terminer pour la reverrouiller. La modification touche tous les éléments du type
+  (murs composés reconstruits, dimensions des portes et fenêtres recopiées) en une
+  seule étape d'annulation, écrite à la fin de la saisie ou du glissement. Sélection
+  de types différents : « Types variés », rien à modifier.
 - Le panneau Propriétés ne montre que les informations de la sélection (type,
   paramètres, couches, sommets d'un élément horizontal). Les commandes sont ailleurs :
   Cadrer, Isoler et Masquer dans le groupe Visibilité de Modifier (touches F, I, H) ;

@@ -93,6 +93,8 @@ impl Application {
                 if let Err(e) = self.proprietes_multiples(ui, &ids) {
                     self.error = Some(e);
                 }
+                if let Some(projet) = self.proprietes_type(ui, &ids)
+                    && let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
                 return;
             }
         }
@@ -157,8 +159,12 @@ impl Application {
                 if let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
                 return;
             }
-        // élément natif : tout est dans le panneau ci-dessus, pas d'attributs génériques
+        // élément natif : tout est dans le panneau ci-dessus, pas d'attributs génériques ;
+        // en dessous, les propriétés de son type
         if self.natif.is_some() && (self.cle_native(id).is_some() || self.natif.as_ref().is_some_and(|(p, _)| p.dalles.iter().any(|d| modele::identifiants::id_natif("remblai", &d.id) == id))) {
+            let ids = self.selection_bim();
+            if let Some(projet) = self.proprietes_type(ui, &ids)
+                && let Err(e) = self.appliquer_projet(projet) { self.error = Some(e); }
             return;
         }
         let Some(s) = &self.scene else { return };

@@ -542,6 +542,10 @@ pub struct Application {
     camera_avant_pieton: Option<Camera>,
     /// Pente donnée à une arête cochée (degrés), la dernière saisie.
     pente_defaut: f64,
+    /// Type dont les propriétés sont déverrouillées (double-clic) dans Propriétés.
+    type_deverrouille: Option<String>,
+    /// Type en cours de saisie dans Propriétés, écrit dans le projet à la fin.
+    type_brouillon: Option<crate::zones::proprietes_type::Brouillon>,
     /// Options de l'application (menu Début > Options).
     options: config::options::Options,
     parametres: Option<crate::socle::parametres::Parametres>,
@@ -564,7 +568,7 @@ pub struct Application {
     pilote: Option<Receiver<Requete>>,
     prochaine_tentative_pilote: std::time::Instant,
     requetes: Vec<Requete>,
-    saisies_pilote: std::collections::VecDeque<egui::Event>,
+    saisies_pilote: std::collections::VecDeque<Vec<egui::Event>>,
     saisie_pilote_image: bool,
     /// Réponses des ouvertures demandées par le pilote, envoyées en fin de chargement.
     attente_ouverture: Vec<Sender<String>>,
@@ -766,6 +770,8 @@ impl Application {
             visibility_dirty: false,
             left_tab: LeftTab::Tree,
             pente_defaut: 35.0,
+            type_deverrouille: None,
+            type_brouillon: None,
             ombres_portees: false,
             ombre_ambiante: false,
             soleil_jour: 21,
@@ -888,14 +894,15 @@ impl eframe::App for Application {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         let terminer = self.saisie_pilote_image && self.saisies_pilote.is_empty();
         self.saisie_pilote_image = !self.saisies_pilote.is_empty();
-        // Une étape par image : egui observe bien l'appui puis le relâchement.
-        if let Some(e) = self.saisies_pilote.pop_front() {
-            let modifiers = match &e {
-                egui::Event::PointerButton { modifiers, .. } | egui::Event::Key { modifiers, .. } | egui::Event::MouseWheel { modifiers, .. } => *modifiers,
-                _ => egui::Modifiers::NONE,
-            };
+        // Un groupe par image : egui observe bien l'appui puis le relâchement (un double-clic
+        // forme un seul groupe).
+        if let Some(groupe) = self.saisies_pilote.pop_front() {
+            let modifiers = groupe.iter().find_map(|e| match e {
+                egui::Event::PointerButton { modifiers, .. } | egui::Event::Key { modifiers, .. } | egui::Event::MouseWheel { modifiers, .. } => Some(*modifiers),
+                _ => None,
+            }).unwrap_or(egui::Modifiers::NONE);
             raw_input.events.push(egui::Event::ModifiersChanged(modifiers));
-            raw_input.events.push(e);
+            raw_input.events.extend(groupe);
             ctx.request_repaint();
         }
         else if terminer {

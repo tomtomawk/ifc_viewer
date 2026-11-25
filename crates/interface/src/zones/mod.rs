@@ -10,6 +10,7 @@ pub(crate) mod volet_proprietes;
 pub(crate) mod volet_arborescence;
 pub(crate) mod navigateur;
 pub(crate) mod proprietes;
+pub(crate) mod proprietes_type;
 pub(crate) mod donnees_importees;
 pub(crate) mod communes;
 mod proprietes_multiples;

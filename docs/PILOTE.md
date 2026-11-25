@@ -163,6 +163,7 @@ Les outils encore désactivés dans l'interface restent indisponibles.
 ```
 
 Actions : `clic` (bouton optionnel gauche/droit/milieu, maj/ctrl/alt optionnels),
+`double_clic` (x,y ; bouton gauche, les deux clics dans la même image),
 `pointer` (x,y), `bouton` (x,y,bouton,appuye,maj/ctrl/alt optionnels) pour les glissements,
 `defiler` (x,y,dx,dy), `texte` (texte), `touche` (touche,maj/ctrl/alt optionnels).
 Touches : Enter, Escape, Delete, Backspace, Tab, ArrowLeft/Right/Up/Down, A…Z, etc.

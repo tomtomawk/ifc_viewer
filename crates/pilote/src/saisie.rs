@@ -17,6 +17,11 @@ pub enum Saisie {
         #[serde(default)]
         alt: bool,
     },
+    /// Deux clics injectés dans la même image : egui les reconnaît comme un double-clic.
+    DoubleClic {
+        x: f32,
+        y: f32,
+    },
     Pointer {
         x: f32,
         y: f32,
@@ -86,10 +91,21 @@ fn modifiers(maj: bool, ctrl: bool, alt: bool) -> Modifiers {
     }
 }
 
-pub fn evenements(saisies: Vec<Saisie>) -> Result<Vec<Event>, String> {
-    let mut out = Vec::new();
+/// Événements regroupés par image : un groupe est injecté en entier dans une même image.
+pub fn evenements(saisies: Vec<Saisie>) -> Result<Vec<Vec<Event>>, String> {
+    let mut groupes = Vec::new();
     for s in saisies {
+        let mut out = Vec::new();
         match s {
+            Saisie::DoubleClic { x, y } => {
+                let pos = position(x, y)?;
+                groupes.push(vec![Event::PointerMoved(pos)]);
+                for pressed in [true, false, true, false] {
+                    out.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+                }
+                groupes.push(out);
+                continue;
+            }
             Saisie::Pointer { x, y } => out.push(Event::PointerMoved(position(x, y)?)),
             Saisie::Clic {
                 x,
@@ -165,8 +181,9 @@ pub fn evenements(saisies: Vec<Saisie>) -> Result<Vec<Event>, String> {
                 }
             }
         }
+        groupes.extend(out.into_iter().map(|e| vec![e]));
     }
-    Ok(out)
+    Ok(groupes)
 }
 
 #[cfg(test)]
@@ -178,7 +195,7 @@ mod tests {
             r#"[{"action":"clic","x":10,"y":20,"maj":true},{"action":"touche","touche":"Enter"}]"#,
         )
         .unwrap();
-        let e = evenements(s).unwrap();
+        let e: Vec<Event> = evenements(s).unwrap().into_iter().flatten().collect();
         assert_eq!(e.len(), 5);
         assert!(matches!(
             e[1],
@@ -191,7 +208,7 @@ mod tests {
         assert!(matches!(e[2], Event::PointerButton { pressed: false, .. }));
         // Alt+clic : fin d'un segment d'arc de polyligne
         let s = serde_json::from_str(r#"[{"action":"clic","x":10,"y":20,"alt":true}]"#).unwrap();
-        assert!(matches!(evenements(s).unwrap()[1], Event::PointerButton { modifiers: Modifiers { alt: true, shift: false, .. }, .. }));
+        assert!(matches!(evenements(s).unwrap()[1][0], Event::PointerButton { modifiers: Modifiers { alt: true, shift: false, .. }, .. }));
         assert!(
             evenements(vec![Saisie::Touche {
                 touche: "inconnue".into(),
@@ -201,5 +218,9 @@ mod tests {
             }])
             .is_err()
         );
+        // double-clic : les quatre événements de bouton dans une seule image
+        let s = serde_json::from_str(r#"[{"action":"double_clic","x":5,"y":6}]"#).unwrap();
+        let g = evenements(s).unwrap();
+        assert_eq!((g.len(), g[1].len()), (2, 4));
     }
 }
