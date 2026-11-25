@@ -88,6 +88,14 @@ pub struct Primitive {
     pub element: Option<Id>,
 }
 
+impl Primitive {
+    /// Primitive invisible (alpha nul) : gardée pour la sélection, ni affichée ni
+    /// exportée (lignes invisibles du dessin 2D).
+    pub fn invisible(&self) -> bool {
+        self.style.couleur[3] == 0
+    }
+}
+
 /// Maillage d'une primitive pour le GPU : triangles et traits d'un pixel.
 #[derive(Default)]
 pub struct Maillage {

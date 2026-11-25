@@ -275,7 +275,7 @@ mod tests {
         let AnnotationForme::Polyligne { points, fermee, traits, remplissage, .. } = &mut f.elements_2d[0].forme else { panic!() };
         let n = points.len() - 1 + usize::from(*fermee && points.len() > 2);
         *traits = vec!["trait-tirets".into(); n];
-        *remplissage = Some(RemplissageContour::Motif { motif: crate::MotifCoupe::Uni });
+        *remplissage = Some(RemplissageContour::motif(crate::MotifCoupe::Uni));
         let json = FichierFamille { famille: f.clone(), ..porte() }.json().unwrap();
         assert!(json.contains("trait-tirets"));
         let r = f.resoudre(900.0, 2150.0, 200.0);

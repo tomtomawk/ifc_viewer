@@ -580,3 +580,22 @@ fn isolant_en_coupe_centre_sur_l_axe_de_la_couche() {
         assert!(zb < 0.1 && zh > 2.4, "{degres}° : motif incomplet en hauteur ({zb} à {zh})");
     }
 }
+
+/// Lignes invisibles : absentes du dessin d'une vue (feuilles et exports) ; un trait
+/// visible de même tracé y est.
+#[test]
+fn lignes_invisibles_absentes_du_dessin_de_la_vue() {
+    use modele::documentation::{Annotation, AnnotationForme};
+    let mut p = modele::Projet::lire_json(include_str!("../../../samples/maison_native.bem")).unwrap();
+    p.types_traits = modele::gabarit::Gabarit::defaut().types_traits.clone();
+    let invisible = p.types_traits.iter().find(|t| t.invisible).unwrap().id.clone();
+    let vue = p.vues.iter().find(|v| matches!(v.genre, modele::GenreVue::Plan { .. })).unwrap().id.clone();
+    let poly = |id: &str, t: &str| Annotation { id: id.into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: vec![[0.0, -5000.0], [3000.0, -5000.0], [3000.0, -3000.0]], fermee: false, courbures: Vec::new(), remplissage: None, traits: vec![t.into(); 2] } };
+    p.annotations.push(poly("invisible", &invisible));
+    p.annotations.push(poly("visible", "trait-continu-fin"));
+    p.verifier().unwrap();
+    let d = crate::dessin_vue(&p, &vue).unwrap();
+    let de = |id: &str| d.primitives.iter().filter(|x| x.element == Some(modele::identifiants::id_natif("annotation", id))).count();
+    assert_eq!(de("invisible"), 0);
+    assert!(de("visible") > 0);
+}

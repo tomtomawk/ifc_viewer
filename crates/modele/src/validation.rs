@@ -373,8 +373,13 @@ impl Projet {
                 }
                 match r {
                     RemplissageContour::Materiau { materiau } if self.materiau(materiau).is_none() => return Err(format!("RemplissageContour : matériau « {materiau} » absent.")),
-                    RemplissageContour::Motif { motif: MotifCoupe::Vide | MotifCoupe::Isolation } => return Err("RemplissageContour : motif non valide.".into()),
-                    RemplissageContour::Motif { motif } if motif.nom_hachures().is_some() && self.definition_motif(motif).is_none() => return Err(format!("RemplissageContour : motif « {} » absent.", motif.libelle())),
+                    RemplissageContour::Motif { motif, arriere_plan, .. } => {
+                        // premier plan et arrière-plan : aplat ou hachures du projet
+                        for m in std::iter::once(motif).chain(arriere_plan.as_ref().map(|a| &a.motif)) {
+                            if matches!(m, MotifCoupe::Vide | MotifCoupe::Isolation) { return Err("RemplissageContour : motif non valide.".into()); }
+                            if m.nom_hachures().is_some() && self.definition_motif(m).is_none() { return Err(format!("RemplissageContour : motif « {} » absent.", m.libelle())); }
+                        }
+                    }
                     _ => {}
                 }
             }

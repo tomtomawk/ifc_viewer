@@ -152,7 +152,8 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
         .into_iter()
         .map(|pr| pr.translater(s.origin))
         .collect();
-    primitives.extend(crate::decouper_symboles_caches(p, v, &s, &visible, annotations(p, v)));
+    // lignes invisibles : ni dessinées ni exportées
+    primitives.extend(crate::decouper_symboles_caches(p, v, &s, &visible, annotations(p, v)).into_iter().filter(|x| !x.invisible()));
     let primitives = modele::elements::cadrage::decouper(primitives, &v.contour_cadrage)?;
     Ok(Dessin {
         droite: u,

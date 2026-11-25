@@ -13,6 +13,11 @@ pub(crate) fn apercu_trait(ui: &egui::Ui, r: egui::Rect, t: &TypeTrait) {
 }
 
 fn apercu_trait_peintre(p: &egui::Painter, r: egui::Rect, couleur: egui::Color32, t: &TypeTrait) {
+    // invisible : pointillé très clair, comme à la sélection seulement
+    if t.invisible {
+        p.add(egui::Shape::dashed_line(&[r.left_center(), r.right_center()], egui::Stroke::new(1.0, couleur.gamma_multiply(0.35)), 2.0, 3.0));
+        return;
+    }
     let trait_ = egui::Stroke::new((t.epaisseur as f32 * 4.0).clamp(0.6, 6.0), couleur);
     let (a, b) = (DVec2::new(r.left() as f64, r.center().y as f64), DVec2::new(r.right() as f64, r.center().y as f64));
     let mut phase = 0.0;
@@ -215,10 +220,10 @@ impl Application {
         let Some((mut types, mut tirets, mut erreur)) = ctx.data(|d| d.get_temp::<Etat>(id)) else { return };
         let (mut ouvert, mut enregistrer) = (true, false);
         egui::Window::new("Types de trait").open(&mut ouvert).default_width(560.0).resizable(true).show(ctx, |ui| {
-            ui.label(RichText::new("Épaisseur et tirets en mm du papier : même aspect à toutes les échelles. Tirets : longueurs trait, blanc, trait, blanc… (vide : continu).").small().weak());
+            ui.label(RichText::new("Épaisseur et tirets en mm du papier : même aspect à toutes les échelles. Tirets : longueurs trait, blanc, trait, blanc… (vide : continu). Invisible : ni affiché ni imprimé, montré seulement à la sélection.").small().weak());
             let mut supprimer = None;
-            egui::Grid::new("grille_types_traits").num_columns(5).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
-                for t in ["Nom", "Épaisseur", "Tirets", "Aperçu", ""] {
+            egui::Grid::new("grille_types_traits").num_columns(6).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
+                for t in ["Nom", "Épaisseur", "Tirets", "Invisible", "Aperçu", ""] {
                     ui.label(RichText::new(t).small().weak());
                 }
                 ui.end_row();
@@ -228,6 +233,7 @@ impl Application {
                     if ui.add_sized([110.0, 20.0], egui::TextEdit::singleline(texte).hint_text("continu")).changed() {
                         t.tirets = texte.split([' ', ';']).filter(|x| !x.is_empty()).filter_map(|x| x.replace(',', ".").parse().ok()).collect();
                     }
+                    ui.checkbox(&mut t.invisible, "").on_hover_text("Lignes invisibles : ni affichées ni imprimées, visibles seulement quand la forme est sélectionnée");
                     let (r, _) = ui.allocate_exact_size(egui::vec2(90.0, 18.0), Sense::hover());
                     apercu_trait(ui, r, t);
                     if ui.small_button("Supprimer").on_hover_text("Supprimer le type : ses segments passent en continu fin").clicked() {
@@ -243,7 +249,7 @@ impl Application {
             ui.horizontal(|ui| {
                 if ui.button("+ Nouveau type").clicked() {
                     let nom = (1..).map(|k| format!("Trait {k}")).find(|n| !types.iter().any(|t| &t.nom == n)).unwrap_or_default();
-                    types.push(TypeTrait { id: String::new(), nom, epaisseur: 0.25, tirets: Vec::new() });
+                    types.push(TypeTrait { id: String::new(), nom, epaisseur: 0.25, tirets: Vec::new(), invisible: false });
                     tirets.push(String::new());
                 }
             });

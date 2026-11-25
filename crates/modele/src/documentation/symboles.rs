@@ -78,7 +78,7 @@ impl FamilleSymbole {
             f.elements_2d.push(e);
         };
         let cercle = |x: f64, y: f64, r: f64| AnnotationForme::Cercle { centre: [x, y], rayon: r, type_trait: String::new() };
-        let plein = |points: Vec<[f64; 2]>| AnnotationForme::Polyligne { points, fermee: true, courbures: Vec::new(), remplissage: Some(RemplissageContour::Motif { motif: MotifCoupe::Uni }), traits: Vec::new() };
+        let plein = |points: Vec<[f64; 2]>| AnnotationForme::Polyligne { points, fermee: true, courbures: Vec::new(), remplissage: Some(RemplissageContour::motif(MotifCoupe::Uni)), traits: Vec::new() };
         let texte = |x: f64, y: f64, t: &str| AnnotationForme::Texte { point: [x, y], texte: t.into() };
         use AlignementTexte::{Centre, Gauche};
         match g {

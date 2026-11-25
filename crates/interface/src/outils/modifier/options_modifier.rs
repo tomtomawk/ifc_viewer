@@ -277,9 +277,14 @@ impl Application {
             .into_iter()
             .filter(|a| !a.element.is_some_and(|id| v.elements_masques.iter().any(|cle| modele::identifiants::id_natif("annotation", cle) == id)))
             .filter(|a| !self.objet_en_edition().is_some_and(|(id, annotation)| annotation && a.element == Some(modele::identifiants::id_natif("annotation", id))))
+            // lignes invisibles : montrées seulement quand leur polyligne est sélectionnée
+            .filter(|a| !a.invisible() || a.element.is_some_and(|id| selection.contains(&id)))
             .map(|mut a| {
                 if a.element.is_some_and(|id| selection.contains(&id)) {
-                    a.style.couleur = [230, 120, 20, 255];
+                    // traits en orange ; remplissage teinté, son motif reste lisible
+                    let c = a.style.couleur;
+                    let teinte = |k: usize, o: u16| ((c[k] as u16 + o) / 2) as u8;
+                    a.style.couleur = if a.role == noyau::trace2d::Role::Hachure { [teinte(0, 230), teinte(1, 120), teinte(2, 20), 255] } else { [230, 120, 20, 255] };
                 }
                 a.translater(-origin)
             })

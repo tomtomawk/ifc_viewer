@@ -192,7 +192,7 @@ fn polyligne_fermee_remplie() {
     let annotation = |remplissage, fermee| Annotation { id: "zone".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: contour.clone(), fermee, courbures: Vec::new(), remplissage, traits: Vec::new() } };
     let hachures = |p: &Projet| annotations(p, p.vues.iter().find(|v| v.id == vue).unwrap()).into_iter().filter(|x| x.role == Role::Hachure).collect::<Vec<_>>();
     // motif choisi : hachures de la définition, encre gris foncé
-    p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Croisees }), true)];
+    p.annotations = vec![annotation(Some(RemplissageContour::motif(MotifCoupe::Croisees)), true)];
     p.verifier().unwrap();
     let h = hachures(&p);
     assert!(matches!(&h[..], [x] if matches!(&x.forme, Forme::Segments(s) if s.len() > 10) && x.style.couleur == [70, 70, 70, 255]));
@@ -201,12 +201,12 @@ fn polyligne_fermee_remplie() {
     p.annotations = vec![annotation(Some(RemplissageContour::Materiau { materiau: nom }), true)];
     p.verifier().unwrap();
     assert!(!hachures(&p).is_empty());
-    p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Uni }), true)];
+    p.annotations = vec![annotation(Some(RemplissageContour::motif(MotifCoupe::Uni)), true)];
     assert!(matches!(&hachures(&p)[..], [x] if matches!(&x.forme, Forme::Triangles(t) if t.len() == 2)));
     // relu tel quel ; refusé sur une polyligne ouverte ou un matériau absent
     let relu: Annotation = serde_json::from_str(&serde_json::to_string(&p.annotations[0]).unwrap()).unwrap();
-    assert!(matches!(relu.forme, AnnotationForme::Polyligne { remplissage: Some(RemplissageContour::Motif { motif: MotifCoupe::Uni }), .. }));
-    p.annotations = vec![annotation(Some(RemplissageContour::Motif { motif: MotifCoupe::Uni }), false)];
+    assert!(matches!(relu.forme, AnnotationForme::Polyligne { remplissage: Some(RemplissageContour::Motif { motif: MotifCoupe::Uni, .. }), .. }));
+    p.annotations = vec![annotation(Some(RemplissageContour::motif(MotifCoupe::Uni)), false)];
     assert!(p.verifier().is_err());
     p.annotations = vec![annotation(Some(RemplissageContour::Materiau { materiau: "Inconnu".into() }), true)];
     assert!(p.verifier().is_err());

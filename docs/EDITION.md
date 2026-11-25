@@ -610,7 +610,14 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   passage, ou une valeur tapée suivie d'Entrée son rayon (petit arc, bombé du côté
   du curseur ; au moins la moitié de la distance entre les deux points). La
   polyligne reste un seul objet : contour fermé, remplissage, types de trait,
-  accrochage au centre et aux extrémités de l'arc. Dans Modifier le tracé, un arc
+  accrochage au centre et aux extrémités de l'arc. Remplissage d'une polyligne
+  fermée (Propriétés) : motif de coupe d'un matériau, ou motif choisi avec sa couleur
+  de **premier plan** et un **arrière-plan** facultatif (aplat ou hachures, et sa
+  couleur) dessiné dessous ; un arrière-plan uni, même blanc, masque ce qui est
+  dessous. Type de trait **Lignes invisibles** (gabarit ; case « Invisible » de la
+  fenêtre des types de trait) : le segment n'est ni affiché ni imprimé ni exporté,
+  mais se sélectionne et apparaît en orange quand sa forme est sélectionnée (le
+  remplissage d'une forme sélectionnée est teinté, son motif reste lisible). Dans Modifier le tracé, un arc
   suit ses sommets, se scinde en deux arcs du même cercle, s'inverse par symétrie,
   et Propriétés donne son rayon et permet de le rendre droit.
   Clic : point suivant ; clic droit, Entrée ou Espace : terminer ; F puis Entrée :
@@ -914,6 +921,12 @@ vue ; leurs formes : `texte`, `ligne`, `polyligne` (`points`, `fermee`, `courbur
 (`points` de passage, `fermee`, `type_trait`), `cercle` (`centre`, `rayon`, `type_trait`), `arc` (`points` :
 départ, passage, fin), `zone`, `cote`, `etiquette`, en mm dans le repère 2D de la vue ; les positions et tailles des feuilles sont en mm papier. Aucun historique
 Undo/Redo n'est sérialisé dans le projet.
+
+`remplissage` d'une polyligne fermée : `{"source": "materiau", "materiau"}` ou
+`{"source": "motif", "motif", "couleur", "arriere_plan": {"motif", "couleur"}}`
+(`couleur` [r, g, b] du premier plan, absente : gris foncé ; `arriere_plan`
+facultatif ; ajout du 25/11/2026, les fichiers antérieurs restent lisibles). Type de
+trait : `invisible: true` pour des lignes invisibles (champ facultatif).
 
 `type_trait` d'une spline ou d'un cercle (champ ajouté le 20/11/2026, facultatif : les
 fichiers existants restent valides) : identifiant d'un type de trait du projet, absent pour

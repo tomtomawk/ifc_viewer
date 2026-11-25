@@ -10,6 +10,9 @@ mod habillage_feuille;
 pub use habillage_feuille::*;
 mod symboles;
 pub use symboles::*;
+mod polyligne;
+pub use polyligne::{PlanMotif, RemplissageContour};
+use polyligne::{primitives_courbe, primitives_polyligne, primitives_remplissage};
 #[cfg(test)]
 mod tests;
 pub use super::*;
@@ -35,12 +38,20 @@ pub struct TypeTrait {
     /// Longueurs alternées trait, blanc, trait… (mm du papier) ; vide : trait continu.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tirets: Vec<f64>,
+    /// Lignes invisibles : ni affichées ni imprimées, visibles seulement à la sélection.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub invisible: bool,
 }
 
 impl TypeTrait {
     /// Trait d'un segment sans type : continu fin.
     pub fn standard() -> TypeTrait {
-        TypeTrait { id: String::new(), nom: "Continu fin".into(), epaisseur: 0.18, tirets: Vec::new() }
+        TypeTrait { id: String::new(), nom: "Continu fin".into(), epaisseur: 0.18, tirets: Vec::new(), invisible: false }
+    }
+
+    /// Style des traits de ce type : encre, ou transparent (alpha nul) s'il est invisible.
+    pub fn style(&self) -> Style {
+        Style { couleur: [30, 30, 30, if self.invisible { 0 } else { 255 }], epaisseur: self.epaisseur }
     }
 
     pub fn valider(&self) -> Result<(), String> {
@@ -93,7 +104,7 @@ impl TypeTrait {
 /// Types de trait du gabarit par défaut (sa section `types_traits`, contrôlée par test).
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn types_traits_standard() -> Vec<TypeTrait> {
-    let t = |id: &str, nom: &str, e: f64, tirets: &[f64]| TypeTrait { id: id.into(), nom: nom.into(), epaisseur: e, tirets: tirets.to_vec() };
+    let t = |id: &str, nom: &str, e: f64, tirets: &[f64]| TypeTrait { id: id.into(), nom: nom.into(), epaisseur: e, tirets: tirets.to_vec(), invisible: false };
     vec![
         t("trait-continu-fin", "Continu fin", 0.18, &[]),
         t("trait-continu-moyen", "Continu moyen", 0.35, &[]),
@@ -102,6 +113,7 @@ pub fn types_traits_standard() -> Vec<TypeTrait> {
         t("trait-pointilles", "Pointillés", 0.18, &[0.5, 1.0]),
         t("trait-axe", "Axe", 0.13, &[6.0, 1.0, 1.0, 1.0]),
         t("trait-cache", "Caché", 0.25, &[2.0, 1.0]),
+        TypeTrait { invisible: true, ..t("trait-invisible", "Lignes invisibles", 0.18, &[]) },
     ]
 }
 
@@ -271,72 +283,6 @@ impl AnnotationForme {
     pub fn segments_polyligne(points: usize, fermee: bool) -> usize {
         points.saturating_sub(1) + usize::from(fermee && points > 2)
     }
-}
-
-/// Remplissage d'une polyligne fermée : motif de coupe d'un matériau (premier plan, encre
-/// et arrière-plan du matériau), ou motif choisi (hachures du projet ou aplat) à l'encre
-/// gris foncé.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(tag = "source", rename_all = "snake_case")]
-pub enum RemplissageContour {
-    Materiau { materiau: String },
-    Motif { motif: MotifCoupe },
-}
-
-impl RemplissageContour {
-    /// Encre d'un motif choisi.
-    pub const ENCRE: [u8; 3] = [70, 70, 70];
-
-    pub fn libelle(&self) -> String {
-        match self {
-            Self::Materiau { materiau } => format!("Matériau : {materiau}"),
-            Self::Motif { motif } => format!("Motif : {}", motif.libelle()),
-        }
-    }
-}
-
-/// Primitives du remplissage d'un contour (mm du plan de la vue) : arrière-plan (aplat
-/// s'il n'est pas blanc, ou hachures) puis premier plan, hachures à l'échelle de la vue.
-fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour: &[[f64; 2]], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
-    use noyau::motif::{GrilleMotif, Motif, hachures_plan};
-    let (motif, encre, fond) = match r {
-        RemplissageContour::Materiau { materiau } => match p.materiau(materiau) {
-            Some(m) => (m.motif.clone(), m.encre_coupe(), Some(m.fond_coupe())),
-            None => return Vec::new(),
-        },
-        RemplissageContour::Motif { motif } => (motif.clone(), RemplissageContour::ENCRE, None),
-    };
-    let contours = vec![contour.iter().map(|q| [q[0] as f32, q[1] as f32]).collect()];
-    let tris: Vec<[[f64; 2]; 3]> = noyau::texte::trianguler(contours).iter().map(|t| t.map(|q| [q[0] as f64, q[1] as f64])).collect();
-    let couleur = |c: [u8; 3]| [c[0], c[1], c[2], 255];
-    let aplat = |c: [u8; 3]| Primitive {
-        forme: Forme::Triangles(tris.iter().map(|t| t.map(|q| pt(DVec2::from_array(q)))).collect()),
-        style: Style { couleur: couleur(c), epaisseur: 0.0 },
-        role: Role::Hachure,
-        element: None,
-    };
-    let hachures = |m: &MotifCoupe, c: [u8; 3]| -> Option<Primitive> {
-        let d = p.definition_motif(m)?;
-        let motif = Motif {
-            nom: d.nom.clone(),
-            modele: false,
-            grilles: d.lignes.iter().map(|l| GrilleMotif { angle: l.angle.to_radians(), origine: l.origine, glissement: l.glissement, decalage: l.pas, tirets: l.tirets.iter().map(|t| t.abs()).collect() }).collect(),
-        };
-        let segments = hachures_plan(&tris, &motif, echelle, 20_000);
-        Some(Primitive { forme: Forme::Segments(segments.into_iter().map(|s| s.map(|q| pt(DVec2::from_array(q)))).collect()), style: Style { couleur: couleur(c), epaisseur: 0.0 }, role: Role::Hachure, element: None })
-    };
-    let mut out = Vec::new();
-    match fond {
-        Some((MotifCoupe::Uni, c)) if c != [255, 255, 255] => out.push(aplat(c)),
-        Some((m, c)) if m != MotifCoupe::Uni => out.extend(hachures(&m, c)),
-        _ => {}
-    }
-    match motif {
-        MotifCoupe::Uni => out.push(aplat(encre)),
-        MotifCoupe::Vide | MotifCoupe::Isolation => {}
-        m => out.extend(hachures(&m, encre)),
-    }
-    out
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -614,58 +560,6 @@ fn point_cote(p: &Projet, v: &Vue, point: &PointCote) -> Option<DVec2> {
         }
     }
 }
-/// Traits d'une polyligne : segments consécutifs de même type regroupés (raccords
-/// continus), tirets reportés d'un segment à l'autre.
-fn primitives_polyligne(p: &Projet, points: &[[f64; 2]], fermee: bool, courbures: &[f64], traits: &[String], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
-    let pts: Vec<DVec2> = points.iter().map(|q| DVec2::from_array(*q)).collect();
-    // chaque segment : ses deux sommets, ou les points de son arc
-    let segments: Vec<Vec<DVec2>> = noyau::forme2d::segments_polyligne(&pts, fermee, courbures).into_iter().map(|(a, b, k)| noyau::forme2d::points_segment(a, b, k)).collect();
-    let mut out = Vec::new();
-    let mut k = 0;
-    while k < segments.len() {
-        let id = traits.get(k).map_or("", |s| s.as_str());
-        let mut fin = k + 1;
-        while fin < segments.len() && traits.get(fin).map_or("", |s| s.as_str()) == id {
-            fin += 1;
-        }
-        let t = p.type_trait(id);
-        let style = Style { couleur: [30, 30, 30, 255], epaisseur: t.epaisseur };
-        if t.tirets.is_empty() {
-            let mut l: Vec<DVec3> = segments[k..fin].iter().flat_map(|s| &s[..s.len() - 1]).map(|q| pt(*q)).collect();
-            let ferme = k == 0 && fin == segments.len() && fermee && pts.len() > 2;
-            if let (false, Some(q)) = (ferme, segments[fin - 1].last()) {
-                l.push(pt(*q));
-            }
-            out.push(Primitive { forme: Forme::Polyligne { points: l, fermee: ferme }, style, role: Role::Annotation, element: None });
-        } else {
-            let mut phase = 0.0;
-            let mut s: Vec<[DVec3; 2]> = Vec::new();
-            for w in segments[k..fin].iter().flat_map(|s| s.windows(2)) {
-                s.extend(t.decouper(w[0], w[1], echelle, &mut phase).into_iter().map(|[a, b]| [pt(a), pt(b)]));
-            }
-            out.push(Primitive { forme: Forme::Segments(s), style, role: Role::Annotation, element: None });
-        }
-        k = fin;
-    }
-    out
-}
-
-/// Traits d'une courbe (spline, cercle) déjà échantillonnée : continue, ou en tirets
-/// reportés d'un tronçon au suivant, selon son type de trait.
-fn primitives_courbe(p: &Projet, lignes: Vec<Vec<DVec2>>, type_trait: &str, echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
-    let t = p.type_trait(type_trait);
-    let style = Style { couleur: [30, 30, 30, 255], epaisseur: t.epaisseur };
-    lignes.into_iter().map(|l| {
-        let forme = if t.tirets.is_empty() {
-            Forme::Polyligne { points: l.iter().map(|q| pt(*q)).collect(), fermee: false }
-        } else {
-            let mut phase = 0.0;
-            Forme::Segments(l.windows(2).flat_map(|w| t.decouper(w[0], w[1], echelle, &mut phase)).map(|[a, b]| [pt(a), pt(b)]).collect())
-        };
-        Primitive { forme, style, role: Role::Annotation, element: None }
-    }).collect()
-}
-
 fn primitives_forme_dessin(p: &Projet, forme: &AnnotationForme, echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
     match forme {
         AnnotationForme::Ligne { debut, fin } => vec![ligne(pt(DVec2::from_array(*debut)), pt(DVec2::from_array(*fin)))],
