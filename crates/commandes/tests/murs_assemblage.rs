@@ -30,7 +30,8 @@ fn modification_type_actualise_tous_les_murs_sans_detacher_les_couches() {
     }
     let ancienne_couche = p.assemblage(&ids[0]).unwrap().couches[2].clone();
     let nouvel_hote = p.assemblage(&ids[0]).unwrap().couches[1].clone();
-    p.ouvertures.push(Ouverture { id: "ouverture-test".into(), nom: "Ouverture".into(), genre: GenreOuverture::Libre, mur: ancienne_couche, type_ouverture: None, abscisse: 2500.0, largeur: 600.0, hauteur: 1000.0, allege: 500.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+    let type_ouverture = Some(p.type_ouverture_par_defaut(GenreOuverture::Libre, 600.0, 1000.0));
+    p.ouvertures.push(Ouverture { id: "ouverture-test".into(), nom: "Ouverture".into(), genre: GenreOuverture::Libre, mur: ancienne_couche, type_ouverture, abscisse: 2500.0, largeur: 600.0, hauteur: 1000.0, allege: 500.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
     let avant = p.clone();
     let axes: Vec<_> = ids.iter().map(|id| p.trajectoire_justification(id).unwrap().0).collect();
     let t = p.types_murs.iter_mut().find(|t| t.id == "t").unwrap();

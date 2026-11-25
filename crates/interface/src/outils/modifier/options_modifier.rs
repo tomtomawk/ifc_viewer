@@ -344,7 +344,7 @@ impl Application {
                     }
                 });
                 // paramètres des familles (type, occurrence) et partagés du projet
-                let mut noms: std::collections::BTreeSet<String> = p.types_ouvertures.iter().filter_map(|t| t.modele.as_ref()).flat_map(|f| f.parametres.iter().map(|x| x.nom.clone())).collect();
+                let mut noms: std::collections::BTreeSet<String> = p.types_ouvertures.iter().map(|t| &t.modele).flat_map(|f| f.parametres.iter().map(|x| x.nom.clone())).collect();
                 noms.extend(p.parametres_partages.keys().cloned());
                 noms.extend(n.parametres.iter().cloned());
                 if !noms.is_empty() {

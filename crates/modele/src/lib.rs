@@ -858,7 +858,8 @@ pub enum GenreOuverture {
     Libre,
 }
 
-/// Type de porte ou de fenêtre : dimensions de la baie qu'il ouvre.
+/// Type de porte, de fenêtre ou d'ouverture libre : dimensions de la baie qu'il ouvre et
+/// sa famille modélisée (obligatoire ; une ouverture libre est une famille d'un seul vide).
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TypeOuverture {
     pub id: String,
@@ -866,12 +867,7 @@ pub struct TypeOuverture {
     pub genre: GenreOuverture,
     pub largeur: f64,
     pub hauteur: f64,
-    /// Famille paramétrique (fenêtre) ; absente : menuiserie générique.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub famille: Option<famille::FamilleFenetre>,
-    /// Famille modélisée (éditeur de familles) : prime sur `famille`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub modele: Option<famille::modelee::FamilleModelee>,
+    pub modele: famille::modelee::FamilleModelee,
     pub origine: Option<Origine>,
     /// Famille qui regroupe ce type dans l'arborescence ; absente : le nom du type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1281,7 +1277,7 @@ impl Projet {
         p.types_traits = g.types_traits.clone();
         p.profils = g.profils.iter().cloned().map(|mut p| { p.id = identifiant("profil", &format!("gabarit:{}", p.nom)); p }).collect();
         for t in &g.types_ouvertures {
-            p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, famille: None, modele: Some(t.famille.clone()), origine: None, famille_nom: None });
+            p.types_ouvertures.push(TypeOuverture { id: identifiant("type-ouverture", &format!("gabarit:{}", t.nom)), nom: t.nom.clone(), genre: t.famille.genre, largeur: t.largeur, hauteur: t.hauteur, modele: t.famille.clone(), origine: None, famille_nom: None });
         }
         p.types_terrains = g.types_terrains.clone();
         // types de poteaux et de poutres : profil désigné par son nom dans le gabarit
@@ -1703,7 +1699,8 @@ mod tests {
         p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
         p.types_murs.push(TypeCompose { sorte: None, id: "t".into(), nom: "200".into(), couches: vec![Couche { materiau: None, epaisseur: 200.0, ..Default::default() }], categorie: None, couches_detaillees: false, origine: None });
         p.murs.push(Mur { variante: None, phase: None, sous_projet: None, id: "m".into(), nom: "Mur".into(), type_mur: "t".into(), assemblage: None, niveau: "n".into(), decalage_bas: 0.0, haut: Haut::Libre { hauteur: 3000.0 }, axe: Axe::Droit { debut: [0.0, 0.0], fin: [5000.0, 0.0] }, origine: None });
-        p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture: None, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, valeurs: BTreeMap::new(), materiaux: BTreeMap::new(), retournee: false, inversee: false, origine: None });
+        let type_ouverture = Some(p.type_ouverture_par_defaut(GenreOuverture::Libre, 1000.0, 1200.0));
+        p.ouvertures.push(Ouverture { id: "o".into(), nom: String::new(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture, abscisse: 1500.0, largeur: 1000.0, hauteur: 1200.0, allege: 900.0, representation: None, valeurs: BTreeMap::new(), materiaux: BTreeMap::new(), retournee: false, inversee: false, origine: None });
         assert!((p.volume_mur(&p.murs[0]).unwrap() - 2.76e9).abs() < 1.0);
         let q = Projet::lire_json(&p.json().unwrap()).unwrap();
         assert_eq!(q.murs[0].axe, p.murs[0].axe);

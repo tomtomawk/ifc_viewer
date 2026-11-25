@@ -29,7 +29,7 @@ impl FamilleCatalogue {
             (Self::Cartouche(String::new()), "Cartouche standard"),
             (Self::Etiquette(String::new()), "Étiquette standard"),
         ];
-        familles.extend(p.types_ouvertures.iter().filter(|t| t.genre != GenreOuverture::Libre)
+        familles.extend(p.types_ouvertures.iter()
             .map(|t| (Self::Ouverture(t.id.clone(), t.genre), t.nom.as_str())));
         familles.extend(p.types_composants.iter().map(|t| (Self::Composant(t.id.clone()), t.nom.as_str())));
         familles.extend(p.profils.iter().map(|t| (Self::Profil(t.id.clone()), t.nom.as_str())));
@@ -181,7 +181,7 @@ impl Application {
         }
         let ids = self.selection_bim();
         let ([id], Some((p, _))) = (ids.as_slice(), &self.natif) else { return None };
-        if p.ouvertures.iter().any(|o| &o.id == id && o.genre != GenreOuverture::Libre) {
+        if p.ouvertures.iter().any(|o| &o.id == id && o.type_ouverture.is_some()) {
             Some(CibleFamille::Ouverture(id.clone()))
         } else if let Some(c) = p.composants.iter().find(|c| &c.id == id) {
             Some(CibleFamille::Catalogue(F::Composant(c.type_composant.clone())))

@@ -65,6 +65,35 @@ fn debattement(a: PointEsquisse, b: PointEsquisse, sens: f64) -> Element2DFamill
 }
 
 impl FamilleModelee {
+    /// Famille par défaut d'un genre d'ouverture : porte 1 vantail, fenêtre OF 2
+    /// vantaux, ouverture libre (un vide).
+    pub fn par_defaut(genre: crate::GenreOuverture) -> FamilleModelee {
+        match genre {
+            crate::GenreOuverture::Porte => Self::porte_1_vantail(),
+            crate::GenreOuverture::Fenetre => Self::fenetre_of_2_vantaux(),
+            crate::GenreOuverture::Libre => Self::ouverture_libre(),
+        }
+    }
+
+    /// Ouverture libre (baie, réservation) : un seul vide qui coupe le mur sur toute son
+    /// épaisseur, de la largeur et de la hauteur du type ; aucune menuiserie.
+    pub fn ouverture_libre() -> FamilleModelee {
+        use AxePlan::*;
+        let mut f = FamilleModelee::vide(CategorieFamille::Ouverture);
+        f.plans = vec![
+            fixe("Centre", X),
+            plan("Gauche", X, -450.0),
+            plan("Droite", X, 450.0),
+            hote("Extérieur", Hote::Exterieur),
+            hote("Intérieur", Hote::Interieur),
+            fixe("Bas", Z),
+            plan("Haut", Z, 2100.0),
+        ];
+        f.contraintes = vec![milieu("Gauche", "Centre", "Droite"), dist("Gauche", "Droite", LARGEUR, 9), dist("Bas", "Haut", HAUTEUR, 9)];
+        f.volumes = vec![baie()];
+        f
+    }
+
     /// Fenêtre ouvrant à la française, deux vantaux vers l'intérieur : dormant en
     /// tableau (retrait réglable, retours d'enduit et de doublage jusqu'au dormant),
     /// ouvrants à profils et battue centrale, vitrage isolant, poignée sur le vantail

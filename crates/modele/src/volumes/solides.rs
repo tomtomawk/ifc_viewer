@@ -423,12 +423,11 @@ pub fn ouverture(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
     Ok(ouverture_parts(p, o)?.into_iter().flat_map(|(_, _, _, t)| t).collect())
 }
 
-/// Menuiserie d'une ouverture par rôle (dormant, ouvrant, vitrage…) quand son type
-/// porte une famille paramétrique ; sinon une seule part (rôle dormant).
-/// Famille modélisée du type de l'ouverture.
+/// Famille modélisée du type de l'ouverture (absente : ouverture importée représentée
+/// par son maillage).
 fn famille_modelee<'a>(p: &'a Projet, o: &Ouverture) -> Option<&'a crate::famille::modelee::FamilleModelee> {
     let t = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t))?;
-    t.modele.as_ref().filter(|_| o.representation.is_none())
+    o.representation.is_none().then_some(&t.modele)
 }
 
 /// Solides résolus d'une famille modélisée placée, dans le projet : valeurs
@@ -550,68 +549,9 @@ pub fn ouverture_parts(p: &Projet, o: &Ouverture) -> Result<Vec<PartMenuiserie>,
         }
         return Ok(parts);
     }
-    let famille = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.famille.as_ref());
-    match famille {
-        Some(f) if o.representation.is_none() && o.genre == GenreOuverture::Fenetre => {
-            let (axe, e, niveau) = hote_ouverture(p, o)?;
-            let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
-            let (c, u) = repere(&axe, o.abscisse);
-            let n = u.perp();
-            let mut parts: Vec<PartMenuiserie> = Vec::new();
-            for b in f.pieces(o.largeur, o.hauteur, e) {
-                let contour = [(b.min.x, b.min.y), (b.max.x, b.min.y), (b.max.x, b.max.y), (b.min.x, b.max.y)].map(|(x, y)| (c + u * x + n * y).to_array());
-                let tris = prisme(&contour, z + b.min.z, z + b.max.z);
-                match parts.iter_mut().find(|(r, _, _, _)| *r == b.role) {
-                    Some((_, _, _, t)) => t.extend(tris),
-                    None => parts.push((b.role, None, PARTOUT, tris)),
-                }
-            }
-            Ok(parts)
-        }
-        _ => Ok(vec![(Role::Dormant, None, PARTOUT, ouverture_generique(p, o)?)]),
-    }
-}
-
-fn ouverture_generique(p: &Projet, o: &Ouverture) -> Result<Vec<Tri>, String> {
-    if let Some(m) = &o.representation {
-        return maillage(m);
-    }
-    let (axe, e, niveau) = hote_ouverture(p, o)?;
-    let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
-    if o.genre == GenreOuverture::Libre {
-        return Ok(Vec::new());
-    }
-    let (c, u) = repere(&axe, o.abscisse);
-    let n = u.perp();
-    let b = 40.0_f64.min(o.largeur / 4.0).min(o.hauteur / 4.0);
-    let mut tris = Vec::new();
-    for (x0, x1, z0, z1) in [
-        (-o.largeur / 2.0, -o.largeur / 2.0 + b, z, z + o.hauteur),
-        (o.largeur / 2.0 - b, o.largeur / 2.0, z, z + o.hauteur),
-        (
-            -o.largeur / 2.0,
-            o.largeur / 2.0,
-            z + o.hauteur - b,
-            z + o.hauteur,
-        ),
-    ] {
-        let d = e.min(80.0) / 2.0;
-        let contour =
-            [(x0, -d), (x1, -d), (x1, d), (x0, d)].map(|(x, y)| (c + u * x + n * y).to_array());
-        tris.extend(prisme(&contour, z0, z1));
-    }
-    if o.genre == GenreOuverture::Fenetre {
-        let d = e.min(80.0) / 2.0;
-        let contour = [
-            (-o.largeur / 2.0, -d),
-            (o.largeur / 2.0, -d),
-            (o.largeur / 2.0, d),
-            (-o.largeur / 2.0, d),
-        ]
-        .map(|(x, y)| (c + u * x + n * y).to_array());
-        tris.extend(prisme(&contour, z, z + b));
-    }
-    Ok(tris)
+    // ouverture importée sans famille : sa représentation lue dans la source
+    let m = o.representation.as_ref().ok_or_else(|| format!("{} : ouverture sans famille.", o.nom))?;
+    Ok(vec![(Role::Dormant, None, PARTOUT, maillage(m)?)])
 }
 
 #[cfg(test)]
@@ -655,12 +595,13 @@ pub(super) mod tests {
         p
     }
     fn baie(p: &mut Projet) {
+        let type_ouverture = Some(p.type_ouverture_par_defaut(GenreOuverture::Libre, 900.0, 2100.0));
         p.ouvertures.push(Ouverture {
             id: "o".into(),
             nom: "Porte".into(),
-            genre: GenreOuverture::Porte,
+            genre: GenreOuverture::Libre,
             mur: "m".into(),
-            type_ouverture: None,
+            type_ouverture,
             abscisse: 2000.0,
             largeur: 900.0,
             hauteur: 2100.0,

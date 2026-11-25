@@ -2,13 +2,14 @@
 use super::CategorieFamille;
 
 impl CategorieFamille {
-    pub const TOUTES: [CategorieFamille; 11] = [Self::Composant, Self::Porte, Self::Fenetre, Self::Profil, Self::Cartouche, Self::EtiquettePiece, Self::Vegetation, Self::TeteNiveau, Self::TeteQuadrillage, Self::RepereCoupe, Self::RepereElevation];
+    pub const TOUTES: [CategorieFamille; 12] = [Self::Composant, Self::Porte, Self::Fenetre, Self::Ouverture, Self::Profil, Self::Cartouche, Self::EtiquettePiece, Self::Vegetation, Self::TeteNiveau, Self::TeteQuadrillage, Self::RepereCoupe, Self::RepereElevation];
 
     pub fn libelle(self) -> &'static str {
         match self {
             Self::Composant => "Composant",
             Self::Porte => "Porte",
             Self::Fenetre => "Fenêtre",
+            Self::Ouverture => "Ouverture (vide)",
             Self::Profil => "Profil",
             Self::Cartouche => "Cartouche",
             Self::EtiquettePiece => "Étiquette de pièce",

@@ -24,8 +24,9 @@ impl RubanEdition {
         if self.ouverture_type_identique.as_ref().is_some_and(|id| !projet.types_ouvertures.iter().any(|t| &t.id == id && t.genre == genre)) {
             self.ouverture_type_identique = None;
         }
-        // porte et fenêtre : toujours une famille, la première du projet à défaut ; sans
-        // famille dans le projet, il faut en charger une
+        // toujours une famille, la première du projet à défaut ; sans famille de porte ou
+        // de fenêtre dans le projet, il faut en charger une ; une ouverture libre sans
+        // type en reçoit un à la pose (un seul vide, aux cotes du ruban)
         if self.ouverture_type_identique.is_none() && genre != GenreOuverture::Libre {
             let mut t: Vec<_> = projet.types_ouvertures.iter().filter(|t| t.genre == genre).collect();
             t.sort_by(|a, b| a.nom.cmp(&b.nom));

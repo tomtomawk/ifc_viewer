@@ -137,13 +137,8 @@ impl Projet {
                 }
         }
         for t in &self.types_ouvertures {
-            if let Some(f) = &t.famille {
-                f.valider(t.largeur, t.hauteur).map_err(|e| format!("{} : {e}", t.nom))?;
-            }
             // famille modélisée : contrôlée dans un mur d'essai de 300 mm
-            if let Some(f) = &t.modele {
-                f.valider(t.largeur, t.hauteur, 300.0).map_err(|e| format!("{} : {e}", t.nom))?;
-            }
+            t.modele.valider(t.largeur, t.hauteur, 300.0).map_err(|e| format!("{} : {e}", t.nom))?;
         }
         // hôte d'une ouverture : mur, ou assemblage à première couche, avec son type
         // (mêmes refus que `solides::hote`)
@@ -170,6 +165,10 @@ impl Projet {
             }
             if !o.valeurs.values().all(|v| v.is_finite()) || !self.parametres_partages.values().all(|v| v.is_finite()) {
                 return Err("Ouverture : valeur de paramètre non finie.".into());
+            }
+            // toute ouverture est une famille, sauf une ouverture importée avec son maillage
+            if o.type_ouverture.is_none() && o.representation.is_none() {
+                return Err(format!("{} : ouverture sans type (famille).", o.nom));
             }
             if let Some(t) = &o.type_ouverture
                 && !self.types_ouvertures.iter().any(|x| &x.id == t) {

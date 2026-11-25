@@ -242,12 +242,14 @@ pub fn convertir_modele(m: &IfcModel, geometries: &HashMap<Id, Vec<[DVec3; 3]>>,
                 consommes.insert(f);
             }
             let rep = remplissage.map(tris).filter(|x| !x.is_empty()).map(|x| modele::Maillage::depuis_triangles(x));
+            // sans menuiserie lue : famille du genre (ouverture libre : un vide)
+            let type_ouverture = rep.is_none().then(|| c.projet.type_ouverture_par_defaut(genre, s1 - s0, z1 - z0));
             c.projet.ouvertures.push(Ouverture {
                 id: ident("ouverture", source),
                 nom: m.name(source),
                 genre,
                 mur: mid.clone(),
-                type_ouverture: None,
+                type_ouverture,
                 abscisse: (s0 + s1) / 2.0,
                 largeur: s1 - s0,
                 hauteur: z1 - z0,

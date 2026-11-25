@@ -184,7 +184,7 @@ pub struct Retours {
 /// Calcule les retours avec l'hôte élargi déjà calculé, ou le calcule si absent.
 pub fn retours_avec(p: &Projet, o: &Ouverture, id: &str, hote: Option<&Result<HoteElargi, String>>) -> Result<Retours, String> {
     let vide = Retours { retirer: Vec::new(), ajouter: Vec::new() };
-    let Some(f) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref()).filter(|_| o.representation.is_none()) else {
+    let Some(f) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).map(|t| &t.modele).filter(|_| o.representation.is_none()) else {
         return Ok(vide);
     };
     let h = match hote { Some(h) => h.clone()?, None => hote_elargi(p, o)? };
@@ -290,7 +290,7 @@ mod tests {
         let mut f = FamilleModelee::gabarit_fenetre();
         f.plans.push(PlanRef { nom: "Retour extérieur".into(), axe: AxePlan::Y, position: 20.0, fixe: true, hote: None });
         f.plans.push(PlanRef { nom: "Retour intérieur".into(), axe: AxePlan::Y, position: -120.0, fixe: true, hote: None });
-        p.types_ouvertures.push(TypeOuverture { id: "f".into(), nom: "OF".into(), genre: GenreOuverture::Fenetre, largeur: 1200.0, hauteur: 1350.0, famille: None, modele: Some(f), origine: None, famille_nom: None });
+        p.types_ouvertures.push(TypeOuverture { id: "f".into(), nom: "OF".into(), genre: GenreOuverture::Fenetre, largeur: 1200.0, hauteur: 1350.0, modele: f, origine: None, famille_nom: None });
         p.ouvertures.push(Ouverture { id: "o".into(), nom: "F".into(), genre: GenreOuverture::Fenetre, mur: "b".into(), type_ouverture: Some("f".into()), abscisse: 3000.0, largeur: 1200.0, hauteur: 1350.0, allege: 900.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
         p.verifier().unwrap();
         p

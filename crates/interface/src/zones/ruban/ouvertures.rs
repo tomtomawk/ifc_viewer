@@ -27,7 +27,7 @@ fn aide_genre(g: GenreOuverture) -> &'static str {
     match g {
         GenreOuverture::Porte => "Porte : vantail posé au sol dans un mur hôte.",
         GenreOuverture::Fenetre => "Fenêtre : baie à une hauteur d'allège dans un mur hôte.",
-        GenreOuverture::Libre => "Libre : réservation ou baie sans menuiserie.",
+        GenreOuverture::Libre => "Libre : réservation ou baie sans menuiserie (famille d'un seul vide).",
     }
 }
 
@@ -58,8 +58,8 @@ pub(crate) fn vignette_ouverture(p: &egui::Painter, r: egui::Rect, genre: GenreO
 
 impl RubanEdition {
     /// Sélecteur de type d'ouverture. `actuel` : type courant (None : générique) ;
-    /// `categories` : onglets proposés ; `generique` : ligne « Générique » proposée
-    /// dans l'onglet Libre (portes et fenêtres ont toujours une famille). En fin de
+    /// `categories` : onglets proposés ; `generique` : dans l'onglet Libre, ligne
+    /// « Nouveau type aux cotes du ruban » (type d'un seul vide créé à la pose). En fin de
     /// liste : charger une famille depuis un fichier.
     pub fn selecteur_type_ouverture(&mut self, ui: &mut egui::Ui, projet: &modele::Projet, genre: GenreOuverture, actuel: Option<&str>, categories: &[GenreOuverture], generique: bool) -> ChoixOuverture {
         let mut sortie = ChoixOuverture::default();
@@ -72,7 +72,7 @@ impl RubanEdition {
         let lignes_de = |g: GenreOuverture| -> Vec<Ligne> {
             let mut v: Vec<Ligne> = Vec::new();
             if generique && g == GenreOuverture::Libre {
-                v.push((None, "Générique (cotes du ruban)".into(), 0.0, 0.0));
+                v.push((None, "Nouveau type aux cotes du ruban".into(), 0.0, 0.0));
             }
             let mut t: Vec<_> = projet.types_ouvertures.iter().filter(|t| t.genre == g).collect();
             t.sort_by(|a, b| a.nom.cmp(&b.nom));
@@ -84,7 +84,7 @@ impl RubanEdition {
         // Sélecteur fermé : vignette, catégorie · nom, cotes.
         let (nom, cotes) = match type_actuel {
             Some(t) => (t.nom.clone(), Some(format!("{} × {}", unite.afficher(t.largeur), unite.afficher(t.hauteur)))),
-            None if genre_actuel == GenreOuverture::Libre => ("Générique (cotes du ruban)".into(), None),
+            None if genre_actuel == GenreOuverture::Libre => ("Nouveau type aux cotes du ruban".into(), None),
             None => ("Aucun type : charger une famille".into(), None),
         };
         let (l, h) = type_actuel.map_or(if genre_actuel == GenreOuverture::Porte { (900.0, 2150.0) } else { (1200.0, 1350.0) }, |t| (t.largeur, t.hauteur));
@@ -108,7 +108,7 @@ Type de l'ouverture : il impose ses cotes et sa famille."), Some(&vignette));
                     etiquette: None,
                     sous_titre: None,
                     detail: ligne.0.as_ref().map(|_| format!("{} × {}", unite.afficher(ligne.2), unite.afficher(ligne.3))),
-                    actions: if generique && onglet != GenreOuverture::Libre && ligne.0.is_some() { modifier } else { &[] },
+                    actions: if generique && ligne.0.is_some() { modifier } else { &[] },
                 };
                 let mut v = |ui: &mut egui::Ui, r: egui::Rect| {
                     if ligne.0.is_some() {
@@ -122,9 +122,7 @@ Type de l'ouverture : il impose ses cotes et sa famille."), Some(&vignette));
                     sortie.type_choisi = Some((ligne.0.clone(), onglet));
                 }
             }
-            if onglet != GenreOuverture::Libre {
-                sortie.charger = selecteur::ligne_ajout(ui, "Charger une famille…");
-            }
+            sortie.charger = selecteur::ligne_ajout(ui, "Charger une famille…");
         });
         if let Some(c) = choix_onglet {
             self.categorie_ouverture = Some(c);

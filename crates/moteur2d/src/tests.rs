@@ -524,7 +524,8 @@ fn isolant_en_plan_centre_sur_l_axe_de_la_couche() {
     let options = ParametresMur { type_mur: Some("isolant".into()), ..Default::default() };
     let mur = projet.ajouter_mur([0.0, 0.0], [6000.0, 0.0], &options).unwrap();
     projet.ajouter_mur([6000.0, 0.0], [6000.0, 4000.0], &options).unwrap();
-    projet.ouvertures.push(modele::Ouverture { id: "baie".into(), nom: "Baie".into(), genre: modele::GenreOuverture::Libre, mur, type_ouverture: None, abscisse: 3000.0, largeur: 1000.0, hauteur: 2100.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+    let type_ouverture = Some(projet.type_ouverture_par_defaut(modele::GenreOuverture::Libre, 1000.0, 2100.0));
+    projet.ouvertures.push(modele::Ouverture { id: "baie".into(), nom: "Baie".into(), genre: modele::GenreOuverture::Libre, mur, type_ouverture, abscisse: 3000.0, largeur: 1000.0, hauteur: 2100.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
     projet.completer_materiaux();
     let scene = maillage::depuis_natif(&projet, std::path::Path::new("test.modele.json")).unwrap();
     let plan = Vec3::NEG_Z.extend((1.0 - scene.origin.z) as f32);

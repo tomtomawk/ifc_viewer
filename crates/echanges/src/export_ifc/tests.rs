@@ -85,8 +85,8 @@ fn terrain_et_limite_dans_le_site() {
 fn un_type_ifc_par_type_utilise() {
     let json = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_native.bem")).unwrap();
     let mut p = Projet::lire_json(&json).unwrap();
-    // une porte typée, une fenêtre sans type
-    p.types_ouvertures.push(TypeOuverture { id: "porte90".into(), nom: "Porte 90".into(), genre: GenreOuverture::Porte, largeur: 900.0, hauteur: 2100.0, famille: None, modele: None, origine: None, famille_nom: None });
+    // une porte d'un nouveau type ; la fenêtre garde le sien (toute ouverture est typée)
+    p.types_ouvertures.push(TypeOuverture { id: "porte90".into(), nom: "Porte 90".into(), genre: GenreOuverture::Porte, largeur: 900.0, hauteur: 2100.0, modele: modele::famille::modelee::FamilleModelee::par_defaut(modele::GenreOuverture::Porte), origine: None, famille_nom: None });
     let porte = p.ouvertures.iter_mut().find(|o| o.genre == GenreOuverture::Porte).unwrap();
     porte.type_ouverture = Some("porte90".into());
     let s = exporter(&p).unwrap();
@@ -94,7 +94,7 @@ fn un_type_ifc_par_type_utilise() {
     let types_murs: std::collections::BTreeSet<_> = p.murs.iter().map(|m| &m.type_mur).collect();
     assert_eq!(du_type(&m, "IFCWALLTYPE").count(), types_murs.len());
     assert_eq!(du_type(&m, "IFCDOORTYPE").count(), 1);
-    assert_eq!(du_type(&m, "IFCWINDOWTYPE").count(), 0);
+    assert_eq!(du_type(&m, "IFCWINDOWTYPE").count(), 1);
     let dalles: std::collections::BTreeSet<_> = p.dalles.iter().map(|d| (d.sorte == SorteDalle::Toiture, &d.type_dalle)).collect();
     assert_eq!(du_type(&m, "IFCSLABTYPE").count() + du_type(&m, "IFCROOFTYPE").count() + du_type(&m, "IFCCOVERINGTYPE").count(), dalles.len());
     // chaque mur, dalle et porte est typé, sous la classe de type qui lui correspond
@@ -106,7 +106,7 @@ fn un_type_ifc_par_type_utilise() {
     }
     assert_eq!(m.name(du_type(&m, "IFCDOORTYPE").next().unwrap()), "Porte 90");
     // un seul IfcRelDefinesByType par type
-    assert_eq!(du_type(&m, "IFCRELDEFINESBYTYPE").count(), types_murs.len() + dalles.len() + 1);
+    assert_eq!(du_type(&m, "IFCRELDEFINESBYTYPE").count(), types_murs.len() + dalles.len() + 2);
 }
 
 /// Groupe de propriétés ou de quantités `nom` d'un produit : (propriété, valeur affichée).
@@ -128,8 +128,12 @@ fn jeux_de_proprietes_communs() {
             assert_eq!(groupe(&m, id, jeu).expect(jeu)[0].1, p.type_dalle(&d.type_dalle).unwrap().nom);
         }
     }
-    // ouvertures sans type : aucune propriété connue, pas de jeu
-    assert!(du_type(&m, "IFCDOOR").all(|id| groupe(&m, id, "Pset_DoorCommon").is_none()));
+    // portes : référence au nom de leur type (toute ouverture a un type)
+    for id in du_type(&m, "IFCDOOR") {
+        let o = p.ouvertures.iter().find(|x| x.nom == m.name(id)).unwrap();
+        let t = p.types_ouvertures.iter().find(|t| Some(&t.id) == o.type_ouverture.as_ref()).unwrap();
+        assert_eq!(groupe(&m, id, "Pset_DoorCommon").expect("Pset_DoorCommon")[0].1, t.nom);
+    }
     assert!(!du_type(&m, "IFCPROPERTYSINGLEVALUE").any(|id| m.get(id).unwrap().arg(0).as_str() == Some("IsExternal")));
 }
 

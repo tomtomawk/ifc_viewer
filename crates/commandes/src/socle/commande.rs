@@ -84,6 +84,7 @@ pub enum Commande {
     Ouverture {
         mur: String,
         genre: GenreOuverture,
+        /// None : type du genre aux cotes demandées, créé au besoin (famille du catalogue).
         type_ouverture: Option<String>,
         abscisse: f64,
         largeur: f64,

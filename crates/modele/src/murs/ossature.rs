@@ -337,7 +337,8 @@ mod tests {
     #[test]
     fn chevetre_autour_d_une_ouverture() {
         let (mut p, id) = projet();
-        p.ouvertures.push(Ouverture { id: "f".into(), nom: "Fenêtre".into(), genre: GenreOuverture::Libre, mur: id.clone(), type_ouverture: None, abscisse: 1500.0, largeur: 800.0, hauteur: 1000.0, allege: 900.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        let type_ouverture = Some(p.type_ouverture_par_defaut(GenreOuverture::Libre, 800.0, 1000.0));
+        p.ouvertures.push(Ouverture { id: "f".into(), nom: "Fenêtre".into(), genre: GenreOuverture::Libre, mur: id.clone(), type_ouverture, abscisse: 1500.0, largeur: 800.0, hauteur: 1000.0, allege: 900.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
         let m = p.murs.iter().find(|m| m.id == id).unwrap();
         let r = membrures_mur(&p, m);
         // montants de part et d'autre, linteau et appui

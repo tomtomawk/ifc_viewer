@@ -209,7 +209,7 @@ impl Application {
                 ui.horizontal(|ui| { ui.label(nom); change|=ui.add_enabled(o.representation.is_none() || matches!(nom,"Abscisse"|"Allège"),egui::DragValue::new(v).dimensions().speed(10.0)).changed(); });
             }
             // paramètres d'occurrence de la famille : propres à cette ouverture
-            if let Some(f) = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).and_then(|t| t.modele.as_ref()) {
+            if let Some(f) = o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).map(|t| &t.modele) {
                 use modele::famille::modelee::{GenreParametre, Portee};
                 let occurrences: Vec<&modele::famille::modelee::Parametre> = f.parametres.iter().filter(|p| p.portee == Portee::Occurrence).collect();
                 if !occurrences.is_empty() {
@@ -262,7 +262,7 @@ impl Application {
                     }
                 }
             }
-            if o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).is_some_and(|t| t.modele.is_some()) {
+            if o.type_ouverture.as_ref().and_then(|t| projet.types_ouvertures.iter().find(|x| &x.id == t)).is_some() {
                 ui.horizontal(|ui| {
                     change |= ui.checkbox(&mut o.retournee, "Retourner").on_hover_text("Échange intérieur et extérieur : sens d'ouverture").changed();
                     change |= ui.checkbox(&mut o.inversee, "Inverser").on_hover_text("Échange gauche et droite : main de la porte").changed();

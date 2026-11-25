@@ -256,7 +256,7 @@ fn champs_occurrence(
             .types_ouvertures
             .iter()
             .find(|t| Some(&t.id) == o.type_ouverture.as_ref())
-            .and_then(|t| t.modele.as_ref())
+            .map(|t| &t.modele)
         else {
             continue;
         };

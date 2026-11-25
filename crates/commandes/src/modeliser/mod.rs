@@ -176,6 +176,12 @@ impl ExecutionModeliser for Projet {
                 allege,
             } => {
                 let (axe, _, _) = solides::hote(self, &mur)?;
+                // sans type : celui du genre aux cotes demandées (famille du catalogue)
+                let type_ouverture = Some(match type_ouverture {
+                    Some(t) => t,
+                    None if [largeur, hauteur].iter().all(|x| x.is_finite() && *x > 0.0) => self.type_ouverture_par_defaut(genre, largeur, hauteur),
+                    None => return Err("L’ouverture doit avoir des dimensions positives.".into()),
+                });
                 // un type impose ses cotes
                 let type_choisi = type_ouverture.as_ref().map(|t| self.types_ouvertures.iter().find(|x| &x.id == t).ok_or("Type d'ouverture absent.")).transpose()?;
                 let (largeur, hauteur) = type_choisi.map_or((largeur, hauteur), |t| (t.largeur, t.hauteur));

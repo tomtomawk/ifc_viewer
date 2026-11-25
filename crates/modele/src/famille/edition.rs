@@ -3,6 +3,25 @@ use crate::*;
 use super::modelee::{FichierFamille, GenreParametre, Portee};
 
 impl Projet {
+    /// Type d'ouverture du genre `genre` aux cotes `largeur` × `hauteur` : un type
+    /// existant du genre aux mêmes cotes, sinon un nouveau type tiré de la famille du
+    /// catalogue (porte 1 vantail, fenêtre OF 2 vantaux, ouverture libre : un vide).
+    /// Rend son identifiant.
+    pub fn type_ouverture_par_defaut(&mut self, genre: GenreOuverture, largeur: f64, hauteur: f64) -> String {
+        use super::modelee::FamilleModelee;
+        if let Some(t) = self.types_ouvertures.iter().find(|t| t.genre == genre && t.largeur == largeur && t.hauteur == hauteur) {
+            return t.id.clone();
+        }
+        let famille = FamilleModelee::par_defaut(genre);
+        let base = match genre { GenreOuverture::Porte => "Porte", GenreOuverture::Fenetre => "Fenêtre", GenreOuverture::Libre => "Ouverture" };
+        let u = crate::unite::unite();
+        let cote = |v: f64| u.afficher(v).split_whitespace().next().unwrap_or_default().to_string();
+        let nom = self.nom_type_libre(&format!("{base} {}×{}", cote(largeur), cote(hauteur)), None);
+        let id = noyau::uuid::uuid();
+        self.types_ouvertures.push(TypeOuverture { id: id.clone(), nom, genre, largeur, hauteur, modele: famille, origine: None, famille_nom: Some(base.into()) });
+        id
+    }
+
     /// Copie d'un type d'ouverture dans la même famille, sous un nom libre dérivé de `base`.
     pub fn avec_copie_type_ouverture(&self, id: &str, base: &str) -> Result<(Projet, String), String> {
         let mut q = self.clone();
@@ -70,10 +89,9 @@ impl Projet {
                 nom,
                 f.largeur,
                 f.hauteur,
-                Some(f.famille.clone()),
+                f.famille.clone(),
                 f.famille.genre,
             );
-            t.famille = None;
             id.to_string()
         } else {
             let id = noyau::uuid::uuid();
@@ -84,8 +102,7 @@ impl Projet {
                 genre: f.famille.genre,
                 largeur: f.largeur,
                 hauteur: f.hauteur,
-                famille: None,
-                modele: Some(f.famille.clone()),
+                modele: f.famille.clone(),
                 origine: None,
                 famille_nom: None,
             });

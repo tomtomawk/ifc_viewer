@@ -11,7 +11,6 @@
 //! `cargo run --release -p echanges --example maison_exemple [sortie.bem]`
 use commandes::{Commande, Execution};
 use modele::creation::{Implantation, ParametresDalle, ParametresMur};
-use modele::famille::{FamilleFenetre, Vantail};
 use modele::*;
 use serde_json::{json, Value};
 
@@ -124,7 +123,7 @@ fn types_supplementaires(p: &mut Projet) -> R<()> {
         categorie: None, couches_detaillees: true, origine: None });
     p.completer_materiaux();
 
-    // menuiseries : déclinaisons des familles du gabarit, et fenêtres paramétriques
+    // menuiseries : déclinaisons des familles du gabarit
     let gab = |nom: &str| p.types_ouvertures.iter().find(|t| t.nom == nom).cloned().ok_or(format!("type absent : {nom}"));
     let decliner = |base: &TypeOuverture, id: &str, nom: &str, l: f64, h: f64| TypeOuverture { id: id.into(), nom: nom.into(), largeur: l, hauteur: h, famille_nom: Some(base.nom.clone()), ..base.clone() };
     let of2 = gab("Fenêtre OF 2 vantaux")?;
@@ -134,18 +133,15 @@ fn types_supplementaires(p: &mut Projet) -> R<()> {
         decliner(&porte, "type-ouv-porte-83", "Porte intérieure 83×204", 830.0, 2040.0),
         decliner(&porte, "type-ouv-porte-73", "Porte intérieure 73×204", 730.0, 2040.0),
     ];
-    let fen = |id: &str, nom: &str, l: f64, h: f64, f: FamilleFenetre| TypeOuverture { id: id.into(), nom: nom.into(), genre: GenreOuverture::Fenetre, largeur: l, hauteur: h, famille: Some(f), modele: None, origine: None, famille_nom: None };
-    let anthracite = [62, 66, 70];
-    nouveaux.push(fen("type-ouv-coulissant", "Baie coulissante 240×215", 2400.0, 2150.0,
-        FamilleFenetre { vantaux: vec![Vantail::Coulissant, Vantail::Coulissant], appui: 0.0, dormant: 70.0, couleur: anthracite, ..Default::default() }));
-    nouveaux.push(fen("type-ouv-ob-60x75", "Fenêtre oscillo-battante 60×75", 600.0, 750.0,
-        FamilleFenetre { vantaux: vec![Vantail::OscilloBattantDroite], couleur: anthracite, ..Default::default() }));
-    nouveaux.push(fen("type-ouv-fixe-180x60", "Châssis fixe 180×60", 1800.0, 600.0,
-        FamilleFenetre { vantaux: vec![Vantail::Fixe], couleur: anthracite, ..Default::default() }));
-    nouveaux.push(fen("type-ouv-imposte-90x215", "Châssis vitré à imposte 90×215", 900.0, 2150.0,
-        FamilleFenetre { vantaux: vec![Vantail::Fixe], imposte: 500.0, soubassement: 900.0, appui: 0.0, couleur: anthracite, ..Default::default() }));
+    // autres menuiseries : familles du gabarit à d'autres cotes, couleur anthracite
+    let pf = gab("Porte-fenêtre 2 vantaux, tableaux et seuil")?;
+    let anthracite = |mut t: TypeOuverture| { t.modele.couleur = [62, 66, 70]; t };
+    nouveaux.push(anthracite(decliner(&pf, "type-ouv-coulissant", "Baie coulissante 240×215", 2400.0, 2150.0)));
+    nouveaux.push(anthracite(decliner(&of2, "type-ouv-ob-60x75", "Fenêtre oscillo-battante 60×75", 600.0, 750.0)));
+    nouveaux.push(anthracite(decliner(&of2, "type-ouv-fixe-180x60", "Châssis fixe 180×60", 1800.0, 600.0)));
+    nouveaux.push(anthracite(decliner(&pf, "type-ouv-imposte-90x215", "Châssis vitré à imposte 90×215", 900.0, 2150.0)));
+    nouveaux.push(anthracite(decliner(&porte, "type-ouv-entree", "Porte d'entrée pleine 100×215", 1000.0, 2150.0)));
     p.types_ouvertures.extend(nouveaux);
-    p.types_ouvertures.push(TypeOuverture { id: "type-ouv-entree".into(), nom: "Porte d'entrée pleine 100×215".into(), genre: GenreOuverture::Porte, largeur: 1000.0, hauteur: 2150.0, famille: None, modele: None, origine: None, famille_nom: None });
     Ok(())
 }
 

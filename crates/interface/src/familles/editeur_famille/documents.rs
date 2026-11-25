@@ -222,7 +222,7 @@ impl Application {
         let u = modele::unite::unite();
         let (largeur, hauteur) = t.map_or((largeur, hauteur), |t| (t.largeur, t.hauteur));
         let genre = t.map_or(genre, |t| t.genre);
-        let famille = t.and_then(|t| t.modele.clone()).unwrap_or_else(|| FamilleModelee::gabarit(genre));
+        let famille = t.map(|t| t.modele.clone()).unwrap_or_else(|| FamilleModelee::gabarit(genre));
         let prefixe = if famille.genre == GenreOuverture::Porte { "Porte" } else { "Fenêtre" };
         let partages = projet.map(|p| p.parametres_partages.clone()).unwrap_or_default();
         let materiaux_projet = projet.map(|p| p.materiaux.iter().map(|m| (m.nom.clone(), m.couleur)).collect()).unwrap_or_default();
@@ -391,7 +391,7 @@ impl Application {
             self.status = "Famille de profil chargée dans le projet.".into();
             return Ok(id);
         }
-        if ed.famille.genre == GenreOuverture::Libre {
+        if matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Composant | modele::famille::modelee::CategorieFamille::Vegetation) {
             // famille de composant : son type (créé ou mis à jour), donc tous ses composants
             let id = if nouveau { String::new() } else { ed.type_id.clone().unwrap_or_default() };
             let t = modele::TypeComposant { id, nom: ed.nom.trim().into(), largeur: ed.largeur, profondeur: ed.epaisseur, hauteur: ed.hauteur, modele: ed.famille.clone() };
@@ -740,7 +740,7 @@ impl Application {
         if f.nom.trim().is_empty() { return Err("Nom de famille vide.".into()); }
         let p = &self.natif.as_ref().ok_or("Aucun projet natif.")?.0;
         let existe = |nom: &str| match f.famille.categorie {
-            C::Porte | C::Fenetre => p.types_ouvertures.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
+            C::Porte | C::Fenetre | C::Ouverture => p.types_ouvertures.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Composant | C::Vegetation => p.types_composants.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Profil => p.profils.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
             C::Cartouche => nom.eq_ignore_ascii_case(modele::documentation::NOM_CARTOUCHE_STANDARD) || p.familles_cartouches.iter().any(|x| x.nom.eq_ignore_ascii_case(nom)),
@@ -773,10 +773,10 @@ impl Application {
                 let type_composant = modele::TypeComposant { id: String::new(), nom: f.nom.clone(), largeur: f.largeur, profondeur: f.profondeur, hauteur: f.hauteur, modele: f.famille.clone() };
                 self.executer_bim(commandes::Commande::TypeComposant { type_composant })?.into_iter().next().ok_or("Composant non créé.")?
             }
-            C::Porte | C::Fenetre => {
+            C::Porte | C::Fenetre | C::Ouverture => {
                 let mut projet = self.natif.as_ref().ok_or("Aucun projet ouvert.")?.0.clone();
                 let id = noyau::uuid::uuid();
-                projet.types_ouvertures.push(modele::TypeOuverture { id: id.clone(), nom: f.nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, famille: None, modele: Some(f.famille.clone()), origine: None, famille_nom: None });
+                projet.types_ouvertures.push(modele::TypeOuverture { id: id.clone(), nom: f.nom.clone(), genre: f.famille.genre, largeur: f.largeur, hauteur: f.hauteur, modele: f.famille.clone(), origine: None, famille_nom: None });
                 self.appliquer_projet(projet)?;
                 id
             }

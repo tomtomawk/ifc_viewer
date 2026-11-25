@@ -164,7 +164,7 @@ fn panneau_selection(ui: &mut egui::Ui, ed: &mut EditeurFamille, projet: &modele
         ui.label("Type");
         ui.text_edit_singleline(&mut ed.nom);
         ui.end_row();
-        let composant = ed.famille.genre == GenreOuverture::Libre;
+        let composant = matches!(ed.famille.categorie, modele::famille::modelee::CategorieFamille::Composant | modele::famille::modelee::CategorieFamille::Vegetation);
         ui.label(LARGEUR).on_hover_text(if composant { "Paramètre de type : largeur du composant (entre Gauche et Droite)" } else { "Paramètre de type : largeur de la baie" });
         ui.add(egui::DragValue::new(&mut ed.largeur).speed(10.0).range(10.0..=20_000.0).dimensions());
         ui.end_row();

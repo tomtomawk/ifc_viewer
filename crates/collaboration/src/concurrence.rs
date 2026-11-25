@@ -227,23 +227,16 @@ fn emprise(k: &str, v: &Value, o: &Objets) -> Option<Zone> {
             }
         }
         "ouvertures" => {
-            // Toute modification d'hôte est observée ; les familles à géométrie
-            // arbitraire restent conservatrices tant qu'une emprise n'est pas prouvée.
+            // Toute modification d'hôte est observée ; la famille (toute ouverture en a
+            // une) reste dans la baie à 1 m près (appui, débattement, retours).
             if let Some(m) = v.get("representation").filter(|m| !m.is_null()) {
                 points(m.get("sommets")?, &mut p);
             } else {
-                if let Some(id) = v.get("type_ouverture").and_then(Value::as_str)
-                    && o.get(&format!("types_ouvertures/{id}"))
-                        .and_then(|t| t.get("modele"))
-                        .is_some_and(|m| !m.is_null())
-                    {
-                        return None;
-                    }
                 let hote = v.get("mur")?.as_str()?;
                 let cle = cle_id(o, hote)?;
                 let z = emprise(&cle, o.get(&cle)?, o)?;
                 p.extend([[z.0[0], z.0[1]], [z.0[2], z.0[3]]]);
-                marge += v.get("largeur")?.as_f64()?.max(v.get("hauteur")?.as_f64()?);
+                marge += v.get("largeur")?.as_f64()?.max(v.get("hauteur")?.as_f64()?) + 1000.0;
             }
         }
         "dalles" => points(v.get("contours")?, &mut p),

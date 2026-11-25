@@ -372,7 +372,7 @@ fn menuiserie() -> Materiau {
 /// Catégorie d'utilisation d'un document de famille unique.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum CategorieFamille { Composant, Porte, Fenetre, Profil, Cartouche, EtiquettePiece, Vegetation, TeteNiveau, TeteQuadrillage, RepereCoupe, RepereElevation }
+pub enum CategorieFamille { Composant, Porte, Fenetre, Ouverture, Profil, Cartouche, EtiquettePiece, Vegetation, TeteNiveau, TeteQuadrillage, RepereCoupe, RepereElevation }
 
 
 /// Nom du paramètre texte qui porte la référence de la géométrie de rendu (style

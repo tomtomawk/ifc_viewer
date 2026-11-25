@@ -220,7 +220,8 @@ mod tests {
         p.murs[0].variante = Some(b.clone());
         p.contextes_vues.insert("vue".into(), FiltresContextes { variante: Some(b.clone()), ..Default::default() });
         p.murs[0].phase = Some("Projet".into());
-        p.ouvertures.push(modele::Ouverture { id: "porte".into(), nom: "Porte".into(), genre: modele::GenreOuverture::Libre, mur: mur.clone(), type_ouverture: None, abscisse: 1000.0, largeur: 600.0, hauteur: 2000.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        let type_ouverture = Some(p.type_ouverture_par_defaut(modele::GenreOuverture::Libre, 600.0, 2000.0));
+        p.ouvertures.push(modele::Ouverture { id: "porte".into(), nom: "Porte".into(), genre: modele::GenreOuverture::Libre, mur: mur.clone(), type_ouverture, abscisse: 1000.0, largeur: 600.0, hauteur: 2000.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
         p.demolitions.insert(mur.clone(), "Démolition".into());
         let mut filtre = FiltresContextes { phase: Some("Projet".into()), sous_projet: None, variante: Some(a.clone()) };
         assert!(p.elements_masques_contextes(&filtre).contains(&mur));

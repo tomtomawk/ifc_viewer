@@ -217,7 +217,8 @@ fn champs(ui: &mut egui::Ui, p: &Projet, t: &mut TypeEdite) {
                 // paramètres de type de la famille : valeur numérique éditable, formule
                 // affichée telle quelle
                 use modele::famille::modelee::{GenreParametre, Portee};
-                if let Some(f) = t.modele.as_mut() {
+                {
+                    let f = &mut t.modele;
                     for par in f.parametres.iter_mut().filter(|x| x.portee == Portee::Type && x.genre == GenreParametre::Longueur) {
                         ui.label(&par.nom);
                         match par.formule.trim().replace(',', ".").parse::<f64>() {
@@ -475,7 +476,14 @@ mod tests {
             let apres = boites(&q);
             let (nom, n) = nom_et_occurrences(p, &cle).unwrap();
             let occ: Vec<Vec<String>> = ids.iter().filter(|i| type_de(p, i).map(|c| c.texte()) == Some(cle.texte()))
-                .map(|i| p.assemblage(i).map_or_else(|| vec![i.clone()], |a| a.couches.clone())).collect();
+                .map(|i| match p.ouvertures.iter().find(|o| &o.id == i && o.genre == modele::GenreOuverture::Libre) {
+                    // ouverture libre : un vide, rien à dessiner ; c'est son mur qui change
+                    Some(o) => {
+                        let hote = p.murs.iter().find(|m| m.id == o.mur).and_then(|m| m.assemblage.clone()).unwrap_or_else(|| o.mur.clone());
+                        p.assemblage(&hote).map_or_else(|| vec![hote.clone()], |a| a.couches.clone())
+                    }
+                    None => p.assemblage(i).map_or_else(|| vec![i.clone()], |a| a.couches.clone()),
+                }).collect();
             assert_eq!(occ.len(), n, "{nom}");
             for o in &occ {
                 assert!(o.iter().any(|s| avant.contains_key(s)), "{nom} : {o:?} absent de la scène");

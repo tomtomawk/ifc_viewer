@@ -227,7 +227,8 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   d'annotation en cours de tracé. Pour le terrain, les altitudes restent associées aux
   sommets déplacés. Pour les lignes d'escalier et de garde-corps, le nombre de sommets
   est conservé pendant cette modification.
-- **Ouverture** place une porte, une fenêtre ou une ouverture libre par clic sur un mur ou par
+- **Ouverture** place une porte, une fenêtre ou une ouverture libre (famille d'un seul
+  vide qui coupe le mur ; toute ouverture est une famille) par clic sur un mur ou par
   abscisse depuis son départ. Au survol du mur, la baie s’affiche à ses dimensions de
   pose. Le tracé est rouge si elle dépasse une extrémité du mur. Une ouverture
   d’assemblage perce toutes ses couches. Une
@@ -557,9 +558,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   de ses valeurs d'occurrence et des paramètres partagés du projet (longueurs en mm,
   oui/non, nom du matériau) ; ces colonnes distinguent les groupes.
 - **Choix du type au placement** : l'outil Ouverture affiche en tête de Propriétés
-  des onglets Porte / Fenêtre / Libre et le type à placer (générique : cotes du
-  ruban) ; un type impose ses cotes, son nom et sa famille ; l'outil garde le
-  dernier type choisi.
+  des onglets Porte / Fenêtre / Libre et le type à placer ; un type impose ses
+  cotes, son nom et sa famille ; l'outil garde le dernier type choisi. Onglet
+  Libre : « Nouveau type aux cotes du ruban » crée à la pose un type « Ouverture
+  L×H » (famille d'un seul vide) ; le gabarit livre « Ouverture libre 90 × 210 ».
+  Une commande `ouverture` sans type reçoit le type du genre aux mêmes cotes, créé
+  au besoin depuis le catalogue (porte 1 vantail, fenêtre OF 2 vantaux, vide).
 - **Escalier** (Modéliser) : la ligne de foulée se trace avec le moteur du dessin 2D
   dans le plan ouvert (départ, un sommet par palier, arrivée ; Entrée ou clic droit
   pour finir) : droit, quart tournant ou demi-tournant selon le tracé, palier carré de
