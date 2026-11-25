@@ -342,14 +342,18 @@ impl Application {
                 ui.label("Nom");
                 change |= ui.text_edit_singleline(&mut g.nom).lost_focus();
                 ui.end_row();
+                // garde-corps typé : hauteur et remplissage viennent du type (Propriétés du type)
+                let libre = g.type_garde_corps.is_none();
                 ui.label("Hauteur");
-                change |= ui.add(egui::DragValue::new(&mut g.hauteur).dimensions().speed(5.0)).changed();
+                change |= ui.add_enabled(libre, egui::DragValue::new(&mut g.hauteur).dimensions().speed(5.0)).changed();
                 ui.end_row();
                 ui.label("Remplissage");
-                egui::ComboBox::from_id_salt("garde_corps_remplissage").selected_text(g.remplissage.nom()).show_ui(ui, |ui| {
-                    for r in modele::Remplissage::TOUS {
-                        change |= ui.selectable_value(&mut g.remplissage, r, r.nom()).changed();
-                    }
+                ui.add_enabled_ui(libre, |ui| {
+                    egui::ComboBox::from_id_salt("garde_corps_remplissage").selected_text(g.remplissage.nom()).show_ui(ui, |ui| {
+                        for r in modele::Remplissage::TOUS {
+                            change |= ui.selectable_value(&mut g.remplissage, r, r.nom()).changed();
+                        }
+                    });
                 });
                 ui.end_row();
                 if g.escalier.is_none() {

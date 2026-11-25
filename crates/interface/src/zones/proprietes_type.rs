@@ -269,7 +269,8 @@ fn champs(ui: &mut egui::Ui, p: &Projet, t: &mut TypeEdite) {
 }
 
 /// Répercute sur les éléments la modification d'un type quand ils ne le lisent pas
-/// directement : couches des murs composés (`ActualiserType`), cotes des ouvertures.
+/// directement : couches des murs composés (`ActualiserType`), cotes des ouvertures,
+/// hauteur et remplissage recopiés des garde-corps (lus par les nomenclatures).
 fn repercuter(q: Projet, p: &Projet, cle: &CleType) -> Result<Projet, String> {
     match cle {
         CleType::Mur(id) => {
@@ -284,6 +285,14 @@ fn repercuter(q: Projet, p: &Projet, cle: &CleType) -> Result<Projet, String> {
             let Some((l, h)) = q.types_ouvertures.iter().find(|t| &t.id == id).map(|t| (t.largeur, t.hauteur)) else { return Ok(q) };
             for o in q.ouvertures.iter_mut().filter(|o| o.type_ouverture.as_ref() == Some(id)) {
                 (o.largeur, o.hauteur) = (l, h);
+            }
+            Ok(q)
+        }
+        CleType::GardeCorps(id) => {
+            let mut q = q;
+            let Some((h, r)) = q.types_garde_corps.iter().find(|t| &t.id == id).map(|t| (t.hauteur, t.remplissage)) else { return Ok(q) };
+            for g in q.garde_corps.iter_mut().filter(|g| g.type_garde_corps.as_ref() == Some(id)) {
+                (g.hauteur, g.remplissage) = (h, r);
             }
             Ok(q)
         }
@@ -380,5 +389,83 @@ mod tests {
             assert!((e - attendu).abs() < 1e-6, "{e} ≠ {attendu}");
         }
         q.verifier().unwrap();
+    }
+
+    /// Boîte englobante et taille de chaque objet de la scène, par identifiant natif.
+    fn boites(p: &Projet) -> std::collections::BTreeMap<String, ([f32; 3], [f32; 3], u32)> {
+        let s = maillage::depuis_natif(p, std::path::Path::new("essai.bem")).unwrap();
+        s.objects.iter().filter_map(|o| {
+            let ifc_base::step::Value::Str(g) = &s.model.file.entities.get(&o.id)?.args[0] else { return None };
+            Some((g.clone(), (o.min.to_array(), o.max.to_array(), o.opaque.count + o.transparent.count)))
+        }).collect()
+    }
+
+    fn maison() -> Projet {
+        Projet::lire_json(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/maison_exemple.bem")).unwrap()).unwrap()
+    }
+
+    /// Agrandit le type et vérifie que tous les éléments du type changent dans la scène.
+    fn verifier_propagation(p: &Projet, ids: &[String]) -> usize {
+        let avant = boites(p);
+        let mut vus = std::collections::BTreeSet::new();
+        for id in ids {
+            let Some(cle) = type_de(p, id) else { continue };
+            if !vus.insert(cle.texte()) { continue }
+            let t = match extraire(p, &cle).unwrap() {
+                TypeEdite::Compose(mut t) => { t.couches[0].epaisseur += 100.0; TypeEdite::Compose(t) }
+                TypeEdite::Ouverture(mut t) => { t.largeur += 200.0; t.hauteur += 100.0; TypeEdite::Ouverture(t) }
+                TypeEdite::Poutre(mut t) => { t.hauteur += 200.0; TypeEdite::Poutre(t) }
+                TypeEdite::Composant(mut t) => { t.largeur *= 1.5; t.hauteur *= 1.5; TypeEdite::Composant(t) }
+                TypeEdite::GardeCorps(mut t) => { t.hauteur += 300.0; TypeEdite::GardeCorps(t) }
+                TypeEdite::Terrain(mut t) => { t.epaisseur += 1000.0; TypeEdite::Terrain(t) }
+                TypeEdite::Vue(_) => continue,
+            };
+            let q = repercuter(ecrire(p, &cle, t), p, &cle).unwrap();
+            q.verifier().unwrap();
+            let apres = boites(&q);
+            let (nom, n) = nom_et_occurrences(p, &cle).unwrap();
+            let occ: Vec<Vec<String>> = ids.iter().filter(|i| type_de(p, i).map(|c| c.texte()) == Some(cle.texte()))
+                .map(|i| p.assemblage(i).map_or_else(|| vec![i.clone()], |a| a.couches.clone())).collect();
+            assert_eq!(occ.len(), n, "{nom}");
+            for o in &occ {
+                assert!(o.iter().any(|s| avant.contains_key(s)), "{nom} : {o:?} absent de la scène");
+                assert!(o.iter().any(|s| avant.get(s) != apres.get(s)), "{nom} : {o:?} inchangé");
+            }
+        }
+        vus.len()
+    }
+
+    #[test]
+    fn chaque_type_de_la_maison_exemple_se_repercute() {
+        let p = maison();
+        let ids: Vec<String> = p.assemblages.iter().map(|a| a.id.clone())
+            .chain(p.murs.iter().filter(|m| m.assemblage.is_none()).map(|m| m.id.clone()))
+            .chain(p.dalles.iter().map(|x| x.id.clone())).chain(p.ouvertures.iter().map(|x| x.id.clone()))
+            .chain(p.composants.iter().map(|x| x.id.clone())).chain(p.terrains.iter().map(|x| x.id.clone())).collect();
+        // 4 types de murs, 6 de dalles, 7 de menuiseries, 4 de composants, 1 de terrain
+        assert!(verifier_propagation(&p, &ids) >= 20);
+    }
+
+    #[test]
+    fn types_de_garde_corps_et_de_poutre_se_repercutent() {
+        let mut p = maison();
+        let mut tg = modele::elements::garde_corps::TypeGardeCorps::standard(1000.0, modele::elements::escalier::Remplissage::Barreaudage);
+        (tg.id, tg.nom) = ("tgc".into(), "Garde-corps".into());
+        p.types_garde_corps.push(tg);
+        for g in p.garde_corps.iter_mut() { g.type_garde_corps = Some("tgc".into()); }
+        p.types_poutres.push(modele::elements::poutre::TypePoutre { id: "tp".into(), nom: "Poutre".into(), largeur: 200.0, hauteur: 300.0, profil: None, materiau: None });
+        let b = p.barres.first_mut().unwrap();
+        (b.genre, b.pose.type_poutre) = (modele::GenreBarre::Poutre, Some("tp".into()));
+        b.debut[2] = 2500.0;
+        b.fin = [b.debut[0] + 3000.0, b.debut[1], 2500.0];
+        p.verifier().unwrap();
+        let ids: Vec<String> = p.garde_corps.iter().map(|g| g.id.clone()).chain(p.barres.iter().map(|b| b.id.clone())).collect();
+        assert_eq!(verifier_propagation(&p, &ids), 2);
+        // la hauteur recopiée sur l'occurrence suit le type (nomenclatures)
+        let cle = CleType::GardeCorps("tgc".into());
+        let Some(TypeEdite::GardeCorps(mut t)) = extraire(&p, &cle) else { panic!() };
+        t.hauteur = 1100.0;
+        let q = repercuter(ecrire(&p, &cle, TypeEdite::GardeCorps(t)), &p, &cle).unwrap();
+        assert!(q.garde_corps.iter().all(|g| g.hauteur == 1100.0));
     }
 }

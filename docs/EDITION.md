@@ -299,9 +299,12 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   terrain, type de coupe ou d'élévation). Un type est partagé : la section est grisée ;
   un double-clic la rend modifiable, avec « Modifie les N éléments de ce type » et
   Terminer pour la reverrouiller. La modification touche tous les éléments du type
-  (murs composés reconstruits, dimensions des portes et fenêtres recopiées) en une
-  seule étape d'annulation, écrite à la fin de la saisie ou du glissement. Sélection
-  de types différents : « Types variés », rien à modifier.
+  (murs composés reconstruits, dimensions des portes et fenêtres, hauteur et
+  remplissage des garde-corps recopiés ; ceux-ci sont grisés dans l'occurrence d'un
+  garde-corps typé) en une seule étape d'annulation, écrite à la fin de la saisie ou
+  du glissement. Sélection de types différents : « Types variés », rien à modifier.
+  Sans section, faute de type : ouvertures libres, poteaux, poutres et garde-corps
+  sans type, escaliers, pièces, plans et vues 3D, annotations.
 - Le panneau Propriétés ne montre que les informations de la sélection (type,
   paramètres, couches, sommets d'un élément horizontal). Les commandes sont ailleurs :
   Cadrer, Isoler et Masquer dans le groupe Visibilité de Modifier (touches F, I, H) ;
