@@ -199,7 +199,16 @@ impl Application {
                 ui.label("Remplissage").on_hover_text("Polylignes fermées : motif de coupe d'un matériau, ou motif choisi");
                 choix = choisir_remplissage_2d(ui, projet, &texte);
                 ui.end_row();
-                // motif choisi : couleur du premier plan, motif et couleur d'arrière-plan
+                // masque ou non les éléments coupés (ordre de tracé), pour toute la sélection
+                if let (false, Some(Some(r))) = (mixte, actuel.clone()) {
+                    let mut masque = r.masque();
+                    ui.label("Masque");
+                    if ui.checkbox(&mut masque, "Masque les éléments coupés").on_hover_text("Cochée : la région est dessinée au-dessus du modèle (murs coupés, poché, arêtes vues), sous les annotations. Décochée : sous les éléments coupés").changed() {
+                        choix = Some(Some(r.avec_masque(masque)));
+                    }
+                    ui.end_row();
+                }
+                // motif choisi : couleur du motif, fond et sa couleur
                 if let (false, Some(Some(r @ RemplissageContour::Motif { .. }))) = (mixte, actuel)
                     && let Some(r) = plans_remplissage(ui, projet, r) { choix = Some(Some(r)); }
             }
@@ -221,16 +230,16 @@ impl Application {
     }
 }
 
-/// Premier plan (couleur) et arrière-plan (aucun, aplat ou motif, et sa couleur) d'un
-/// remplissage par motif ; rend le remplissage modifié.
+/// Couleur du motif et fond (aucun, aplat ou hachures, et sa couleur) d'un remplissage
+/// par motif ; rend le remplissage modifié.
 fn plans_remplissage(ui: &mut egui::Ui, projet: &modele::Projet, r: modele::documentation::RemplissageContour) -> Option<modele::documentation::RemplissageContour> {
     use modele::{MotifCoupe, documentation::{PlanMotif, RemplissageContour}};
     let avant = r.clone();
-    let RemplissageContour::Motif { motif, mut couleur, mut arriere_plan } = r else { return None };
-    ui.label("Premier plan").on_hover_text("Couleur du motif de premier plan");
+    let RemplissageContour::Motif { motif, mut couleur, mut arriere_plan, masque } = r else { return None };
+    ui.label("Couleur du motif");
     ui.color_edit_button_srgb(&mut couleur);
     ui.end_row();
-    ui.label("Arrière-plan").on_hover_text("Motif dessiné sous le premier plan ; un aplat, même blanc, masque ce qui est dessous");
+    ui.label("Fond").on_hover_text("Motif dessiné sous le motif de la région (aplat ou hachures)");
     let texte = arriere_plan.as_ref().map_or("Aucun".to_string(), |a| a.motif.libelle().to_string());
     egui::ComboBox::from_id_salt("arriere_plan_formes_2d").width(150.0).truncate().selected_text(texte).show_ui(ui, |ui| {
         if ui.selectable_label(arriere_plan.is_none(), "Aucun").clicked() { arriere_plan = None; }
@@ -243,11 +252,11 @@ fn plans_remplissage(ui: &mut egui::Ui, projet: &modele::Projet, r: modele::docu
     });
     ui.end_row();
     if let Some(a) = arriere_plan.as_mut() {
-        ui.label("Couleur d'arrière-plan");
+        ui.label("Couleur du fond");
         ui.color_edit_button_srgb(&mut a.couleur);
         ui.end_row();
     }
-    let apres = RemplissageContour::Motif { motif, couleur, arriere_plan };
+    let apres = RemplissageContour::Motif { motif, couleur, arriere_plan, masque };
     (apres != avant).then_some(apres)
 }
 
@@ -260,7 +269,7 @@ pub(crate) fn choisir_remplissage_2d(ui: &mut egui::Ui, projet: &modele::Projet,
         if !projet.materiaux.is_empty() {
             ui.separator(); ui.label(RichText::new("Matériaux").small().weak());
             for m in &projet.materiaux {
-                if ui.selectable_label(false, &m.nom).clicked() { choix = Some(Some(RemplissageContour::Materiau { materiau: m.nom.clone() })); }
+                if ui.selectable_label(false, &m.nom).clicked() { choix = Some(Some(RemplissageContour::materiau(&m.nom))); }
             }
         }
         ui.separator(); ui.label(RichText::new("Motifs").small().weak());

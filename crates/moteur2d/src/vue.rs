@@ -7,6 +7,8 @@ use super::*;
 /// passer devant les faces coupées ; marqués comme annotations, jamais découpés.
 /// `fins` : affichage traits fins, tous les traits à un pixel ; `objet` : rang dans la
 /// scène de l'élément d'une primitive (sélection).
+/// `normale` : normale du plan du dessin, tournée vers l'observateur ; chaque primitive
+/// en est rapprochée selon son rôle (ordre de tracé à l'écran).
 pub fn sommets(objet: &(dyn Fn(noyau::Id) -> Option<u32> + Sync), prims: &[Primitive], normale: DVec3, echelle: f64, fins: bool) -> (Vec<Vertex>, Vec<Vertex>) {
     let largeur = TRAIT_FORT_MM * echelle / 1000.0;
     let raccords = (!fins).then(|| noyau::trace2d::Raccords::new(prims, echelle));
@@ -14,7 +16,11 @@ pub fn sommets(objet: &(dyn Fn(noyau::Id) -> Option<u32> + Sync), prims: &[Primi
     let morceaux: Vec<(Vec<Vertex>, Vec<Vertex>)> = prims.par_iter().map(|p| {
         let (mut tris, mut traits) = (Vec::new(), Vec::new());
         let obj = p.element.and_then(objet).unwrap_or(u32::MAX);
-        let decal = -normale * if p.role == noyau::trace2d::Role::Coupe { (0.4 * largeur).min(0.004) } else { (0.2 * largeur).min(0.002) };
+        // décalage vers l'observateur selon l'ordre de tracé : région de fond sous le
+        // poché, contours coupés au-dessus, région masquante au-dessus du modèle,
+        // annotations au-dessus de tout
+        let f = match p.role { Role::Fond => 0.1, Role::Coupe => 0.4, Role::Masque => 0.6, Role::Annotation => 0.8, _ => 0.2 };
+        let decal = normale * (f * largeur).min(f * 0.01);
         let sommet = |q: DVec3| Vertex { pos: (q + decal).as_vec3().to_array(), normal: [0, 0, 0, 127], color: p.style.couleur, obj };
         let m = maillage(p, normale, echelle, fins, raccords.as_ref());
         tris.extend(m.triangles.iter().flatten().map(|q| sommet(*q)));

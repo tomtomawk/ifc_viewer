@@ -19,6 +19,8 @@ mod coupe;
 pub use coupe::{coupe, coupe_avec_cache, CacheCoupe};
 mod vue;
 mod symboles_caches;
+mod masques;
+pub use masques::masquer_traits;
 pub use symboles_caches::decouper_symboles_caches;
 pub use vue::{cadrer_primitives, sommets, sommets_boite, styler_traits, vu};
 use noyau::motif::{GrilleMotif, Motif, hachures_plan};

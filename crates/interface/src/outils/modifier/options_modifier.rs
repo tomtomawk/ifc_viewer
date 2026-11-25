@@ -284,7 +284,7 @@ impl Application {
                     // traits en orange ; remplissage teinté, son motif reste lisible
                     let c = a.style.couleur;
                     let teinte = |k: usize, o: u16| ((c[k] as u16 + o) / 2) as u8;
-                    a.style.couleur = if a.role == noyau::trace2d::Role::Hachure { [teinte(0, 230), teinte(1, 120), teinte(2, 20), 255] } else { [230, 120, 20, 255] };
+                    a.style.couleur = if matches!(a.role, noyau::trace2d::Role::Hachure | noyau::trace2d::Role::Fond | noyau::trace2d::Role::Masque) { [teinte(0, 230), teinte(1, 120), teinte(2, 20), 255] } else { [230, 120, 20, 255] };
                 }
                 a.translater(-origin)
             })

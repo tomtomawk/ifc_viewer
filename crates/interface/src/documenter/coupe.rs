@@ -95,6 +95,23 @@ impl Application {
         Some((visible,limite))
     }
 
+    /// Retrait des traits du modèle sous les régions masquantes de la vue native ouverte
+    /// (primitives en mètres, repère de la scène) ; identité sans région.
+    fn masquage_regions(&self) -> impl Fn(Vec<trace2d::Primitive>) -> Vec<trace2d::Primitive> + use<> {
+        let contexte = self.natif.as_ref().zip(self.vue_native_id()).zip(self.scene.as_ref()).and_then(|(((p, _), id), s)| {
+            let v = p.vues.iter().find(|v| v.id == id)?;
+            let regions: Vec<Vec<glam::DVec2>> = modele::documentation::regions_masquantes(p, v).into_iter().map(|c| c.into_iter().map(glam::DVec2::from_array).collect()).collect();
+            (!regions.is_empty()).then(|| (regions, modele::documentation::repere(p, v), s.origin))
+        });
+        move |prims| match &contexte {
+            Some((regions, (o, u, h), origine)) => {
+                let (o, u, h, origine) = (*o, *u, *h, *origine);
+                moteur2d::masquer_traits(prims, regions, &|q| { let m = (q + origine) * 1000.0 - o; glam::DVec2::new(m.dot(u), m.dot(h)) })
+            }
+            None => prims,
+        }
+    }
+
     /// Recalcule le tracé de la coupe (poché, hachures, contours) s'il le faut.
     pub(crate) fn update_coupe(&mut self) {
         if !self.coupe_dirty {
@@ -106,14 +123,16 @@ impl Application {
         // élévation : vue depuis sa ligne, rien n'est coupé (pas de poché)
         let elevation = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Élévation" && v.plan_coupe.is_some());
         let (affichage, poche) = (self.affichage(), self.poche_style());
+        // régions qui masquent les éléments coupés : traits du modèle retirés dessous
+        let masquer = self.masquage_regions();
         let (mut tris, mut traits) = match (&self.scene, self.plan_coupe().filter(|_| !elevation)) {
             (Some(s), Some(p)) => {
                 // objets inchangés depuis la dernière coupe : repris du cache (P1)
                 let prims = moteur2d::coupe_avec_cache(s, &self.visible, affichage, p, self.echelle, poche, &mut self.cache_coupe);
                 // styles d'objets : tirets des contours coupés (dans le plan de coupe)
-                let prims = moteur2d::styler_traits(prims, s, glam::DVec3::X, glam::DVec3::Y, self.echelle);
+                let prims = masquer(moteur2d::styler_traits(prims, s, glam::DVec3::X, glam::DVec3::Y, self.echelle));
                 noyau::chrono::chrono_lent(&format!("coupe : coupe des objets ({} recoupés)", self.cache_coupe.recoupes), &mut t_etape);
-                moteur2d::sommets(&|e| s.object_of.get(&e).copied(), &prims, p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
+                moteur2d::sommets(&|e| s.object_of.get(&e).copied(), &prims, -p.truncate().as_dvec3().normalize(), self.echelle, self.traits_fins)
             }
             _ => Default::default(),
         };
@@ -121,6 +140,7 @@ impl Application {
         if let Some(s)=&self.scene {
             let mut prims=self.primitives_fond_plan();
             prims.extend(self.primitives_au_dessus_plan());
+            let prims=masquer(prims);
             let (t,l)=moteur2d::sommets(&|e| s.object_of.get(&e).copied(),&prims,glam::DVec3::Z,self.echelle,true);
             tris.extend(t);traits.extend(l);
         }
@@ -132,7 +152,7 @@ impl Application {
             traits.extend(l);
         }
         if let Some(s) = &self.scene {
-            let prims=self.annotations_natives();
+            let prims=masquer(self.annotations_natives());
             let (t,l)=moteur2d::sommets(&|e| s.object_of.get(&e).copied(),&prims,-self.camera.forward().as_dvec3(),self.echelle,self.traits_fins);
             tris.extend(t); traits.extend(l);
         }

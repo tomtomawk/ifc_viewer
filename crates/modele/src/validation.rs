@@ -372,7 +372,7 @@ impl Projet {
                     return Err("Seule une polyligne fermée peut être remplie.".into());
                 }
                 match r {
-                    RemplissageContour::Materiau { materiau } if self.materiau(materiau).is_none() => return Err(format!("RemplissageContour : matériau « {materiau} » absent.")),
+                    RemplissageContour::Materiau { materiau, .. } if self.materiau(materiau).is_none() => return Err(format!("RemplissageContour : matériau « {materiau} » absent.")),
                     RemplissageContour::Motif { motif, arriere_plan, .. } => {
                         // premier plan et arrière-plan : aplat ou hachures du projet
                         for m in std::iter::once(motif).chain(arriere_plan.as_ref().map(|a| &a.motif)) {

@@ -9,7 +9,13 @@ use super::*;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum RemplissageContour {
-    Materiau { materiau: String },
+    Materiau {
+        materiau: String,
+        /// Masque les éléments coupés (et vus) : dessiné au-dessus du modèle ; sinon
+        /// dessous des éléments coupés.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        masque: bool,
+    },
     Motif {
         /// Motif de premier plan.
         motif: MotifCoupe,
@@ -19,6 +25,9 @@ pub enum RemplissageContour {
         /// dessous.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         arriere_plan: Option<PlanMotif>,
+        /// Comme pour un matériau.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        masque: bool,
     },
 }
 
@@ -36,14 +45,29 @@ impl RemplissageContour {
     /// Encre d'un motif choisi.
     pub const ENCRE: [u8; 3] = [70, 70, 70];
 
-    /// Motif choisi, à l'encre, sans arrière-plan.
+    /// Motif choisi, à l'encre, sans fond, sous les éléments coupés.
     pub fn motif(motif: MotifCoupe) -> Self {
-        Self::Motif { motif, couleur: Self::ENCRE, arriere_plan: None }
+        Self::Motif { motif, couleur: Self::ENCRE, arriere_plan: None, masque: false }
+    }
+
+    /// Motif de coupe d'un matériau, sous les éléments coupés.
+    pub fn materiau(materiau: &str) -> Self {
+        Self::Materiau { materiau: materiau.into(), masque: false }
+    }
+
+    /// Vrai si la région masque les éléments coupés (dessinée au-dessus du modèle).
+    pub fn masque(&self) -> bool {
+        match self { Self::Materiau { masque, .. } | Self::Motif { masque, .. } => *masque }
+    }
+
+    pub fn avec_masque(mut self, valeur: bool) -> Self {
+        match &mut self { Self::Materiau { masque, .. } | Self::Motif { masque, .. } => *masque = valeur }
+        self
     }
 
     pub fn libelle(&self) -> String {
         match self {
-            Self::Materiau { materiau } => format!("Matériau : {materiau}"),
+            Self::Materiau { materiau, .. } => format!("Matériau : {materiau}"),
             Self::Motif { motif, arriere_plan: None, .. } => format!("Motif : {}", motif.libelle()),
             Self::Motif { motif, arriere_plan: Some(a), .. } => format!("Motif : {} sur {}", motif.libelle(), a.motif.libelle()),
         }
@@ -52,15 +76,29 @@ impl RemplissageContour {
 
 /// Primitives du remplissage d'un contour (mm du plan de la vue) : arrière-plan (aplat
 /// s'il n'est pas blanc, ou hachures) puis premier plan, hachures à l'échelle de la vue.
+/// Contours (mm, repère 2D de la vue) des polylignes fermées remplies de la vue qui
+/// masquent les éléments coupés : les traits du modèle y sont retirés à l'écran.
+pub fn regions_masquantes(p: &Projet, v: &Vue) -> Vec<Vec<[f64; 2]>> {
+    p.annotations.iter()
+        .filter(|a| a.vue == v.id && !v.elements_masques.contains(&a.id))
+        .filter_map(|a| match &a.forme {
+            AnnotationForme::Polyligne { fermee: true, remplissage: Some(r), points, .. } if r.masque() && points.len() >= 3 => a.forme.contour_developpe(),
+            _ => None,
+        })
+        .collect()
+}
+
 pub(super) fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour: &[[f64; 2]], echelle: f64, pt: &dyn Fn(DVec2) -> DVec3) -> Vec<Primitive> {
     use noyau::motif::{GrilleMotif, Motif, hachures_plan};
     let (motif, encre, fond) = match r {
-        RemplissageContour::Materiau { materiau } => match p.materiau(materiau) {
+        RemplissageContour::Materiau { materiau, .. } => match p.materiau(materiau) {
             Some(m) => (m.motif.clone(), m.encre_coupe(), Some(m.fond_coupe())),
             None => return Vec::new(),
         },
-        RemplissageContour::Motif { motif, couleur, arriere_plan } => (motif.clone(), *couleur, arriere_plan.as_ref().map(|a| (a.motif.clone(), a.couleur))),
+        RemplissageContour::Motif { motif, couleur, arriere_plan, .. } => (motif.clone(), *couleur, arriere_plan.as_ref().map(|a| (a.motif.clone(), a.couleur))),
     };
+    // région masquante : au-dessus du modèle ; sinon sous les éléments coupés
+    let role = if r.masque() { Role::Masque } else { Role::Fond };
     // arrière-plan choisi : un aplat blanc masque aussi (celui d'un matériau, non)
     let masque = matches!(r, RemplissageContour::Motif { .. });
     let contours = vec![contour.iter().map(|q| [q[0] as f32, q[1] as f32]).collect()];
@@ -69,7 +107,7 @@ pub(super) fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour
     let aplat = |c: [u8; 3]| Primitive {
         forme: Forme::Triangles(tris.iter().map(|t| t.map(|q| pt(DVec2::from_array(q)))).collect()),
         style: Style { couleur: couleur(c), epaisseur: 0.0 },
-        role: Role::Hachure,
+        role,
         element: None,
     };
     let hachures = |m: &MotifCoupe, c: [u8; 3]| -> Option<Primitive> {
@@ -80,7 +118,7 @@ pub(super) fn primitives_remplissage(p: &Projet, r: &RemplissageContour, contour
             grilles: d.lignes.iter().map(|l| GrilleMotif { angle: l.angle.to_radians(), origine: l.origine, glissement: l.glissement, decalage: l.pas, tirets: l.tirets.iter().map(|t| t.abs()).collect() }).collect(),
         };
         let segments = hachures_plan(&tris, &motif, echelle, 20_000);
-        Some(Primitive { forme: Forme::Segments(segments.into_iter().map(|s| s.map(|q| pt(DVec2::from_array(q)))).collect()), style: Style { couleur: couleur(c), epaisseur: 0.0 }, role: Role::Hachure, element: None })
+        Some(Primitive { forme: Forme::Segments(segments.into_iter().map(|s| s.map(|q| pt(DVec2::from_array(q)))).collect()), style: Style { couleur: couleur(c), epaisseur: 0.0 }, role, element: None })
     };
     let mut out = Vec::new();
     match fond {
@@ -163,7 +201,7 @@ mod tests {
     fn premier_plan_et_arriere_plan() {
         let p = Projet::depuis_gabarit("Essai", &crate::gabarit::Gabarit::defaut());
         let hachures = MotifCoupe::hachures(&p.noms_motifs()[0]);
-        let r = RemplissageContour::Motif { motif: hachures.clone(), couleur: [200, 0, 0], arriere_plan: Some(PlanMotif { motif: MotifCoupe::Uni, couleur: [255, 255, 255] }) };
+        let r = RemplissageContour::Motif { motif: hachures.clone(), couleur: [200, 0, 0], arriere_plan: Some(PlanMotif { motif: MotifCoupe::Uni, couleur: [255, 255, 255] }), masque: false };
         let prims = super::super::primitives_forme_dessin(&p, &carre(Some(r.clone()), ""), 100.0, &|q| q.extend(0.0));
         assert!(matches!(prims[0].forme, Forme::Triangles(_)) && prims[0].style.couleur == [255, 255, 255, 255], "arrière-plan blanc d'abord : masque");
         assert!(matches!(prims[1].forme, Forme::Segments(_)) && prims[1].style.couleur == [200, 0, 0, 255], "hachures du premier plan");

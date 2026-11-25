@@ -190,7 +190,7 @@ fn polyligne_fermee_remplie() {
     let vue = p.ajouter_vue_plan(&niveau, 1200.0).unwrap();
     let contour = vec![[0.0, 0.0], [2000.0, 0.0], [2000.0, 1000.0], [0.0, 1000.0]];
     let annotation = |remplissage, fermee| Annotation { id: "zone".into(), vue: vue.clone(), hauteur: 2.5, forme: AnnotationForme::Polyligne { points: contour.clone(), fermee, courbures: Vec::new(), remplissage, traits: Vec::new() } };
-    let hachures = |p: &Projet| annotations(p, p.vues.iter().find(|v| v.id == vue).unwrap()).into_iter().filter(|x| x.role == Role::Hachure).collect::<Vec<_>>();
+    let hachures = |p: &Projet| annotations(p, p.vues.iter().find(|v| v.id == vue).unwrap()).into_iter().filter(|x| x.role == Role::Fond).collect::<Vec<_>>();
     // motif choisi : hachures de la définition, encre gris foncé
     p.annotations = vec![annotation(Some(RemplissageContour::motif(MotifCoupe::Croisees)), true)];
     p.verifier().unwrap();
@@ -198,17 +198,23 @@ fn polyligne_fermee_remplie() {
     assert!(matches!(&h[..], [x] if matches!(&x.forme, Forme::Segments(s) if s.len() > 10) && x.style.couleur == [70, 70, 70, 255]));
     // matériau : son motif de coupe ; aplat : triangles
     let nom = p.materiaux[0].nom.clone();
-    p.annotations = vec![annotation(Some(RemplissageContour::Materiau { materiau: nom }), true)];
+    p.annotations = vec![annotation(Some(RemplissageContour::materiau(&nom)), true)];
     p.verifier().unwrap();
     assert!(!hachures(&p).is_empty());
     p.annotations = vec![annotation(Some(RemplissageContour::motif(MotifCoupe::Uni)), true)];
     assert!(matches!(&hachures(&p)[..], [x] if matches!(&x.forme, Forme::Triangles(t) if t.len() == 2)));
+    // masque : région au-dessus du modèle (rôle Masque, rang au-dessus des contours
+    // coupés et sous les annotations) ; sinon sous le poché (rôle Fond)
+    p.annotations = vec![annotation(Some(RemplissageContour::motif(MotifCoupe::Uni).avec_masque(true)), true)];
+    let v = p.vues.iter().find(|v| v.id == vue).unwrap();
+    assert!(hachures(&p).is_empty() && annotations(&p, v).iter().any(|x| x.role == Role::Masque));
+    assert!(Role::Fond.rang() < Role::Poche.rang() && Role::Coupe.rang() < Role::Masque.rang() && Role::Masque.rang() < Role::Annotation.rang());
     // relu tel quel ; refusé sur une polyligne ouverte ou un matériau absent
     let relu: Annotation = serde_json::from_str(&serde_json::to_string(&p.annotations[0]).unwrap()).unwrap();
-    assert!(matches!(relu.forme, AnnotationForme::Polyligne { remplissage: Some(RemplissageContour::Motif { motif: MotifCoupe::Uni, .. }), .. }));
+    assert!(matches!(relu.forme, AnnotationForme::Polyligne { remplissage: Some(RemplissageContour::Motif { motif: MotifCoupe::Uni, masque: true, .. }), .. }));
     p.annotations = vec![annotation(Some(RemplissageContour::motif(MotifCoupe::Uni)), false)];
     assert!(p.verifier().is_err());
-    p.annotations = vec![annotation(Some(RemplissageContour::Materiau { materiau: "Inconnu".into() }), true)];
+    p.annotations = vec![annotation(Some(RemplissageContour::materiau("Inconnu")), true)];
     assert!(p.verifier().is_err());
 }
 

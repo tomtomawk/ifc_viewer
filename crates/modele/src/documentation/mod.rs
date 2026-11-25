@@ -11,7 +11,7 @@ pub use habillage_feuille::*;
 mod symboles;
 pub use symboles::*;
 mod polyligne;
-pub use polyligne::{PlanMotif, RemplissageContour};
+pub use polyligne::{regions_masquantes, PlanMotif, RemplissageContour};
 use polyligne::{primitives_courbe, primitives_polyligne, primitives_remplissage};
 #[cfg(test)]
 mod tests;
@@ -815,6 +815,10 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
             }
             _ => {}
         }
+    }
+    // symboles des familles : dessin du modèle (sous les régions masquantes)
+    for x in &mut out {
+        if x.role == Role::Annotation { x.role = Role::Vu; }
     }
     out
 }

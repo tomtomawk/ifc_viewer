@@ -611,10 +611,14 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   du curseur ; au moins la moitié de la distance entre les deux points). La
   polyligne reste un seul objet : contour fermé, remplissage, types de trait,
   accrochage au centre et aux extrémités de l'arc. Remplissage d'une polyligne
-  fermée (Propriétés) : motif de coupe d'un matériau, ou motif choisi avec sa couleur
-  de **premier plan** et un **arrière-plan** facultatif (aplat ou hachures, et sa
-  couleur) dessiné dessous ; un arrière-plan uni, même blanc, masque ce qui est
-  dessous. Type de trait **Lignes invisibles** (gabarit ; case « Invisible » de la
+  fermée (Propriétés) : motif de coupe d'un matériau, ou motif choisi avec sa
+  **couleur** et un **fond** facultatif (aplat ou hachures, et sa couleur) dessiné
+  dessous. **Masque les éléments coupés** : cochée, la région est dessinée au-dessus du
+  modèle (murs et éléments coupés, poché, arêtes vues, symboles des menuiseries) et
+  sous les annotations (textes, cotes, quadrillages, ses propres traits) ; décochée
+  (par défaut), elle passe sous les éléments coupés. À l'écran, les traits du modèle
+  sont retirés sous une région masquante ; dans les feuilles et les exports, l'ordre
+  de tracé suffit. Type de trait **Lignes invisibles** (gabarit ; case « Invisible » de la
   fenêtre des types de trait) : le segment n'est ni affiché ni imprimé ni exporté,
   mais se sélectionne et apparaît en orange quand sa forme est sélectionnée (le
   remplissage d'une forme sélectionnée est teinté, son motif reste lisible). Dans Modifier le tracé, un arc
@@ -924,8 +928,10 @@ Undo/Redo n'est sérialisé dans le projet.
 
 `remplissage` d'une polyligne fermée : `{"source": "materiau", "materiau"}` ou
 `{"source": "motif", "motif", "couleur", "arriere_plan": {"motif", "couleur"}}`
-(`couleur` [r, g, b] du premier plan, absente : gris foncé ; `arriere_plan`
-facultatif ; ajout du 25/11/2026, les fichiers antérieurs restent lisibles). Type de
+(`couleur` [r, g, b] du motif, absente : gris foncé ; `arriere_plan` : le fond,
+facultatif) ; les deux portent `masque` (facultatif, faux : sous les éléments
+coupés ; vrai : au-dessus du modèle). Ajouts du 25/11/2026, les fichiers antérieurs
+restent lisibles. Type de
 trait : `invisible: true` pour des lignes invisibles (champ facultatif).
 
 `type_trait` d'une spline ou d'un cercle (champ ajouté le 20/11/2026, facultatif : les

@@ -28,6 +28,8 @@ pub enum Forme {
 /// Rôle d'une primitive dans le dessin : ordre de tracé et épaisseur par défaut.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {
+    /// Région remplie sous le modèle (ne masque pas les éléments coupés).
+    Fond,
     /// Remplissage des parties coupées.
     Poche,
     /// Hachures (des parties coupées, des régions remplies).
@@ -36,6 +38,8 @@ pub enum Role {
     Vu,
     /// Contour des parties coupées.
     Coupe,
+    /// Région remplie qui masque le modèle (éléments coupés et vus), sous les annotations.
+    Masque,
     /// Traits, textes, cotes et symboles des vues.
     Annotation,
 }
@@ -44,18 +48,20 @@ impl Role {
     /// Ordre de tracé (du fond vers le dessus).
     pub fn rang(self) -> u8 {
         match self {
-            Role::Poche => 0,
-            Role::Hachure => 1,
-            Role::Vu => 2,
-            Role::Coupe => 3,
-            Role::Annotation => 4,
+            Role::Fond => 0,
+            Role::Poche => 1,
+            Role::Hachure => 2,
+            Role::Vu => 3,
+            Role::Coupe => 4,
+            Role::Masque => 5,
+            Role::Annotation => 6,
         }
     }
 
     /// Épaisseur à l'export d'un trait fin (épaisseur nulle), mm du papier.
     pub fn trait_fin(self) -> f64 {
         match self {
-            Role::Hachure => 0.09,
+            Role::Hachure | Role::Fond | Role::Masque => 0.09,
             Role::Vu => 0.13,
             _ => 0.18,
         }
@@ -63,6 +69,8 @@ impl Role {
 
     pub fn nom(self) -> &'static str {
         match self {
+            Role::Fond => "fond",
+            Role::Masque => "masque",
             Role::Poche => "poche",
             Role::Hachure => "hachure",
             Role::Vu => "vu",
