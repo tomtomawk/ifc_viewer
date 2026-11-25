@@ -907,6 +907,8 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 if uw.dot(DVec2::new(u.x, u.y)).abs() < 0.98 || !(-1.0..=*profondeur).contains(&profondeur_c) || !(0.0..=longueur).contains(&lateral) {
                     continue;
                 }
+                // marquées de leur ouverture : retirées si elle est cachée (`moteur2d`)
+                let debut = out.len();
                 for (l, m) in super::volumes::solides::regions_ouverture(p, ouv, VueEsquisse::Elevation, v.niveau_detail) {
                     out.extend(remplissage_commun(l.into_iter().map(|q| o + u * (q - o).dot(u) + h * (q - o).dot(h)).collect(), m));
                 }
@@ -914,6 +916,8 @@ fn symboles_familles(p: &Projet, v: &Vue) -> Vec<Primitive> {
                 for (point, contenu, hauteur) in super::volumes::solides::textes_ouverture(p, ouv, VueEsquisse::Elevation, v.niveau_detail) {
                     out.push(texte(&remplir_champs(&contenu, &[("{projet}", &p.nom), ("{vue}", &v.nom)]), point * 0.001, u, h, hauteur * v.echelle * 0.001, [30,30,30,255]));
                 }
+                let marque = Some(crate::identifiants::id_natif("ouverture", &ouv.id));
+                for x in &mut out[debut..] { x.element = x.element.or(marque); }
             }
             _ => {}
         }

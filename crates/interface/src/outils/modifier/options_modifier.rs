@@ -255,7 +255,9 @@ impl Application {
             .iter()
             .map(|id| modele::identifiants::id_natif("annotation", id))
             .collect();
-        modele::documentation::annotations(p, v)
+        let annotations = modele::documentation::annotations(p, v);
+        let annotations = match &self.scene { Some(s) => moteur2d::retirer_symboles_caches(p, v, s, &self.visible, annotations), None => annotations };
+        annotations
             .into_iter()
             .filter(|a| !a.element.is_some_and(|id| v.elements_masques.iter().any(|cle| modele::identifiants::id_natif("annotation", cle) == id)))
             .filter(|a| !self.objet_en_edition().is_some_and(|(id, annotation)| annotation && a.element == Some(modele::identifiants::id_natif("annotation", id))))
