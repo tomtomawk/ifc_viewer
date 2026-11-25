@@ -154,6 +154,9 @@ impl ModificationInterne for Projet {
         if self.annotations.iter().any(|a| a.id == id) {
             return self.scinder_ligne(id, point, ecart);
         }
+        if self.murs.iter().find(|m| m.id == id).is_some_and(|m| self.cle_profil_mur(m).is_some()) || self.profils_murs.contains_key(&id) {
+            return Err("Scinder : le mur a un profil modifié ; réinitialisez-le d'abord.".into());
+        }
         let couches = self.couches_de(&id);
         if couches.is_empty() || !couches.iter().all(|c| self.murs.iter().any(|m| &m.id == c && matches!(m.axe, Axe::Droit { .. }))) {
             return Err("Scinder : mur droit, poutre ou ligne d'annotation seulement.".into());

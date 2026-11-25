@@ -365,6 +365,11 @@ fn fusionner_dans(
             cible.priorites_jonction.insert(id, p);
         }
     }
+    for (id, x) in imp.profils_murs {
+        if elements.contains(&id) {
+            cible.profils_murs.insert(id, x);
+        }
+    }
     for (id, a) in imp.attaches_toitures {
         if elements.contains(&id) {
             cible.attaches_toitures.insert(id, a);

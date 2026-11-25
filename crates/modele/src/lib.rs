@@ -207,6 +207,9 @@ pub struct Projet {
     pub attaches_toitures: BTreeMap<String, std::collections::BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub priorites_jonction: BTreeMap<String,i32>,
+    /// Profils d'élévation des murs, par mur indépendant ou assemblage (`murs::profil`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profils_murs: BTreeMap<String, murs::profil::ProfilMur>,
     /// Ligne d'implantation (justification) choisie à la création d'un mur ou d'un
     /// assemblage ; absente : axe médian.
     pub implantations: BTreeMap<String, assemblage::Reference>,

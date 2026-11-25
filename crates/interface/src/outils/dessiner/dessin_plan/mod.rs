@@ -14,6 +14,7 @@ mod suivre_trait;
 mod palettes;
 mod poignees_contour;
 mod visee;
+mod profil_mur;
 use crate::*;
 use moteur2d::dao::{self as d2, Accroche, OutilDessin, Trace};
 use noyau::forme2d::{Geom};
@@ -189,6 +190,8 @@ pub(crate) enum ElementTrace {
     GardeCorps,
     /// Contour fermé d'une limite de propriété.
     Limite,
+    /// Profil d'élévation d'un mur (`profil_mur.rs`) ; `id` : mur ou assemblage.
+    ProfilMur,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -638,9 +641,10 @@ impl Application {
         let ids = self.selection_bim();
         let Some((p, _)) = &self.natif else { return };
         if ids.len()==1 && (p.murs.iter().any(|m|m.id==ids[0])||p.assemblages.iter().any(|m|m.id==ids[0])) {
+            if self.commencer_profil_mur(&ids[0]) { return; }
             self.onglet_ruban=OngletRuban::Modifier;
             self.ruban_edition.annuler();
-            self.status="Mur : glisser une extrémité de la ligne d'implantation ; accrochages actifs, Maj pour contraindre aux axes.".into();
+            self.status="Mur : glisser une extrémité de la ligne d'implantation ; accrochages actifs, Maj pour contraindre aux axes. Profil du mur : Modifier tracé en 3D, en coupe ou en élévation.".into();
             return;
         }
         if ids.len() == 1 && p.terrains.iter().any(|t| t.id == ids[0]) {
@@ -711,6 +715,7 @@ impl Application {
             match (e.element, e.creation) {
                 (Some(ElementTrace::GardeCorps), _) | (_, Some(Usage::GardeCorps)) => "Garde-corps".into(),
                 (Some(ElementTrace::Limite), _) | (_, Some(Usage::LimitePropriete)) => "Limite de propriété".into(),
+                (Some(ElementTrace::ProfilMur), _) => "Profil du mur".into(),
                 (_, Some(Usage::Terrain)) => "Terrain".into(),
                 (_, Some(Usage::Escalier)) => "Escalier".into(),
                 (_, Some(Usage::Cadrage)) => "Cadrage de la vue".into(),
@@ -893,6 +898,7 @@ impl Application {
     /// Repère du tracé : origine, droite, haut (mm). Annotation : celui de la vue native
     /// ouverte ; mur ou élément horizontal : plan horizontal de son altitude.
     fn repere_dessin(&self) -> Option<(DVec3, DVec3, DVec3)> {
+        if let Some(r) = self.repere_profil_edition() { return Some(r); }
         if let Some((id,_,_))=&self.dessin2d.arc_glisse {
             let (_,z)=self.natif.as_ref()?.0.trajectoire_justification(id)?;
             return Some((DVec3::new(0.,0.,z),DVec3::X,DVec3::Y));
@@ -951,6 +957,7 @@ impl Application {
     }
 
     fn geoms_dessin_avec_mode(&mut self, selection: bool) -> Vec<Geom> {
+        if let Some(g) = self.geoms_profil_mur() { return g; }
         let Some((usage, _)) = self.usage_dessin().or_else(||(self.poignee_axe.is_some() || self.glisse_milieu.is_some() || self.dessin2d.arc_glisse.is_some()).then_some((Usage::Mur,OutilDessin::Ligne))).or_else(|| (self.texte_annotation_actif() || self.niveau_vue_actif() || self.id_poignee_annotation().is_some()).then_some((Usage::Annotation, OutilDessin::Polyligne))) else { return Vec::new() };
         let vue = self.vue_native_id();
         let altitude = if let Some((id,_,_))=&self.dessin2d.arc_glisse {self.natif.as_ref().and_then(|(p,_)|p.trajectoire_justification(id)).map_or(0.0,|a|a.1)} else if self.poignee_axe.is_some() || self.glisse_milieu.is_some() {self.axe_selection().map_or(0.0,|a|a.3)} else {self.altitude_trace()};

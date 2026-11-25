@@ -2,4 +2,5 @@
 pub mod assemblage;
 pub mod jonctions;
 pub mod ossature;
+pub mod profil;
 pub mod retours;

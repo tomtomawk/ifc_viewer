@@ -150,6 +150,7 @@ impl ExecutionInterne for Projet {
             | Commande::Contour { .. }
             | Commande::Tremie { .. } => self.executer_modeliser(c),
             Commande::Attacher { .. }
+            | Commande::ProfilMur { .. }
             | Commande::PrioriteJonction { .. }
             | Commande::Aligner { .. }
             | Commande::InverserMur { .. }

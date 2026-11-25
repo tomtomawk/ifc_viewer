@@ -121,6 +121,7 @@ pub fn copier_selection(source: &Projet, ids: &[String]) -> Result<Projet, Strin
         .filter(|(id, _)| ids.contains(*id))
         .map(|(k, v)| (k.clone(), *v))
         .collect();
+    fragment.profils_murs = source.profils_murs.iter().filter(|(id, _)| ids.contains(*id)).map(|(k, v)| (k.clone(), v.clone())).collect();
     fragment.attaches_toitures = source
         .attaches_toitures
         .iter()

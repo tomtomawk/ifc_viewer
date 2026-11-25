@@ -23,6 +23,9 @@ impl ExecutionModifier for Projet {
                     if !self.murs.iter().any(|m| m.id == *id) && self.assemblage(id).is_none() {
                         return Err("Sélectionnez des murs ou assemblages.".into());
                     }
+                    if toiture.is_some() && (self.profils_murs.contains_key(id) || self.murs.iter().find(|m| &m.id == id).is_some_and(|m| self.cle_profil_mur(m).is_some())) {
+                        return Err("Ce mur a un profil modifié : réinitialisez-le avant de l'attacher.".into());
+                    }
                     if let Some(t) = &toiture {
                         self.attaches_toitures.entry(id.clone()).or_default().insert(t.clone());
                     } else {
@@ -30,6 +33,23 @@ impl ExecutionModifier for Projet {
                     }
                 }
                 Ok(ids)
+            }
+            Commande::ProfilMur { id, profil } => {
+                let cle = self.murs.iter().find(|m| m.id == id).and_then(|m| m.assemblage.clone()).unwrap_or(id);
+                if !self.murs.iter().any(|m| m.id == cle) && self.assemblage(&cle).is_none() {
+                    return Err("Sélectionnez un mur.".into());
+                }
+                match profil {
+                    Some(profil) => {
+                        self.repere_profil(&cle)?;
+                        modele::murs::profil::valider_profil(&profil)?;
+                        self.profils_murs.insert(cle.clone(), profil);
+                        self.attaches_toitures.remove(&cle);
+                        for c in self.couches_de(&cle) { self.attaches_toitures.remove(&c); }
+                    }
+                    None => { self.profils_murs.remove(&cle); }
+                }
+                Ok(vec![cle])
             }
             Commande::PrioriteJonction { id, priorite } => {
                 if !self.murs.iter().any(|m| m.id == id) {
@@ -162,6 +182,7 @@ impl ExecutionModifier for Projet {
                         !set.contains(id) && !toits.is_empty()
                     });
                 self.priorites_jonction.retain(|id, _| !set.contains(id));
+                self.profils_murs.retain(|id, _| !set.contains(id));
                 self.implantations.retain(|id, _| !set.contains(id));
                 self.placements_surface.retain(|id, _| !set.contains(id));
                 self.contextes.retain(|id, _| !set.contains(id));

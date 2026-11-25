@@ -83,6 +83,8 @@ impl Application {
         let polyligne = usage == Usage::Annotation;
         let suivre = polyligne && self.suivi_trait_actif();
         let mut activer_suivi = false;
+        let profil = self.profil_mur_en_cours().is_some();
+        let mut reinitialiser = false;
         ui.horizontal(|ui| {
             if polyligne {
                 activer_suivi = ui.selectable_label(suivre, "Suivre un trait").on_hover_text("Cliquer un trait existant dans la vue : la polyligne le reprend").clicked();
@@ -93,6 +95,10 @@ impl Application {
             (choisir_selection, forme_choisie) = boutons_trace(ui, selection && !suivre, commande, outil_enfonce, formes_usage(usage), raison_forme);
             if usage == Usage::Poutre { self.options_poutre(ui); }
             if decaler { self.champ_distance_decalage(ui); }
+            if profil {
+                ui.separator();
+                reinitialiser = ui.button("Réinitialiser le profil").on_hover_text("Rendre au mur son rectangle d'origine (base et haut)").clicked();
+            }
             if let Some(n) = copies.as_mut() {
                 ui.separator();
                 ui.label("Copies");
@@ -101,6 +107,10 @@ impl Application {
         });
         if let (Some(n), Some(e)) = (copies, self.dessin2d.edition_contour.as_mut()) && matches!(e.commande, Some(CommandeContour::Reseau(_))) {
             e.commande = Some(CommandeContour::Reseau(n));
+        }
+        if reinitialiser {
+            self.reinitialiser_profil_mur();
+            return;
         }
         if activer_suivi {
             self.ruban_edition.suivre_trait = true;

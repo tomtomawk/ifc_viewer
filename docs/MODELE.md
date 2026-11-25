@@ -160,6 +160,15 @@ tableau non vide d’identifiants de toitures distinctes. Le format antérieur u
 une chaîne pour une seule toiture. Il n’y a pas de migration. La cote des toitures
 déjà saisies est désormais interprétée à l’égout.
 
+La table `profils_murs` associe un mur indépendant ou un assemblage à son profil
+d'élévation `{ "contours": [[[s, z], …], …] }` (mm) : `s` le long de l'axe du mur de
+référence (le mur, ou la première couche de l'assemblage) depuis son début, `z`
+au-dessus de sa base. Le premier contour est l'extérieur, les suivants des vides à
+l'intérieur ; contours simples. Mur droit seulement. Le volume du mur est son prisme en
+plan (jonctions comprises) coupé par le profil ; un mur à profil ignore
+`attaches_toitures`. Champ absent : rectangle base-haut. Ajout compatible (champ
+facultatif).
+
 ### Pente par arête
 
 Comme une toiture par tracé de Revit : une arête qui « définit la pente » porte un

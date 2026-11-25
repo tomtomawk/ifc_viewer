@@ -430,7 +430,9 @@ impl Application {
             self.dessin2d.message = Some("Contour non fermé : reprendre son tracé et le fermer, ou annuler avec la croix.".into());
             return;
         }
-        if valider && usage == Some(Usage::Cadrage) {
+        if valider && self.profil_mur_en_cours().is_some() {
+            if let Err(e) = self.valider_profil_mur() { self.dessin2d.message = Some(e); return; }
+        } else if valider && usage == Some(Usage::Cadrage) {
             let Some(contour) = self.dessin2d.dalle.first().cloned() else { self.dessin2d.message = Some("Tracez d'abord un contour fermé.".into()); return; };
             if contour.len() > 128 { self.dessin2d.message = Some("Le contour de cadrage ne peut pas dépasser 128 sommets.".into()); return; }
             let Some(id) = self.vue_native_id() else { return };
@@ -479,6 +481,7 @@ impl Application {
             let commande = match element {
                 ElementTrace::GardeCorps => projet.garde_corps.iter().find(|g| g.id == id).cloned().map(|mut garde_corps| { garde_corps.trace = trace; Commande::GardeCorps { garde_corps } }),
                 ElementTrace::Limite => projet.limites_propriete.iter().find(|l| l.id == id).cloned().map(|mut limite| { limite.contour = trace; Commande::LimitePropriete { limite } }),
+                ElementTrace::ProfilMur => None,
             };
             let Some(commande) = commande else { self.dessin2d.message = Some("Élément introuvable.".into()); return; };
             if let Err(e) = self.executer_bim(commande) { self.dessin2d.message = Some(e); return; }

@@ -34,6 +34,9 @@ pub(super) fn volume_mur(
     booleen: Booleen,
 ) -> Result<Vec<Tri>, String> {
     let contour = contour_mur(p, m, jonctions, epaisseur)?;
+    if let Some(cle) = p.cle_profil_mur(m) {
+        return crate::murs::profil::volume(p, cle, &contour, booleen);
+    }
     let volume = prisme(&contour, bas, haut);
     let attaches: std::collections::BTreeSet<_> = std::iter::once(&m.id)
         .chain(m.assemblage.iter())

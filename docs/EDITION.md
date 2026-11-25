@@ -314,6 +314,19 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   et haut des murs (attache à une toiture, priorité d'une couche aux croisements),
   mise à jour depuis le type, trémie ou contour rectangulaire d'un élément
   horizontal. Modifier un contour réinitialise ses pentes par arête.
+- **Profil d'un mur** (comme « Modifier le profil » de Revit) : sélectionner un mur
+  droit (ou une couche : tout l'assemblage), puis **Modifier → Modifier tracé** en vue
+  3D, en coupe ou en élévation. Le contour d'élévation apparaît dans le plan du mur,
+  à partir du rectangle base-haut ; il se modifie avec les outils de tracé des
+  contours (glisser sommets et côtés, Polygone, Rectangle ; un contour intérieur fait
+  un vide), accrochages sur la base, le haut, les bouts du mur et les niveaux.
+  Entrée valide, **Réinitialiser le profil** rend le rectangle. Côtés droits seulement ;
+  refusé sur un mur courbe, ou vu par la tranche. En plan, Modifier tracé garde le
+  glissement des extrémités. Le profil reste en place quand le mur est allongé,
+  raccourci ou retourné, et suit le mur déplacé ou tourné. Un mur à profil quitte ses
+  toitures et ne s'y attache plus ; Scinder est refusé tant que le profil n'est pas
+  réinitialisé. Hauteur des nomenclatures et quantités IFC : hauteur nominale
+  (base-haut) ; volume : celui du profil.
 - **Raccords des murs droits** : l'onglet se forme quand les extrémités des lignes
   de contrôle se touchent, y compris avec une implantation sur une face et un angle
   aigu. Une tolérance de 0,01 mm absorbe seulement l'arrondi des coordonnées ;
@@ -840,6 +853,7 @@ editer {"action":"copier","ids":["rdc-m0"],"delta":[0,3000,0]}
 editer {"action":"tourner","ids":["rdc-m0"],"centre":[0,0],"angle":90}
 editer {"action":"ouverture","mur":"rdc-m0","genre":"porte","abscisse":2000,"largeur":900,"hauteur":2100,"allege":0}
 editer {"action":"attacher","ids":["etage-m0"],"toiture":"toiture"}
+editer {"action":"profil_mur","id":"rdc-m0","profil":{"contours":[[[0,0],[4000,0],[4000,2700],[2000,4000],[0,2700]]]}}
 editer {"action":"supprimer","ids":["porte"]}
 annuler
 retablir

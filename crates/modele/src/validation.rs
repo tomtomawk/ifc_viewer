@@ -294,6 +294,7 @@ impl Projet {
                 return Err("Toiture d'attachement absente.".into());
             }
         }
+        crate::murs::profil::verifier(self)?;
         for g in &self.quadrillages {
             if g.nom.trim().is_empty()
                 || g.debut == g.fin

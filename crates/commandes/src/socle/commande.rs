@@ -122,6 +122,12 @@ pub enum Commande {
         ids: Vec<String>,
         toiture: Option<String>,
     },
+    /// Profil d'élévation d'un mur indépendant ou d'un assemblage (une couche désigne
+    /// son assemblage) ; None : rectangle d'origine. Le mur quitte ses toitures.
+    ProfilMur {
+        id: String,
+        profil: Option<modele::murs::profil::ProfilMur>,
+    },
     PrioriteJonction {
         id: String,
         priorite: i32,

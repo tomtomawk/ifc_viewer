@@ -252,6 +252,8 @@ impl ExecutionCopier for Projet {
                     .map(|(id, n)| (map[id].clone(), *n))
                     .collect();
                 self.priorites_jonction.extend(priorites);
+                let profils: Vec<_> = self.profils_murs.iter().filter(|(id, _)| map.contains_key(*id)).map(|(id, x)| (map[id].clone(), x.clone())).collect();
+                self.profils_murs.extend(profils);
                 let implantations: Vec<_> = self.implantations.iter().filter(|(id, _)| map.contains_key(*id)).map(|(id, r)| (map[id].clone(), *r)).collect();
                 self.implantations.extend(implantations);
                 let placements: Vec<_> = map.iter().filter_map(|(a, b)| {

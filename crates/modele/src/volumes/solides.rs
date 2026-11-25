@@ -755,6 +755,7 @@ impl Projet {
             }
             self.ouvertures[k].representation = Some(mesh);
         }
+        self.recaler_profils_murs(avant);
         Ok(())
     }
 }
