@@ -41,17 +41,26 @@ pub struct TypeTrait {
     /// Lignes invisibles : ni affichées ni imprimées, visibles seulement à la sélection.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub invisible: bool,
+    /// Couleur des traits [r, v, b] ; absente du fichier : encre noire.
+    #[serde(default = "TypeTrait::encre", skip_serializing_if = "TypeTrait::est_encre")]
+    pub couleur: [u8; 3],
 }
 
 impl TypeTrait {
     /// Trait d'un segment sans type : continu fin.
     pub fn standard() -> TypeTrait {
-        TypeTrait { id: String::new(), nom: "Continu fin".into(), epaisseur: 0.18, tirets: Vec::new(), invisible: false }
+        TypeTrait { id: String::new(), nom: "Continu fin".into(), epaisseur: 0.18, tirets: Vec::new(), invisible: false, couleur: Self::ENCRE }
     }
+
+    /// Encre noire des traits sans couleur choisie.
+    pub const ENCRE: [u8; 3] = [30, 30, 30];
+    fn encre() -> [u8; 3] { Self::ENCRE }
+    fn est_encre(c: &[u8; 3]) -> bool { *c == Self::ENCRE }
 
     /// Style des traits de ce type : encre, ou transparent (alpha nul) s'il est invisible.
     pub fn style(&self) -> Style {
-        Style { couleur: [30, 30, 30, if self.invisible { 0 } else { 255 }], epaisseur: self.epaisseur }
+        let [r, v, b] = self.couleur;
+        Style { couleur: [r, v, b, if self.invisible { 0 } else { 255 }], epaisseur: self.epaisseur }
     }
 
     pub fn valider(&self) -> Result<(), String> {
@@ -104,7 +113,8 @@ impl TypeTrait {
 /// Types de trait du gabarit par défaut (sa section `types_traits`, contrôlée par test).
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn types_traits_standard() -> Vec<TypeTrait> {
-    let t = |id: &str, nom: &str, e: f64, tirets: &[f64]| TypeTrait { id: id.into(), nom: nom.into(), epaisseur: e, tirets: tirets.to_vec(), invisible: false };
+    let t = |id: &str, nom: &str, e: f64, tirets: &[f64]| TypeTrait { id: id.into(), nom: nom.into(), epaisseur: e, tirets: tirets.to_vec(), invisible: false, couleur: TypeTrait::ENCRE };
+    let c = |id: &str, nom: &str, e: f64, tirets: &[f64], couleur: [u8; 3]| TypeTrait { couleur, ..t(id, nom, e, tirets) };
     vec![
         t("trait-continu-fin", "Continu fin", 0.18, &[]),
         t("trait-continu-moyen", "Continu moyen", 0.35, &[]),
@@ -114,6 +124,11 @@ pub fn types_traits_standard() -> Vec<TypeTrait> {
         t("trait-axe", "Axe", 0.13, &[6.0, 1.0, 1.0, 1.0]),
         t("trait-cache", "Caché", 0.25, &[2.0, 1.0]),
         TypeTrait { invisible: true, ..t("trait-invisible", "Lignes invisibles", 0.18, &[]) },
+        c("trait-rouge", "Continu rouge", 0.25, &[], [200, 30, 30]),
+        c("trait-bleu", "Continu bleu", 0.25, &[], [30, 80, 200]),
+        c("trait-vert", "Continu vert", 0.25, &[], [30, 140, 60]),
+        c("trait-axe-rouge", "Axe rouge", 0.13, &[6.0, 1.0, 1.0, 1.0], [200, 30, 30]),
+        c("trait-tirets-bleus", "Tirets bleus", 0.18, &[3.0, 1.5], [30, 80, 200]),
     ]
 }
 

@@ -618,7 +618,10 @@ d'ouverture libre est `libre` ; l'ancien nom `baie` n'est plus accepté.
   sous les annotations (textes, cotes, quadrillages, ses propres traits) ; décochée
   (par défaut), elle passe sous les éléments coupés. À l'écran, les traits du modèle
   sont retirés sous une région masquante ; dans les feuilles et les exports, l'ordre
-  de tracé suffit. Type de trait **Lignes invisibles** (gabarit ; case « Invisible » de la
+  de tracé suffit. Types de trait **de couleur** (gabarit : Continu rouge, bleu, vert, Axe rouge, Tirets
+  bleus ; sélecteur de couleur de la fenêtre des types de trait) : la couleur du type
+  est celle des traits à l'écran, dans les feuilles et les exports (SVG, PDF ; DXF :
+  indice AutoCAD de base le plus proche) ; noir : suit le thème à l'écran. Type de trait **Lignes invisibles** (gabarit ; case « Invisible » de la
   fenêtre des types de trait) : le segment n'est ni affiché ni imprimé ni exporté,
   mais se sélectionne et apparaît en orange quand sa forme est sélectionnée (le
   remplissage d'une forme sélectionnée est teinté, son motif reste lisible). Dans Modifier le tracé, un arc
@@ -932,7 +935,8 @@ Undo/Redo n'est sérialisé dans le projet.
 facultatif) ; les deux portent `masque` (facultatif, faux : sous les éléments
 coupés ; vrai : au-dessus du modèle). Ajouts du 25/11/2026, les fichiers antérieurs
 restent lisibles. Type de
-trait : `invisible: true` pour des lignes invisibles (champ facultatif).
+trait : `invisible: true` pour des lignes invisibles et `couleur` [r, v, b] (champs
+facultatifs, noir par défaut).
 
 `type_trait` d'une spline ou d'un cercle (champ ajouté le 20/11/2026, facultatif : les
 fichiers existants restent valides) : identifiant d'un type de trait du projet, absent pour

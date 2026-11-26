@@ -240,7 +240,7 @@ fn plumes_et_trait_de_la_categorie_dans_la_scene() {
     p.niveaux.push(Niveau { id: "n".into(), nom: "RDC".into(), altitude: 0.0, origine: None });
     p.types_poteaux.push(modele::elements::poutre::TypeSection { id: "p200".into(), nom: "Poteau 200 × 200".into(), profil: None, largeur: 200.0, hauteur: 200.0, materiau: None });
     p.barres.push(Barre { id: "p".into(), nom: "Poteau".into(), genre: GenreBarre::Poteau, niveau: "n".into(), debut: [0.0, 0.0, 0.0], fin: [0.0, 0.0, 2500.0], type_barre: "p200".into(), rotation: 0.0, pose: Default::default(), origine: None });
-    p.types_traits.push(documentation::TypeTrait { id: "tirets".into(), nom: "Tirets".into(), epaisseur: 0.25, tirets: vec![3.0, 1.5], invisible: false });
+    p.types_traits.push(documentation::TypeTrait { id: "tirets".into(), nom: "Tirets".into(), epaisseur: 0.25, tirets: vec![3.0, 1.5], invisible: false, couleur: modele::documentation::TypeTrait::ENCRE });
     p.styles_categories.insert(CategorieMateriau::Poteaux, StyleCategorie { materiau: Some("Béton".into()), plume_coupe: Some(8), plume_projection: Some(3), type_trait_projection: Some("tirets".into()), ..Default::default() });
     p.completer_materiaux();
     p.verifier().unwrap();

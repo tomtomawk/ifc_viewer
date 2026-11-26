@@ -219,6 +219,10 @@ fn mur_brut(
         Some(x) => x.par_mur.get(&m.id).into_iter().flatten().map(|&k| (&p.ouvertures[k], Some(&x.hotes[k]))).collect(),
         None => p.ouvertures.iter().filter(|o| crate::murs::retours::perce(p, o, m)).map(|o| (o, None)).collect(),
     };
+    // cas courant : aucune ouverture n'a de retour à recoller, les vides se coupent par lots
+    if let Some(percee) = percer_par_lots(p, &m.id, &ouvertures, &tris, booleen)? {
+        return Ok(percee);
+    }
     for (o, hote) in ouvertures {
         let (axe, ep, niveau) = match hote {
             Some(Ok(h)) => (h.axe, h.epaisseur, h.niveau.clone()),
@@ -279,6 +283,67 @@ fn mur_brut(
             .ok_or("Calcul du percement trop complexe ; projet conservé.")?;
     }
     Ok(tris)
+}
+
+type Booleen = fn(&[Tri], &[Tri], noyau::csg::Op, f64) -> Option<Vec<Tri>>;
+/// Lot de vides disjoints : triangles réunis et boîtes de chaque vide.
+type Lot = (Vec<Tri>, Vec<(DVec3, DVec3)>);
+
+/// Boîte englobante d'un solide.
+fn boite_solide(t: &[Tri]) -> (DVec3, DVec3) {
+    t.iter().flatten().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), q| (a.min(*q), b.max(*q)))
+}
+
+/// Percement d'un mur par lots : les vides de toutes ses ouvertures (famille ou baie
+/// rectangulaire) sont répartis en lots de solides deux à deux disjoints, et chaque lot
+/// se retire du mur en une seule différence au lieu d'une par vide (chaque différence
+/// reprend tout le maillage du mur, qui grossit à chaque ouverture). None : une
+/// ouverture a des retours à recoller ou des données à refuser, le calcul séquentiel
+/// s'applique.
+fn percer_par_lots(p: &Projet, mur: &str, ouvertures: &[(&Ouverture, Option<&Result<crate::murs::retours::HoteElargi, String>>)], tris: &[Tri], booleen: Booleen) -> Result<Option<Vec<Tri>>, String> {
+    if ouvertures.len() < 2 || tris.is_empty() {
+        return Ok(None);
+    }
+    let mut solides: Vec<(Vec<Tri>, (DVec3, DVec3))> = Vec::new();
+    for (o, hote) in ouvertures {
+        // hôte déjà calculé (calcul groupé), sinon calculé ici : même résultat dans les deux cas
+        let (axe, ep, niveau) = match hote {
+            Some(Ok(h)) => (h.axe, h.epaisseur, h.niveau.clone()),
+            Some(Err(_)) => return Ok(None),
+            None => match hote_ouverture(p, o) { Ok(x) => x, Err(_) => return Ok(None) },
+        };
+        let Some(z) = p.niveau(&niveau).map(|n| n.altitude + o.allege) else { return Ok(None) };
+        if ![o.abscisse, o.largeur, o.hauteur, z].iter().all(|v| v.is_finite()) || o.largeur <= 0.0 || o.hauteur <= 0.0 {
+            return Ok(None);
+        }
+        let retours = crate::murs::retours::retours_avec(p, o, mur, *hote)?;
+        if !retours.retirer.is_empty() || !retours.ajouter.is_empty() {
+            return Ok(None);
+        }
+        match vides_famille(p, o)? {
+            Some(vides) => solides.extend(vides.into_iter().map(|v| { let b = boite_solide(&v); (v, b) })),
+            None => {
+                // marge transversale pour couper même les faces coplanaires d'une couche
+                let vide = prisme(&bande(&axe, o.abscisse - o.largeur / 2.0, o.abscisse + o.largeur / 2.0, ep + 2.0)?, z, z + o.hauteur);
+                let b = boite_solide(&vide);
+                solides.push((vide, b));
+            }
+        }
+    }
+    // lots de solides dont les boîtes (élargies de 1 mm) sont deux à deux disjointes
+    let mut lots: Vec<Lot> = Vec::new();
+    for (vide, (a, b)) in solides {
+        let libre = |boites: &Vec<(DVec3, DVec3)>| boites.iter().all(|(c, d)| (a - 1.0).cmpgt(*d).any() || (*c - 1.0).cmpgt(b).any());
+        match lots.iter_mut().find(|(_, boites)| libre(boites)) {
+            Some((t, boites)) => { t.extend(vide); boites.push((a, b)); }
+            None => lots.push((vide, vec![(a, b)])),
+        }
+    }
+    let mut percee = tris.to_vec();
+    for (lot, _) in lots {
+        percee = booleen(&percee, &lot, noyau::csg::Op::Difference, 1e-5).ok_or("Calcul du percement trop complexe ; projet conservé.")?;
+    }
+    Ok(Some(percee))
 }
 
 /// Jonctions volumétriques : aux croisements et aux raccords courbes, la couche
@@ -452,7 +517,7 @@ fn solides_famille(p: &Projet, o: &Ouverture, f: &crate::famille::modelee::Famil
 }
 
 /// Vides de la famille modélisée de l'ouverture (None : percement rectangulaire).
-fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, String> {
+pub(crate) fn vides_famille(p: &Projet, o: &Ouverture) -> Result<Option<Vec<Vec<Tri>>>, String> {
     let Some(f) = famille_modelee(p, o) else { return Ok(None) };
     Ok(Some(solides_famille(p, o, f)?.into_iter().filter(|s| s.vide && s.visible).map(|s| s.tris).collect()))
 }
@@ -638,6 +703,28 @@ pub(super) mod tests {
             .map(|m| geometrie::volume(&mur(&p, m, &jonctions::coupes(&p)).unwrap()))
             .sum();
         assert!((v - 2_022_000_000.0).abs() < 1.0, "{v}");
+    }
+    /// Percement par lots : volume exact d'un mur à ouvertures disjointes (libres) et à
+    /// ouvertures qui se recouvrent (lots séparés), sans retour ni famille complexe.
+    #[test]
+    fn percement_par_lots_volume_exact() {
+        let mut p = exemple();
+        let ouvrir = |p: &mut Projet, id: &str, abscisse: f64| {
+            let type_ouverture = Some(p.type_ouverture_par_defaut(GenreOuverture::Libre, 900.0, 2100.0));
+            p.ouvertures.push(Ouverture { id: id.into(), nom: id.into(), genre: GenreOuverture::Libre, mur: "m".into(), type_ouverture, abscisse, largeur: 900.0, hauteur: 2100.0, allege: 0.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        };
+        let volume = |p: &Projet| geometrie::volume(&mur(p, &p.murs[0], &jonctions::coupes(p)).unwrap());
+        let plein = 4000.0 * 200.0 * 3000.0;
+        // trois baies disjointes
+        for (k, x) in [700.0, 2000.0, 3300.0].into_iter().enumerate() { ouvrir(&mut p, &format!("o{k}"), x); }
+        assert!((volume(&p) - (plein - 3.0 * 900.0 * 2100.0 * 200.0)).abs() < 1.0, "{}", volume(&p));
+        // une quatrième recouvre la deuxième : 1550..2450 et 1900..2800 → 1550..2800
+        ouvrir(&mut p, "o3", 2350.0);
+        let recouvrement = 900.0 * 2100.0 * 200.0 * 2.0 + (2800.0 - 1550.0) * 2100.0 * 200.0;
+        assert!((volume(&p) - (plein - recouvrement)).abs() < 1.0, "{}", volume(&p));
+        // le calcul groupé rend les mêmes triangles
+        let j = jonctions::coupes(&p);
+        assert!(murs(&p, &j)[0] == mur(&p, &p.murs[0], &j));
     }
     #[test]
     fn mur_courbe_deux_sens_et_grandes_coordonnees() {

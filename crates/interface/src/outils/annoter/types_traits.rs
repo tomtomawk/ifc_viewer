@@ -13,6 +13,8 @@ pub(crate) fn apercu_trait(ui: &egui::Ui, r: egui::Rect, t: &TypeTrait) {
 }
 
 fn apercu_trait_peintre(p: &egui::Painter, r: egui::Rect, couleur: egui::Color32, t: &TypeTrait) {
+    // couleur du type ; l'encre noire suit le thème de l'interface
+    let couleur = if t.couleur == TypeTrait::ENCRE { couleur } else { egui::Color32::from_rgb(t.couleur[0], t.couleur[1], t.couleur[2]) };
     // invisible : pointillé très clair, comme à la sélection seulement
     if t.invisible {
         p.add(egui::Shape::dashed_line(&[r.left_center(), r.right_center()], egui::Stroke::new(1.0, couleur.gamma_multiply(0.35)), 2.0, 3.0));
@@ -222,8 +224,8 @@ impl Application {
         egui::Window::new("Types de trait").open(&mut ouvert).default_width(560.0).resizable(true).show(ctx, |ui| {
             ui.label(RichText::new("Épaisseur et tirets en mm du papier : même aspect à toutes les échelles. Tirets : longueurs trait, blanc, trait, blanc… (vide : continu). Invisible : ni affiché ni imprimé, montré seulement à la sélection.").small().weak());
             let mut supprimer = None;
-            egui::Grid::new("grille_types_traits").num_columns(6).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
-                for t in ["Nom", "Épaisseur", "Tirets", "Invisible", "Aperçu", ""] {
+            egui::Grid::new("grille_types_traits").num_columns(7).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
+                for t in ["Nom", "Épaisseur", "Tirets", "Couleur", "Invisible", "Aperçu", ""] {
                     ui.label(RichText::new(t).small().weak());
                 }
                 ui.end_row();
@@ -233,6 +235,7 @@ impl Application {
                     if ui.add_sized([110.0, 20.0], egui::TextEdit::singleline(texte).hint_text("continu")).changed() {
                         t.tirets = texte.split([' ', ';']).filter(|x| !x.is_empty()).filter_map(|x| x.replace(',', ".").parse().ok()).collect();
                     }
+                    ui.color_edit_button_srgb(&mut t.couleur).on_hover_text("Couleur des traits de ce type (noir : suit le thème à l'écran, noir à l'impression)");
                     ui.checkbox(&mut t.invisible, "").on_hover_text("Lignes invisibles : ni affichées ni imprimées, visibles seulement quand la forme est sélectionnée");
                     let (r, _) = ui.allocate_exact_size(egui::vec2(90.0, 18.0), Sense::hover());
                     apercu_trait(ui, r, t);
@@ -249,7 +252,7 @@ impl Application {
             ui.horizontal(|ui| {
                 if ui.button("+ Nouveau type").clicked() {
                     let nom = (1..).map(|k| format!("Trait {k}")).find(|n| !types.iter().any(|t| &t.nom == n)).unwrap_or_default();
-                    types.push(TypeTrait { id: String::new(), nom, epaisseur: 0.25, tirets: Vec::new(), invisible: false });
+                    types.push(TypeTrait { id: String::new(), nom, epaisseur: 0.25, tirets: Vec::new(), invisible: false, couleur: TypeTrait::ENCRE });
                     tirets.push(String::new());
                 }
             });

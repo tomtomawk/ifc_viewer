@@ -189,7 +189,7 @@ fn plumes_et_trait_de_la_categorie() {
     assert_eq!(p.trait_coupe(Some(&couche), CategorieMateriau::Murs), p.trait_couche(&couche));
     assert!(p.trait_projection(CategorieMateriau::Murs).is_none());
     p.styles_categories.insert(CategorieMateriau::Murs, StyleCategorie { plume_coupe: Some(9), plume_projection: Some(2), type_trait_projection: Some("tirets".into()), ..Default::default() });
-    p.types_traits.push(crate::documentation::TypeTrait { id: "tirets".into(), nom: "Tirets".into(), epaisseur: 0.25, tirets: vec![3.0, 1.5], invisible: false });
+    p.types_traits.push(crate::documentation::TypeTrait { id: "tirets".into(), nom: "Tirets".into(), epaisseur: 0.25, tirets: vec![3.0, 1.5], invisible: false, couleur: crate::documentation::TypeTrait::ENCRE });
     let plumes = p.epaisseurs_plumes();
     // la plume réglée sur la couche prime, puis celle de la catégorie
     assert_eq!(p.trait_coupe(Some(&reglee), CategorieMateriau::Murs), plumes[7]);

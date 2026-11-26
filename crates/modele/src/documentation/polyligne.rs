@@ -225,4 +225,25 @@ mod tests {
         let visibles = super::super::primitives_forme_dessin(&p, &carre(None, "trait-continu-fin"), 100.0, &|q| q.extend(0.0));
         assert!(!visibles[0].invisible());
     }
+
+    /// Types de trait de couleur : la couleur du type est celle des traits (opaque), le
+    /// fichier relu garde noir par défaut ; invisible : alpha nul, couleur gardée.
+    #[test]
+    fn types_de_trait_de_couleur() {
+        let p = Projet::depuis_gabarit("Essai", &crate::gabarit::Gabarit::defaut());
+        let rouge = p.types_traits.iter().find(|t| t.id == "trait-rouge").expect("type rouge du gabarit");
+        assert_eq!(rouge.style().couleur, [200, 30, 30, 255]);
+        let prims = super::super::primitives_forme_dessin(&p, &carre(None, "trait-rouge"), 100.0, &|q| q.extend(0.0));
+        assert_eq!(prims[0].style.couleur, [200, 30, 30, 255]);
+        // noir par défaut, omis du JSON ; relu à l'identique
+        let noir = p.type_trait("trait-continu-fin");
+        assert!(serde_json::to_value(&noir).unwrap().get("couleur").is_none());
+        let relu: TypeTrait = serde_json::from_str(r#"{"id":"x","nom":"X","epaisseur":0.2}"#).unwrap();
+        assert_eq!(relu.couleur, TypeTrait::ENCRE);
+        let json = serde_json::to_string(rouge).unwrap();
+        assert_eq!(serde_json::from_str::<TypeTrait>(&json).unwrap(), *rouge);
+        // invisible et colorée : transparente
+        let inv = TypeTrait { invisible: true, ..rouge.clone() };
+        assert_eq!(inv.style().couleur, [200, 30, 30, 0]);
+    }
 }

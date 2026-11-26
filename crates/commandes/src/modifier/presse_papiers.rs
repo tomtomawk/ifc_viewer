@@ -279,6 +279,7 @@ mod tests {
             epaisseur: 0.5,
             tirets: vec![],
             invisible: false,
+            couleur: modele::documentation::TypeTrait::ENCRE,
         });
         let fragment = copier_selection(&source, &["dessin-1".into()]).unwrap();
         let mut destination = Projet::nouveau("Destination");

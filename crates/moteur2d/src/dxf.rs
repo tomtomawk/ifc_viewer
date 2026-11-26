@@ -20,6 +20,13 @@ fn calque(r: Role) -> &'static str {
 /// 7 (noir sur fond blanc), 8 et 9 (gris).
 fn couleur(c: [u8; 4]) -> u8 {
     let l = (c[0] as u32 + c[1] as u32 + c[2] as u32) / 3;
+    // couleur franche : l'indice AutoCAD de base le plus proche (rouge, jaune, vert,
+    // cyan, bleu, magenta) ; sinon gris selon la clarté
+    let (mx, mn) = (c[..3].iter().copied().max().unwrap_or(0) as i32, c[..3].iter().copied().min().unwrap_or(0) as i32);
+    if mx - mn > 70 {
+        let t = |v: u8| i32::from(v as i32 * 2 > mx + mn);
+        return match (t(c[0]), t(c[1]), t(c[2])) { (1, 0, 0) => 1, (1, 1, 0) => 2, (0, 1, 0) => 3, (0, 1, 1) => 4, (0, 0, 1) => 5, (1, 0, 1) => 6, _ => 7 };
+    }
     if l < 90 { 7 } else if l < 190 { 8 } else { 9 }
 }
 
