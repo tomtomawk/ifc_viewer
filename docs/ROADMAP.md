@@ -65,7 +65,7 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M12 | Outils Symbole et Légende : boutons présents, désactivés | P2 | `crates/interface/src/zones/ruban/affichage.rs:100-103` |
 | M14 | Créer à l'identique : menuiseries à géométrie importée et pentes différentes par arête | P3 | `docs/EDITION.md` |
 | M15 | Toitures concaves à pentes différentes par arête (aujourd'hui refusées) | P3 | `docs/EDITION.md` |
-| M16 | Poutres inclinées ; sections circulaires de poteau | P2 | `docs/EDITION.md` |
+| M16 | Poutres inclinées (aujourd'hui horizontales seulement) ; sections circulaires de poteau et de poutre : les profils des types de section n'acceptent que des côtés droits (`Profil::points` lit les sommets de la polyligne, pas ses arcs) | P2 | `crates/modele/src/famille/profil.rs`, `crates/modele/src/elements/poutre.rs`, `docs/EDITION.md` |
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
 | U11 | Réglages retirés car jamais lus (U3, 20/11/2026), à réaliser s'ils sont voulus : Texte (ligne de repère avec flèche, alignement gauche / centre / droite), Étiquette (contenu : type, repère, matériau), Cote (mode orthogonal, décalage papier), Zone (motif, pas), Quadrillage en arc, Déplacer contraint horizontal / vertical (Maj contraint déjà aux axes) | P3 | `zones/ruban/mod.rs` (`champs`) ; question au §9 |
