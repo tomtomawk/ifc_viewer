@@ -372,7 +372,9 @@ impl Application {
         let brouillon = self.type_brouillon.take().filter(|b| b.cle == texte && deverrouille);
         let original = extraire(p, &cle)?;
         let mut t = brouillon.map_or_else(|| original.clone(), |b| b.valeur);
+        // pleine largeur, mêmes bords que le sélecteur de type
         let cadre = egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.add_enabled_ui(deverrouille, |ui| champs(ui, p, &mut t));
         });
         if deverrouille {

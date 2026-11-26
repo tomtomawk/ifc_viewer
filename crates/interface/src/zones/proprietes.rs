@@ -88,10 +88,7 @@ impl Application {
             return nouveau;
         }
         if let Some(a) = projet.assemblages.iter().find(|a| modele::identifiants::id_natif("assemblage", &a.id) == id) {
-            ui.label(RichText::new(format!("Mur composé · {}", a.nom)).strong());
-            if let Some(t) = projet.type_mur(&a.type_mur) {
-                ui.label(RichText::new(&t.nom).weak());
-            }
+            // le nom est dans la grille (Nom) et le type dans le sélecteur : pas de titre
             let couches = projet.couches_assemblage(&a.id);
             egui::Grid::new("assemblage_identite").num_columns(2).striped(true).show(ui,|ui| {
                 if let Some(m)=couches.first() {
@@ -126,11 +123,12 @@ impl Application {
             let epaisseur = projet.type_mur(&m.type_mur).map_or(0.0, |t| t.epaisseur());
             let materiau = projet.type_mur(&m.type_mur).and_then(|t| (t.couches.len() == 1).then(|| t.couches[0].materiau.clone()).flatten());
             let assemblage = m.assemblage.as_ref().and_then(|a| projet.assemblage(a));
-            ui.label(RichText::new(match (assemblage, &materiau) {
-                (Some(a), Some(x)) => format!("Couche · {x} · de {}", a.nom),
-                (Some(a), None) => format!("Couche de {}", a.nom),
-                (None, _) => m.nom.clone(),
-            }).strong());
+            // mur seul : son nom est dans la grille ; une couche dit de quel mur elle fait partie
+            match (assemblage, &materiau) {
+                (Some(a), Some(x)) => { ui.label(RichText::new(format!("Couche · {x} · de {}", a.nom)).strong()); }
+                (Some(a), None) => { ui.label(RichText::new(format!("Couche de {}", a.nom)).strong()); }
+                (None, _) => {}
+            }
             let mut change = false;
             egui::Grid::new("mur_natif_proprietes").num_columns(2).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 let niveaux: Vec<(String, String)> = projet.niveaux.iter().map(|n| (n.id.clone(), n.nom.clone())).collect();
