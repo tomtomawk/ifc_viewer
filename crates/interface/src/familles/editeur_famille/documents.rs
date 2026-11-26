@@ -669,13 +669,18 @@ impl Application {
         });
     }
 
-    /// Portes et fenêtres du projet : (type, nom, catégorie), par catégorie puis nom.
+    /// Familles du projet : (type, nom, catégorie), portes, fenêtres et ouvertures libres
+    /// (types d'ouvertures) par catégorie puis nom, suivies des composants (catégorie
+    /// `Libre` aussi : le genre ne les distingue pas, leurs identifiants sont ceux de
+    /// `types_composants`).
     pub(crate) fn familles_projet(&self) -> Vec<(String, String, GenreOuverture)> {
         let Some((p, _)) = &self.natif else { return Vec::new() };
-        let mut v: Vec<(String, String, GenreOuverture)> = p.types_ouvertures.iter().filter(|t| t.genre != GenreOuverture::Libre).map(|t| (t.id.clone(), t.nom.clone(), t.genre)).collect();
-        v.extend(p.types_composants.iter().map(|t| (t.id.clone(), t.nom.clone(), GenreOuverture::Libre)));
+        let mut v: Vec<(String, String, GenreOuverture)> = p.types_ouvertures.iter().map(|t| (t.id.clone(), t.nom.clone(), t.genre)).collect();
         let rang = |g: GenreOuverture| match g { GenreOuverture::Porte => 0, GenreOuverture::Fenetre => 1, GenreOuverture::Libre => 2 };
         v.sort_by(|a, b| (rang(a.2), &a.1).cmp(&(rang(b.2), &b.1)));
+        let mut composants: Vec<_> = p.types_composants.iter().map(|t| (t.id.clone(), t.nom.clone(), GenreOuverture::Libre)).collect();
+        composants.sort_by(|a, b| a.1.cmp(&b.1));
+        v.extend(composants);
         v
     }
 
