@@ -215,15 +215,16 @@ fn mur_brut(
     let mut tris = crate::elements::modenature::creuser(p, m, super::attache_toiture::volume_mur(p, m, jonctions, (bas, haut), e, booleen)?, booleen)?;
     // ouvertures qui percent le mur, avec leur hôte élargi s'il est déjà calculé
     type Hote = Result<crate::murs::retours::HoteElargi, String>;
-    let ouvertures: Vec<(&Ouverture, Option<&Hote>)> = match percements {
-        Some(x) => x.par_mur.get(&m.id).into_iter().flatten().map(|&k| (&p.ouvertures[k], Some(&x.hotes[k]))).collect(),
-        None => p.ouvertures.iter().filter(|o| crate::murs::retours::perce(p, o, m)).map(|o| (o, None)).collect(),
+    type Resolue = Option<std::sync::Arc<FamilleResolue>>;
+    let ouvertures: Vec<(&Ouverture, Option<&Hote>, Resolue)> = match percements {
+        Some(x) => x.par_mur.get(&m.id).into_iter().flatten().map(|&k| (&p.ouvertures[k], Some(&x.hotes[k]), x.familles[k].clone())).collect(),
+        None => p.ouvertures.iter().filter(|o| crate::murs::retours::perce(p, o, m)).map(|o| (o, None, None)).collect(),
     };
     // cas courant : aucune ouverture n'a de retour à recoller, les vides se coupent par lots
     if let Some(percee) = percer_par_lots(p, &m.id, &ouvertures, &tris, booleen)? {
         return Ok(percee);
     }
-    for (o, hote) in ouvertures {
+    for (o, hote, resolue) in ouvertures {
         let (axe, ep, niveau) = match hote {
             Some(Ok(h)) => (h.axe, h.epaisseur, h.niveau.clone()),
             Some(Err(e)) => return Err(e.clone()),
@@ -244,14 +245,14 @@ fn mur_brut(
         }
         // retours aux insertions : place laissée aux couches qui se retournent, puis
         // retour de cette couche
-        let retours = crate::murs::retours::retours_avec(p, o, &m.id, hote)?;
+        let retours = crate::murs::retours::retours_avec(p, o, &m.id, hote, resolue.as_deref().map(|r| &r.resolution))?;
         for r in &retours.retirer {
             if tris.is_empty() { break; }
             tris = booleen(&tris, r, noyau::csg::Op::Difference, 1e-5)
                 .ok_or("Calcul du retour trop complexe ; projet conservé.")?;
         }
         // famille modélisée : ses vides percent le mur
-        if let Some(vides) = vides_famille(p, o)? {
+        if let Some(vides) = vides_places(p, o, &axe, &niveau, resolue.as_deref())? {
             for vide in vides {
                 if tris.is_empty() {
                     break;
@@ -286,26 +287,32 @@ fn mur_brut(
 }
 
 type Booleen = fn(&[Tri], &[Tri], noyau::csg::Op, f64) -> Option<Vec<Tri>>;
-/// Lot de vides disjoints : triangles réunis et boîtes de chaque vide.
-type Lot = (Vec<Tri>, Vec<(DVec3, DVec3)>);
 
 /// Boîte englobante d'un solide.
 fn boite_solide(t: &[Tri]) -> (DVec3, DVec3) {
     t.iter().flatten().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), q| (a.min(*q), b.max(*q)))
 }
 
-/// Percement d'un mur par lots : les vides de toutes ses ouvertures (famille ou baie
-/// rectangulaire) sont répartis en lots de solides deux à deux disjoints, et chaque lot
-/// se retire du mur en une seule différence au lieu d'une par vide (chaque différence
-/// reprend tout le maillage du mur, qui grossit à chaque ouverture). None : une
-/// ouverture a des retours à recoller ou des données à refuser, le calcul séquentiel
-/// s'applique.
-fn percer_par_lots(p: &Projet, mur: &str, ouvertures: &[(&Ouverture, Option<&Result<crate::murs::retours::HoteElargi, String>>)], tris: &[Tri], booleen: Booleen) -> Result<Option<Vec<Tri>>, String> {
+/// Percement d'un mur par lots : les solides à retirer de toutes ses ouvertures (vides
+/// de la famille ou baie rectangulaire, place laissée aux retours des autres couches)
+/// sont répartis en lots de solides deux à deux disjoints, et chaque lot se retire du mur
+/// en une seule différence au lieu d'une par solide (chaque différence reprend tout le
+/// maillage du mur, qui grossit à chaque ouverture) ; les retours de la couche se
+/// recollent de même par lots d'unions. Les différences commutent ; les unions viennent
+/// après toutes les différences, ce qui rend le même mur que le calcul séquentiel quand
+/// les ouvertures à retours ont des emprises (vides et retours compris) deux à deux
+/// disjointes. None (calcul séquentiel) : une seule ouverture, emprises à retours qui se
+/// recouvrent, ou données à refuser.
+fn percer_par_lots(p: &Projet, mur: &str, ouvertures: &[OuvertureHote], tris: &[Tri], booleen: Booleen) -> Result<Option<Vec<Tri>>, String> {
     if ouvertures.len() < 2 || tris.is_empty() {
         return Ok(None);
     }
-    let mut solides: Vec<(Vec<Tri>, (DVec3, DVec3))> = Vec::new();
-    for (o, hote) in ouvertures {
+    let mut retirer: Vec<Solide> = Vec::new();
+    let mut ajouter: Vec<Solide> = Vec::new();
+    // emprise de chaque ouverture (tous ses solides), pour le contrôle des recouvrements
+    let mut emprises: Vec<(DVec3, DVec3)> = Vec::new();
+    let mut avec_retours = false;
+    for (o, hote, resolue) in ouvertures {
         // hôte déjà calculé (calcul groupé), sinon calculé ici : même résultat dans les deux cas
         let (axe, ep, niveau) = match hote {
             Some(Ok(h)) => (h.axe, h.epaisseur, h.niveau.clone()),
@@ -316,34 +323,65 @@ fn percer_par_lots(p: &Projet, mur: &str, ouvertures: &[(&Ouverture, Option<&Res
         if ![o.abscisse, o.largeur, o.hauteur, z].iter().all(|v| v.is_finite()) || o.largeur <= 0.0 || o.hauteur <= 0.0 {
             return Ok(None);
         }
-        let retours = crate::murs::retours::retours_avec(p, o, mur, *hote)?;
-        if !retours.retirer.is_empty() || !retours.ajouter.is_empty() {
-            return Ok(None);
-        }
-        match vides_famille(p, o)? {
-            Some(vides) => solides.extend(vides.into_iter().map(|v| { let b = boite_solide(&v); (v, b) })),
-            None => {
-                // marge transversale pour couper même les faces coplanaires d'une couche
-                let vide = prisme(&bande(&axe, o.abscisse - o.largeur / 2.0, o.abscisse + o.largeur / 2.0, ep + 2.0)?, z, z + o.hauteur);
-                let b = boite_solide(&vide);
-                solides.push((vide, b));
+        let retours = crate::murs::retours::retours_avec(p, o, mur, *hote, resolue.as_deref().map(|r| &r.resolution))?;
+        avec_retours |= !retours.retirer.is_empty() || !retours.ajouter.is_empty();
+        let vides = match vides_places(p, o, &axe, &niveau, resolue.as_deref())? {
+            Some(v) => v,
+            // marge transversale pour couper même les faces coplanaires d'une couche
+            None => vec![prisme(&bande(&axe, o.abscisse - o.largeur / 2.0, o.abscisse + o.largeur / 2.0, ep + 2.0)?, z, z + o.hauteur)],
+        };
+        let mut emprise = (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN));
+        let mut noter = |v: Vec<Tri>, liste: &mut Vec<Solide>| {
+            let b = boite_solide(&v);
+            emprise = (emprise.0.min(b.0), emprise.1.max(b.1));
+            liste.push((v, b));
+        };
+        for v in retours.retirer.into_iter().chain(vides) { noter(v, &mut retirer); }
+        for v in retours.ajouter { noter(v, &mut ajouter); }
+        emprises.push(emprise);
+    }
+    // retours : les emprises doivent être disjointes pour que l'ordre des opérations n'importe pas
+    if avec_retours {
+        for (k, (a, b)) in emprises.iter().enumerate() {
+            if emprises[..k].iter().any(|(c, d)| !disjointes((*a, *b), (*c, *d))) {
+                return Ok(None);
             }
         }
     }
-    // lots de solides dont les boîtes (élargies de 1 mm) sont deux à deux disjointes
-    let mut lots: Vec<Lot> = Vec::new();
-    for (vide, (a, b)) in solides {
-        let libre = |boites: &Vec<(DVec3, DVec3)>| boites.iter().all(|(c, d)| (a - 1.0).cmpgt(*d).any() || (*c - 1.0).cmpgt(b).any());
-        match lots.iter_mut().find(|(_, boites)| libre(boites)) {
-            Some((t, boites)) => { t.extend(vide); boites.push((a, b)); }
-            None => lots.push((vide, vec![(a, b)])),
-        }
-    }
     let mut percee = tris.to_vec();
-    for (lot, _) in lots {
-        percee = booleen(&percee, &lot, noyau::csg::Op::Difference, 1e-5).ok_or("Calcul du percement trop complexe ; projet conservé.")?;
+    for (lot, op, message) in en_lots(retirer).into_iter().map(|l| (l, noyau::csg::Op::Difference, "Calcul du percement trop complexe ; projet conservé."))
+        .chain(en_lots(ajouter).into_iter().map(|l| (l, noyau::csg::Op::Union, "Calcul du retour trop complexe ; projet conservé.")))
+    {
+        if percee.is_empty() { break; }
+        percee = booleen(&percee, &lot, op, 1e-5).ok_or(message)?;
     }
     Ok(Some(percee))
+}
+
+type HoteOuv = Result<crate::murs::retours::HoteElargi, String>;
+/// Ouverture d'un mur : son hôte élargi et sa famille résolue, s'ils sont déjà calculés.
+type OuvertureHote<'a> = (&'a Ouverture, Option<&'a HoteOuv>, Option<std::sync::Arc<FamilleResolue>>);
+/// Lot de solides disjoints : triangles réunis et boîtes de chaque solide.
+type LotSolides = (Vec<Tri>, Vec<(DVec3, DVec3)>);
+/// Solide et sa boîte englobante.
+type Solide = (Vec<Tri>, (DVec3, DVec3));
+
+/// Vrai si deux boîtes, élargies de 1 mm, ne se recouvrent pas.
+fn disjointes((a, b): (DVec3, DVec3), (c, d): (DVec3, DVec3)) -> bool {
+    (a - 1.0).cmpgt(d).any() || (c - 1.0).cmpgt(b).any()
+}
+
+/// Répartit des solides en lots de solides deux à deux disjoints (boîtes élargies de
+/// 1 mm), triangles réunis par lot, dans l'ordre d'apparition.
+fn en_lots(solides: Vec<Solide>) -> Vec<Vec<Tri>> {
+    let mut lots: Vec<LotSolides> = Vec::new();
+    for (v, boite) in solides {
+        match lots.iter_mut().find(|(_, boites)| boites.iter().all(|b| disjointes(boite, *b))) {
+            Some((t, boites)) => { t.extend(v); boites.push(boite); }
+            None => lots.push((v, vec![boite])),
+        }
+    }
+    lots.into_iter().map(|(t, _)| t).collect()
 }
 
 /// Jonctions volumétriques : aux croisements et aux raccords courbes, la couche
@@ -499,21 +537,69 @@ fn famille_modelee<'a>(p: &'a Projet, o: &Ouverture) -> Option<&'a crate::famill
 /// d'occurrence de l'ouverture et paramètres partagés du projet appliqués.
 fn solides_famille(p: &Projet, o: &Ouverture, f: &crate::famille::modelee::FamilleModelee) -> Result<Vec<crate::famille::modelee::SolideFamille>, String> {
     let (axe, e, niveau) = hote_ouverture(p, o)?;
-    let z = p.niveau(&niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
-    let (c, u) = repere(&axe, o.abscisse);
+    let resolue = resoudre_famille(p, o, f, e);
+    placer_solides(p, o, &axe, &niveau, &resolue.solides)
+}
+
+/// Famille d'une ouverture résolue pour ses cotes et l'épaisseur de son hôte : valeurs
+/// des paramètres et solides dans le repère de la famille (avant placement dans le mur).
+pub struct FamilleResolue {
+    pub resolution: crate::famille::modelee::Resolution,
+    pub solides: Vec<crate::famille::modelee::SolideFamille>,
+}
+
+fn resoudre_famille(p: &Projet, o: &Ouverture, f: &crate::famille::modelee::FamilleModelee, e: f64) -> FamilleResolue {
+    let resolution = f.resoudre_occurrence(o.largeur, o.hauteur, e, &p.surcharges(o), &o.materiaux);
+    let solides = f.solides(&resolution);
+    FamilleResolue { resolution, solides }
+}
+
+/// Solides résolus placés dans le mur : axe de l'hôte, niveau, abscisse, retournement.
+fn placer_solides(p: &Projet, o: &Ouverture, axe: &Axe, niveau: &str, locaux: &[crate::famille::modelee::SolideFamille]) -> Result<Vec<crate::famille::modelee::SolideFamille>, String> {
+    let z = p.niveau(niveau).ok_or("Niveau introuvable.")?.altitude + o.allege;
+    let (c, u) = repere(axe, o.abscisse);
     let n = u.perp();
-    let surcharges = p.surcharges(o);
-    let r = f.resoudre_occurrence(o.largeur, o.hauteur, e, &surcharges, &o.materiaux);
     let monde = |q: DVec3| placer(o, c, u, n, z, q);
     // un seul miroir retourne l'orientation des faces
     let impair = o.retournee != o.inversee;
-    Ok(f.solides(&r)
-        .into_iter()
+    Ok(locaux
+        .iter()
+        .cloned()
         .map(|mut s| {
             s.tris = s.tris.into_iter().map(|t| { let m = t.map(monde); if impair { [m[0], m[2], m[1]] } else { m } }).collect();
             s
         })
         .collect())
+}
+
+/// Familles résolues de toutes les ouvertures (None : sans famille ou hôte en erreur),
+/// dans l'ordre de `p.ouvertures`. Les ouvertures de même type, mêmes cotes, même
+/// épaisseur d'hôte et mêmes valeurs partagent une seule résolution ; seul le
+/// placement dans le mur est propre à chacune.
+pub(crate) fn familles_resolues(p: &Projet, hotes: &[Result<crate::murs::retours::HoteElargi, String>]) -> Vec<Option<std::sync::Arc<FamilleResolue>>> {
+    use rayon::prelude::*;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    let cles: Vec<Option<String>> = p.ouvertures.iter().zip(hotes).map(|(o, h)| match (famille_modelee(p, o), h) {
+        (Some(_), Ok(h)) => Some(format!("{:?}|{}|{}|{}|{:?}|{:?}", o.type_ouverture, o.largeur.to_bits(), o.hauteur.to_bits(), h.epaisseur.to_bits(), p.surcharges(o), o.materiaux)),
+        _ => None,
+    }).collect();
+    let mut premiers: HashMap<&str, usize> = HashMap::new();
+    for (k, c) in cles.iter().enumerate() {
+        if let Some(c) = c { premiers.entry(c.as_str()).or_insert(k); }
+    }
+    let resolues: HashMap<&str, Arc<FamilleResolue>> = premiers.par_iter().filter_map(|(c, &k)| {
+        let (o, h) = (&p.ouvertures[k], hotes[k].as_ref().ok()?);
+        Some((*c, Arc::new(resoudre_famille(p, o, famille_modelee(p, o)?, h.epaisseur))))
+    }).collect();
+    cles.iter().map(|c| c.as_ref().and_then(|c| resolues.get(c.as_str()).cloned())).collect()
+}
+
+/// Vides placés de la famille d'une ouverture, depuis sa résolution déjà calculée si
+/// elle l'est (None : percement rectangulaire).
+fn vides_places(p: &Projet, o: &Ouverture, axe: &Axe, niveau: &str, resolue: Option<&FamilleResolue>) -> Result<Option<Vec<Vec<Tri>>>, String> {
+    let Some(r) = resolue else { return vides_famille(p, o) };
+    Ok(Some(placer_solides(p, o, axe, niveau, &r.solides)?.into_iter().filter(|s| s.vide && s.visible).map(|s| s.tris).collect()))
 }
 
 /// Vides de la famille modélisée de l'ouverture (None : percement rectangulaire).

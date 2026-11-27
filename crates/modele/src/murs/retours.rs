@@ -130,6 +130,9 @@ fn proche(p: &Projet, o: &Ouverture, m: &Mur) -> bool {
 /// mur par mur, calculées une seule fois pour tout le projet.
 pub struct Percements {
     pub hotes: Vec<Result<HoteElargi, String>>,
+    /// Famille résolue de chaque ouverture, partagée entre les ouvertures de même type,
+    /// mêmes cotes, même épaisseur d'hôte et mêmes valeurs (une résolution par groupe).
+    pub familles: Vec<Option<std::sync::Arc<crate::volumes::solides::FamilleResolue>>>,
     pub par_mur: std::collections::HashMap<String, Vec<usize>>,
 }
 
@@ -138,6 +141,7 @@ impl Percements {
         use rayon::prelude::*;
         use std::collections::HashMap;
         let hotes: Vec<Result<HoteElargi, String>> = p.ouvertures.par_iter().map(|o| hote_elargi(p, o)).collect();
+        let familles = crate::volumes::solides::familles_resolues(p, &hotes);
         let par_id: HashMap<&str, &Mur> = p.murs.iter().map(|m| (m.id.as_str(), m)).collect();
         let mut couches: HashMap<&str, Vec<&Mur>> = HashMap::new();
         for m in &p.murs {
@@ -158,7 +162,7 @@ impl Percements {
                 if liste.last() != Some(&k) { liste.push(k); }
             }
         }
-        Self { hotes, par_mur }
+        Self { hotes, familles, par_mur }
     }
 }
 
@@ -182,18 +186,24 @@ pub struct Retours {
 }
 
 /// Calcule les retours avec l'hôte élargi déjà calculé, ou le calcule si absent.
-pub fn retours_avec(p: &Projet, o: &Ouverture, id: &str, hote: Option<&Result<HoteElargi, String>>) -> Result<Retours, String> {
+pub fn retours_avec(p: &Projet, o: &Ouverture, id: &str, hote: Option<&Result<HoteElargi, String>>, resolue: Option<&crate::famille::modelee::Resolution>) -> Result<Retours, String> {
     let vide = Retours { retirer: Vec::new(), ajouter: Vec::new() };
     let Some(f) = o.type_ouverture.as_ref().and_then(|t| p.types_ouvertures.iter().find(|x| &x.id == t)).map(|t| &t.modele).filter(|_| o.representation.is_none()) else {
         return Ok(vide);
     };
     let h = match hote { Some(h) => h.clone()?, None => hote_elargi(p, o)? };
     let Some(moi) = h.membres.iter().find(|m| m.id == id).cloned() else { return Ok(vide) };
-    let surcharges = p.surcharges(o);
-    let r = f.resoudre_occurrence(o.largeur, o.hauteur, h.epaisseur, &surcharges, &o.materiaux);
+    let resolue_ici;
+    let r = match resolue {
+        Some(r) => r,
+        None => {
+            resolue_ici = f.resoudre_occurrence(o.largeur, o.hauteur, h.epaisseur, &p.surcharges(o), &o.materiaux);
+            &resolue_ici
+        }
+    };
     // côté famille → côté mur : une ouverture retournée échange extérieur et intérieur
     let signe = if o.retournee { -1.0 } else { 1.0 };
-    let limites = [(1.0, plan_retour(f, &r, true).map(|y| y * signe)), (-1.0, plan_retour(f, &r, false).map(|y| y * signe))];
+    let limites = [(1.0, plan_retour(f, r, true).map(|y| y * signe)), (-1.0, plan_retour(f, r, false).map(|y| y * signe))];
     let limites: Vec<(f64, f64)> = limites
         .into_iter()
         .filter_map(|(cote, l)| l.map(|l| (cote * signe, l)))
@@ -357,5 +367,36 @@ mod tests {
         let (enduit, beton) = (&couches[0], &couches[1]);
         assert!(sans[beton] - avec[beton] > baie * 200.0 + 1.0, "béton sans place pour les retours");
         assert!(avec[enduit] > sans[enduit] - baie * 15.0 + 1.0, "enduit non retourné");
+    }
+
+    /// Percement par lots avec retours : trois fenêtres éloignées sur un mur de 12 m font
+    /// perdre à chaque couche exactement la somme de ce que fait perdre chacune seule
+    /// (une seule ouverture : calcul séquentiel), et le calcul groupé rend les mêmes
+    /// triangles que le calcul unitaire.
+    #[test]
+    fn percement_par_lots_avec_retours_additif() {
+        let g = crate::gabarit::Gabarit::defaut();
+        let mut p = Projet::depuis_gabarit("OF", &g);
+        let t = p.types_ouvertures.iter().find(|t| t.nom == "Fenêtre OF 2 vantaux").unwrap().clone();
+        let tm = p.types_murs.iter().find(|t| t.nom.starts_with("Mur BA 200 + doublage")).unwrap().id.clone();
+        let mur = p.ajouter_mur([0.0, 0.0], [12000.0, 0.0], &crate::creation::ParametresMur { type_mur: Some(tm), ..Default::default() }).unwrap();
+        let ouvrir = |p: &mut Projet, id: &str, x: f64| p.ouvertures.push(Ouverture { id: id.into(), nom: id.into(), genre: GenreOuverture::Fenetre, mur: mur.clone(), type_ouverture: Some(t.id.clone()), abscisse: x, largeur: t.largeur, hauteur: t.hauteur, allege: 900.0, representation: None, valeurs: Default::default(), materiaux: Default::default(), retournee: false, inversee: false, origine: None });
+        let sans = volumes(&p);
+        let seules: Vec<BTreeMap<String, f64>> = [2000.0, 6000.0, 10000.0].into_iter().enumerate().map(|(k, x)| {
+            let mut q = p.clone();
+            ouvrir(&mut q, &format!("o{k}"), x);
+            volumes(&q)
+        }).collect();
+        for (k, x) in [2000.0, 6000.0, 10000.0].into_iter().enumerate() { ouvrir(&mut p, &format!("o{k}"), x); }
+        p.verifier().unwrap();
+        let trois = volumes(&p);
+        for id in sans.keys() {
+            let attendu = seules.iter().map(|s| s[id] - sans[id]).sum::<f64>() + sans[id];
+            assert!((trois[id] - attendu).abs() < 2.0, "{id} : {} au lieu de {attendu}", trois[id]);
+        }
+        let j = crate::murs::jonctions::coupes(&p);
+        for (m, g) in p.murs.iter().zip(crate::volumes::solides::murs(&p, &j)) {
+            assert!(g == crate::volumes::solides::mur(&p, m, &j), "{}", m.id);
+        }
     }
 }

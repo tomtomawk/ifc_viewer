@@ -65,7 +65,6 @@ Comportement attendu de chaque fonction : `docs/MODIFICATION.md`.
 | M12 | Outils Symbole et Légende : boutons présents, désactivés | P2 | `crates/interface/src/zones/ruban/affichage.rs:100-103` |
 | M14 | Créer à l'identique : menuiseries à géométrie importée et pentes différentes par arête | P3 | `docs/EDITION.md` |
 | M15 | Toitures concaves à pentes différentes par arête (aujourd'hui refusées) | P3 | `docs/EDITION.md` |
-| A13 | Coût des familles d'ouvertures sur un gros projet, reste : scène complète récupérée par le percement par lots (mesures dans [SUIVI.md](SUIVI.md)), mais un mur déplacé reste à 250 à 310 ms contre 170 ms avant ; murs dont une ouverture a des retours (maison d'exemple) : percement toujours séquentiel, retours à regrouper en lots ; résolution de la famille répétée par couche (un essai isolé n'a rien gagné, à reprendre maintenant que les découpes pèsent moins) | P3 | `crates/modele/src/murs/retours.rs`, `crates/modele/src/volumes/solides.rs` |
 | M16 | Poutres inclinées (aujourd'hui horizontales seulement) ; sections circulaires de poteau et de poutre : les profils des types de section n'acceptent que des côtés droits (`Profil::points` lit les sommets de la polyligne, pas ses arcs) | P2 | `crates/modele/src/famille/profil.rs`, `crates/modele/src/elements/poutre.rs`, `docs/EDITION.md` |
 | M17 | Feuilles natives en onglets de dessin éditables | P2 | `docs/EDITION.md` |
 | M19 | Palette de commandes ; aide contextuelle | P3 | — |
