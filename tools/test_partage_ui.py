@@ -101,7 +101,10 @@ try:
             assert mur['axe']['debut'][0]==x
     for port,y in zip(ports,[20000,40000]):
         niveau=rpc(port,'projet_natif')['projet']['niveaux'][0]['id']
-        rpc(port,'editer '+json.dumps(dict(action='barre',barre=dict(id='',nom='Poteau de test',genre='poteau',niveau=niveau,debut=[40000,y,0],fin=[40000,y,3000],largeur=250,hauteur=250,rotation=0))))
+        pr=rpc(port,'projet_natif')
+        type_poteau=f'type-poteau-essai-{port}'
+        rpc(port,'modifier_projet '+json.dumps({'empreinte':pr['empreinte'],'operations':[{'op':'add','path':'/types_poteaux','value':[{'id':type_poteau,'nom':'Poteau 250','largeur':250,'hauteur':250}]}]}))
+        rpc(port,'editer '+json.dumps(dict(action='barre',barre=dict(id='',nom='Poteau de test',genre='poteau',niveau=niveau,debut=[40000,y,0],fin=[40000,y,3000],type_barre=type_poteau,rotation=0))))
     with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(synchro,ports))
     synchro(ports[0]);synchro(ports[1])
     for port in ports:

@@ -345,13 +345,26 @@ mod tests {
         assert!((avec["p"] - sans["p"] - anneau(13.0) * 33.5).abs() < 2.0);
     }
 
+    /// Nombres de la valeur JSON arrondis à 1e-9.
+    fn arrondir(v: serde_json::Value) -> serde_json::Value {
+        use serde_json::Value;
+        match v {
+            Value::Number(n) => n.as_f64().map_or(Value::Number(n), |x| serde_json::json!((x * 1e9).round() / 1e9)),
+            Value::Array(a) => Value::Array(a.into_iter().map(arrondir).collect()),
+            Value::Object(o) => Value::Object(o.into_iter().map(|(k, v)| (k, arrondir(v))).collect()),
+            v => v,
+        }
+    }
+
     #[test]
     fn gabarit_charge_l_of_et_retourne_le_mur_double() {
         let g = crate::gabarit::Gabarit::defaut();
         let livrees = crate::gabarit::familles_livrees();
         assert_eq!(g.types_ouvertures.len(), livrees.len());
         for (a, b) in g.types_ouvertures.iter().zip(&livrees) {
-            assert_eq!((&a.nom, a.largeur, a.hauteur, &a.famille), (&b.nom, b.largeur, b.hauteur, &b.famille), "gabarit à régénérer : cargo test --bin bimedit -- --ignored ecrire_familles_du_gabarit");
+            // flottants arrondis : `tan` diffère d'un dernier chiffre selon la plateforme
+            let (ja, jb) = (serde_json::to_value((&a.nom, a.largeur, a.hauteur, &a.famille)).unwrap(), serde_json::to_value((&b.nom, b.largeur, b.hauteur, &b.famille)).unwrap());
+            assert_eq!(arrondir(ja), arrondir(jb), "gabarit à régénérer : cargo test --bin bimedit -- --ignored ecrire_familles_du_gabarit");
         }
         let mut p = Projet::depuis_gabarit("OF", &g);
         let t = p.types_ouvertures.iter().find(|t| t.nom == "Fenêtre OF 2 vantaux").unwrap().clone();

@@ -16,6 +16,7 @@ Dernière mise à jour : 20 novembre 2026.
 
 | Contrôle | Résultat | Date |
 |---|---|---|
+| 27/11/2026 | CI : essais d'interface `test-poignees-poutres` et `test_partage_ui` passés au modèle typé (`type_barre` au lieu de `largeur`/`hauteur`) ; test `gabarit_charge_l_of_et_retourne_le_mur_double` comparé à 1e-9 près (`tan(π/8)` diffère d'un dernier chiffre sur macOS arm64) | ce commit | `cargo test -p modele gabarit_charge` ; `tools/essais_interface.py` sous Xvfb : 21/22 puis `test_partage_ui` seul corrigé et réussi ; macOS arm64 et `cargo check --workspace --tests` : non revérifiés ici (CI) |
 | `cargo check --workspace --tests` | réussi, 0 avertissement (Linux x64) | 17/11/2026 |
 | `tools/valider_ifc.py --donnees` (IfcOpenShell 0.9.0.post1) | `maison_native` : 15 géométries, 0 erreur ; `immeuble_essai_murs` : 2 952 géométries, 0 erreur | 17/11/2026 |
 | `cargo test --workspace` (debug) | 469 réussis, 0 échec, 4 ignorés (dont 2 mesures lancées à la demande) | 17/11/2026 |
