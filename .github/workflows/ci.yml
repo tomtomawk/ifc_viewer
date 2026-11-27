@@ -17,7 +17,7 @@ jobs:
           - { nom: windows-arm64, os: windows-11-arm, artefact: bimedit.exe }
           - { nom: linux-x64, os: ubuntu-latest, artefact: bimedit }
           - { nom: linux-arm64, os: ubuntu-24.04-arm, artefact: bimedit }
-          - { nom: macos-arm64, os: macos-14, artefact: bimedit }
+          - { nom: macos-arm64, os: macos-latest, artefact: bimedit }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
