@@ -74,7 +74,8 @@ jobs:
       # Xvfb : écran large pour les essais à deux instances côte à côte
       - name: Essais d'interface (Xvfb)
         run: |
-          sudo apt-get install -y xvfb mesa-vulkan-drivers
+          # winit charge ces bibliothèques à l'exécution (dlopen) sous X11
+          sudo apt-get install -y xvfb mesa-vulkan-drivers libxkbcommon-x11-0 libx11-xcb1 libxcursor1 libxi6 libxrandr2
           cargo build -p bimedit
           xvfb-run -a -s "-screen 0 3200x1000x24" python3 tools/essais_interface.py --exe target/debug/bimedit
       # Bloquant (A1b, I5) : aucun avertissement ; `unwrap`, `expect` et `panic!` hors
