@@ -23,8 +23,13 @@ const SCENE: &str = include_str!("scene.wgsl");
 /// Occultation ambiante à partir de la profondeur de la vue, puis flou.
 const AO: &str = include_str!("ao.wgsl");
 
-/// Côté de la carte d'ombres (pixels).
+/// Côté de la carte d'ombres (pixels) : 4 cascades en `depth32float`, soit 256 Mo par
+/// rendu sur poste. Navigateur : 64 Mo, la mémoire GPU d'un onglet est comptée (deux rendus,
+/// vue et éditeur de familles, épuisaient le périphérique au démarrage, ROADMAP W5b).
+#[cfg(not(target_arch = "wasm32"))]
 pub const TAILLE_OMBRES: i32 = 4096;
+#[cfg(target_arch = "wasm32")]
+pub const TAILLE_OMBRES: i32 = 2048;
 /// Cascades de la carte d'ombres.
 pub const NB_CASCADES: usize = 4;
 

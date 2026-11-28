@@ -122,7 +122,6 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 |---|---|
 | U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
 | U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
-| Web | Version navigateur (§10.3) : hébergement (GitHub Pages sans en-têtes COOP/COEP, ou serveur de l'agence) ; WebGPU seul ou repli WebGL2 ? |
 | Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
 
 ## 10. Études des évolutions
@@ -168,18 +167,18 @@ Cible `wasm32-unknown-unknown`, développée sur `master` comme le reste. Config
 - le code propre à une cible est écarté à la compilation par `#[cfg(target_arch = "wasm32")]` et `#[cfg(not(target_arch = "wasm32"))]`, et ses dépendances par `[target.'cfg(…)'.dependencies]` : rien du navigateur dans le binaire poste, rien du poste dans le module web ;
 - ces `cfg` restent dans quelques modules d'adaptation (horloge, tâches de fond, fichiers et dialogues, point d'entrée), pas dans la logique métier ;
 - fonctionnalité Cargo `poste` (active par défaut) dans `interface` : pilote MCP, collaboration par fichiers partagés, fenêtre native ; la future crate `web` dépend d'`interface` sans elle ;
-- intégration continue : tâche `wasm` (`cargo check --target wasm32-unknown-unknown`) sur les crates déjà portées, étendue à chaque étape.
+- intégration continue : tâche `wasm` (`cargo check --target wasm32-unknown-unknown`) ; construction et publication par `.github/workflows/web.yml`.
 
 | Id | Étape | Priorité | Détail |
 |---|---|---|---|
 | W3 | Fichiers dans le navigateur : téléversement et téléchargement (octets, sans chemin), puis stockage OPFS et copie de récupération ; les dialogues passent déjà par `socle::dialogue::Fichier`, qui rend `None` en wasm32 | P2 | `std::fs` : 37 fichiers, à traiter selon le périmètre de W5 |
 | W4b | Rendre `pilote` et `collaboration` facultatifs dans `interface` (dépendances liées à `poste`) : 48 accès à `self.collaboration`, champs `Session`, `projet/conflits.rs`, `socle/pilotage.rs`, `socle/commandes_pilote.rs`. Aujourd'hui ces crates sont compilées dans la cible web mais inertes (pas de serveur, fichiers inaccessibles) | P3 | taille du module web ; pas bloquant pour W5 |
-| W5a | **Défaut** : sous WebGL2 (repli sans WebGPU), le pipeline « copie de la profondeur » de `moteur3d` est refusé (« `textureLoad` from depth textures is not supported in GLSL ») : l'application s'arrête au démarrage. Remède : copie de profondeur par une autre voie (texture `R32Float` écrite au rendu opaque, ou désactiver reflets et copie en WebGL2) | P1 | constaté le 28/11/2026, Chromium sans écran, `--disable-features=WebGPU` |
-| W5b | **Défaut** : sous WebGPU (Chromium sans écran, adaptateur SwiftShader), panique au premier `install_scene` : `createBuffer … size (74040) is too large for the implementation when mappedAtCreation == true` dans `moteur3d::gpu::Renderer::upload_vertices` (`create_buffer_init`). Le même appel en JavaScript pur réussit sur ce navigateur : cause à chercher dans l'état du périphérique (perte, limites demandées, erreur de validation non affichée). À reproduire sur un vrai GPU (Chrome ou Edge sur poste) | P1 | même essai |
+| W8 | Publication Cloudflare Pages : créer le projet Pages « bimedit » et les secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` du dépôt ; le workflow `.github/workflows/web.yml` publie alors à chaque push sur `master` | P2 | action de l'utilisateur (compte Cloudflare) |
+| W9 | Premier essai réel de l'interface sur un poste avec GPU (Chrome ou Edge) : démarrage, dépôt de `samples/maison_native.bem`, navigation 3D. Le conteneur d'essai ne peut pas afficher un canevas WebGPU (W5b) | P1 | aucune image de l'interface obtenue à ce jour |
 | W5c | Visionneuse : bouton Ouvrir et export SVG/PDF par téléchargement (aujourd'hui seul le dépôt d'un `.bem` sur la page ouvre un projet) ; IFC dans le navigateur (`echanges::depuis_ifc` lit un chemin) | P2 | après W5a et W5b |
 | W6 | Mesures dans le navigateur (reconstruction, mémoire : 4 Go au plus en wasm32 ; module de 22,6 Mo après `wasm-opt`, 8,1 Mo en gzip : à réduire) sur les échantillons ; décision sur le parallélisme (`wasm-bindgen-rayon` exige les en-têtes COOP et COEP) | P3 | vérifier aussi que `rayon` 1.13 se replie sur le fil courant ; remplace l'estimation « facteur 4 à 8 » |
 | W7 | Édition dans le navigateur (commandes, historique, enregistrement local) | P3 | après W6 |
 
 Hors périmètre : import Revit (taille, mémoire), pilote MCP, collaboration par fichiers partagés (sur le web elle demanderait un serveur `yrs` : décision à part).
 
-Décisions à prendre avant W5 (§9) : hébergement (GitHub Pages ne pose pas COOP et COEP ; serveur de l'agence) ; WebGPU seul ou repli WebGL2 (fonctionnalités `wgpu` d'eframe 0.37 à vérifier, parc de navigateurs de l'agence).
+Décisions du 28/11/2026 : WebGPU seul (pas de repli WebGL2) ; hébergement sur Cloudflare Pages (en-têtes `_headers`, dont COOP et COEP pour W6).

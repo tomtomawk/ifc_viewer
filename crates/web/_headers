@@ -1,0 +1,6 @@
+# En-têtes servis par Cloudflare Pages (copiés dans dist par trunk, voir index.html).
+# COOP et COEP : isolation d'origine, nécessaire aux fils d'exécution en wasm (ROADMAP W6) ;
+# sans effet gênant tant que la page ne charge rien d'une autre origine.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
