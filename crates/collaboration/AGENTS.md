@@ -23,6 +23,8 @@ Dépendances internes autorisées : `noyau`, `modele`, `maillage`, `commandes`, 
 
 Protocole de transaction, journal, verrou fichier, fusion de projets, texte collaboratif, `.bimpartage`. L'écran de collaboration est dans `interface/src/projet/collaboration.rs` ; la commande en ligne `--collaboration` est ici (`cli.rs`). Voir `docs/COLLABORATION.md`.
 
+Piège : ne pas écrire `yrs::undo::Options::default()` (absent en wasm32) ; passer par `options_annulation` (`texte.rs`). La crate compile pour wasm32 (tâche CI `wasm`).
+
 ## Vérifier
 
 ```

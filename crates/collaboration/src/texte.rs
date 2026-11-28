@@ -83,12 +83,7 @@ impl Editeur {
         doc.transact_mut()
             .apply_update(Update::decode_v1(&s.etat).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
-        let options = yrs::undo::Options {
-            init_undo_stack: s.annulations.clone(),
-            init_redo_stack: s.retablissements.clone(),
-            ..Default::default()
-        };
-        let mut undo = UndoManager::with_options(options);
+        let mut undo = UndoManager::with_options(options_annulation(s.annulations.clone(), s.retablissements.clone()));
         undo.expand_scope(&doc, &texte);
         undo.include_origin(origine);
         Ok(Self {
@@ -100,7 +95,7 @@ impl Editeur {
     pub fn ouvrir(etat: &EtatTexte, origine: &str) -> Resultat<Self> {
         let doc = etat.document()?;
         let texte = doc.get_or_insert_text("texte");
-        let mut undo = UndoManager::with_options(yrs::undo::Options::default());
+        let mut undo = UndoManager::with_options(options_annulation(Vec::new(), Vec::new()));
         undo.expand_scope(&doc, &texte);
         undo.include_origin(origine);
         Ok(Self {
@@ -171,4 +166,25 @@ pub fn projection(p: &mut Projet, textes: &BTreeMap<String, EtatTexte>) -> Resul
                 }
     }
     Ok(())
+}
+
+/// Horloge du regroupement des annulations. `yrs` n'en fournit pas en wasm32
+/// (`Options::default` y est absent) : `web-time` lit la même heure sur poste et navigateur.
+struct Horloge;
+impl yrs::sync::Clock for Horloge {
+    fn now(&self) -> yrs::sync::Timestamp {
+        web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as yrs::sync::Timestamp)
+    }
+}
+
+/// Options d'annulation de `yrs` (valeurs de `Options::default` sur poste : 500 ms).
+fn options_annulation(annulations: Vec<yrs::undo::StackItem<()>>, retablissements: Vec<yrs::undo::StackItem<()>>) -> yrs::undo::Options<()> {
+    yrs::undo::Options {
+        capture_timeout_millis: 500,
+        tracked_origins: Default::default(),
+        capture_transaction: None,
+        timestamp: std::sync::Arc::new(Horloge),
+        init_undo_stack: annulations,
+        init_redo_stack: retablissements,
+    }
 }

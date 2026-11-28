@@ -409,6 +409,7 @@ dependencies = [
  "noyau",
  "serde",
  "serde_json",
+ "web-time",
  "windows-sys 0.59.0",
  "yrs",
 ]

@@ -51,6 +51,22 @@ jobs:
           name: bimedit-${{ matrix.nom }}
           path: target/release/${{ matrix.artefact }}
 
+  # Version navigateur (ROADMAP §10.3) : les crates déjà portées compilent pour wasm32
+  wasm:
+    name: compilation wasm32
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: >-
+          cargo check --target wasm32-unknown-unknown
+          -p noyau -p modele -p ifc_base -p scene -p formats -p maillage -p commandes
+          -p moteur2d -p moteur3d -p echanges -p collaboration -p pilote -p config
+
   # Tests en mode debug : les assertions de débogage (debug_assert, débordements)
   # y sont actives, contrairement au mode release des autres tâches.
   debug:

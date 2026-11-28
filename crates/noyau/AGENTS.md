@@ -24,6 +24,7 @@ Une fonction pure de géométrie 2D/3D ou un utilitaire dont `modele`, `scene`, 
 
 - `MAX_APPARENCES` (`constantes.rs`) doit rester égale à la constante en dur de `crates/moteur3d/src/scene.wgsl`.
 - Pas de ré-export de compatibilité : les appelants écrivent `noyau::<module>::…`.
+- wasm32 (ROADMAP §10.3) : `uuid` y prend la fonctionnalité `js` (`Cargo.toml`, section `target`) ; la crate doit compiler par `cargo check -p noyau --target wasm32-unknown-unknown` (tâche CI `wasm`).
 
 ## Vérifier
 

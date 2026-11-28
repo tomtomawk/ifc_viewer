@@ -108,7 +108,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 |---|---|---|---|
 | E1b | Styles d'objets, reste : à l'écran, lignes vues tracées à un pixel sans tirets (GPU : `moteur3d/src/scene.wgsl`, `LARGEUR_TRAIT`) ; poché de coupe des ouvertures et des composants par leur matériau (couleur seule aujourd'hui) ; éléments importés et liens IFC sans style de catégorie ; tirets de projection repris à chaque arête (pas de phase continue le long d'un contour) ; bibliothèque partagée entre projets si elle reste voulue | P3 | `crates/maillage/src/styles.rs`, `crates/moteur2d/src/vue.rs`, `crates/moteur3d/` |
 | E2 | Vérification multiplateforme : essai manuel sur chaque système, cache macOS (demande n° 4) | P2 | §10 |
-| E3 | Version navigateur en lecture seule (demande n° 3) | P3 | §10 |
+| E3 | Version navigateur, étapes W1 à W7 (demande n° 3) | P2 | §10.3 |
 
 ## 8. Collaboration
 
@@ -122,6 +122,7 @@ Description de la dette : `docs/ARCHITECTURE.md` §5.
 |---|---|
 | U11 | Parmi les réglages retirés le 20/11/2026 parce qu'ils n'agissaient pas (alignement et flèche du texte, contenu de l'étiquette, cote orthogonale et décalage papier, motif de zone, quadrillage en arc, contrainte de Déplacer), lesquels faut-il réaliser ? |
 | U7 | Transformations sans sélection préalable : ajouter l'étape « Sélectionner, Entrée pour valider » dans la commande (MODIFICATION.md §1), ou garder la règle actuelle (sélection d'abord) ? |
+| Web | Version navigateur (§10.3) : hébergement (GitHub Pages sans en-têtes COOP/COEP, ou serveur de l'agence) ; WebGPU seul ou repli WebGL2 ? |
 | Texte | Parcours du texte livré le 20/11/2026 : Entrée valide et Maj+Entrée passe à la ligne ; l'outil reste actif après chaque texte. Convient-il, ou préférer Entrée = nouvelle ligne et Ctrl+Entrée = valider (usage Revit) ? |
 
 ## 10. Études des évolutions
@@ -162,36 +163,23 @@ Demandes n° 4 et 3 de la feuille de route du 16 novembre 2026 (tâches E2, E3 d
 
 ### 10.3 E3 — Version navigateur, WebAssembly (n° 3)
 
-#### Faisabilité
+Cible `wasm32-unknown-unknown`, développée sur `master` comme le reste. Configuration retenue le 28/11/2026 :
 
-`eframe` et `wgpu` fonctionnent dans un navigateur (WebGPU, ou WebGL2 en repli), et le modèle (`noyau`, `modele`, `commandes`, `moteur2d`, `maillage`) est du Rust pur. Le portage reste un chantier lourd : l'application repose sur le système de fichiers, les fils d'exécution et les processus.
+- le code propre à une cible est écarté à la compilation par `#[cfg(target_arch = "wasm32")]` et `#[cfg(not(target_arch = "wasm32"))]`, et ses dépendances par `[target.'cfg(…)'.dependencies]` : rien du navigateur dans le binaire poste, rien du poste dans le module web ;
+- ces `cfg` restent dans quelques modules d'adaptation (horloge, tâches de fond, fichiers et dialogues, point d'entrée), pas dans la logique métier ;
+- fonctionnalité Cargo `poste` (active par défaut) dans `interface` : pilote MCP, collaboration par fichiers partagés, fenêtre native ; la future crate `web` dépend d'`interface` sans elle ;
+- intégration continue : tâche `wasm` (`cargo check --target wasm32-unknown-unknown`) sur les crates déjà portées, étendue à chaque étape.
 
-#### Obstacles relevés (nombre de fichiers par crate)
+| Id | Étape | Priorité | Détail |
+|---|---|---|---|
+| W1 | `std::time::Instant` remplacé par `web_time::Instant` (62 appels, dont collaboration 26 et interface 15) : il panique à l'exécution en wasm32 | P2 | changement mécanique, sans effet sur le poste |
+| W2 | Tâches de fond : 21 `thread::spawn` (interface 15, echanges 2, collaboration, pilote) derrière un module de tâches (`interface/src/socle/taches.rs` existe) ; en wasm32, exécution sur le fil courant | P2 | `rayon` 1.13 se replie sur le fil courant quand il ne peut créer de fil : à vérifier à l'exécution |
+| W3 | Fichiers et dialogues : 24 `rfd::FileDialog` (synchrone, absent en wasm32) derrière une couche commune ; navigateur : `AsyncFileDialog`, téléversement et téléchargement, puis OPFS | P2 | `std::fs` : 37 fichiers, à traiter selon le périmètre de W5 |
+| W4 | Fonctionnalité `poste` d'`interface` (pilote, collaboration, `eframe::run_native`, icône) ; ARCHITECTURE §2 et `app/tests/dependances.rs` mis à jour pour la crate `web` | P2 | environ 10 fichiers d'`interface` appellent `pilote::` ou `collaboration::` |
+| W5 | Crate `web` : `eframe::WebRunner`, `trunk`, `index.html` ; visionneuse : ouvrir un `.bem` ou un IFC téléversé, 3D, plans et coupes, export SVG et PDF téléchargés | P2 | dépend de W1 à W4 |
+| W6 | Mesures dans le navigateur (reconstruction, mémoire : 4 Go au plus en wasm32) sur les échantillons ; décision sur le parallélisme (`wasm-bindgen-rayon` exige les en-têtes COOP et COEP) | P3 | remplace l'estimation « facteur 4 à 8 » |
+| W7 | Édition dans le navigateur (commandes, historique, enregistrement local) | P3 | après W6 |
 
-| Usage | Crates concernées | Remède |
-|---|---|---|
-| `std::time::Instant` (panique sur `wasm32-unknown-unknown`) | noyau 1, modele 1, maillage 1, moteur2d 1, formats 2, echanges 1, collaboration 4, interface 6, pilote 1, app 2 | crate `web-time`, même API |
-| `std::fs` | noyau 1, modele 4, config 1, formats 2, echanges 3, moteur3d 1, collaboration 4, interface 8, pilote 3, app 2 | couche d'accès aux fichiers : lecture et écriture par téléversement et téléchargement ; stockage OPFS ou IndexedDB |
-| `rayon` (parallélisme) | 13 crates, dont modele 13, interface 23 et formats 5 | séquentiel dans le navigateur, ou `wasm-bindgen-rayon` (exige l'isolation d'origine : en-têtes COOP et COEP) |
-| `std::thread` | collaboration 4, interface 3, pilote 2, echanges 1, app 2 | tâches asynchrones (`wasm-bindgen-futures`) |
-| `std::process`, `std::net` | pilote (MCP, instances), collaboration, interface, echanges, app | hors périmètre web : pilote et CLI restent sur poste |
-| `rfd` (dialogues) | interface 13 | API asynchrone de `rfd` (navigateur) : à adapter appel par appel |
-| verrous de fichiers (collaboration) | collaboration | serveur de synchronisation (`yrs` est déjà la base des transactions) |
+Hors périmètre : import Revit (taille, mémoire), pilote MCP, collaboration par fichiers partagés (sur le web elle demanderait un serveur `yrs` : décision à part).
 
-#### Périmètre proposé pour une première version web
-
-- **Lecture seule d'abord** : ouvrir un `.bem` ou un IFC téléversé, naviguer en 3D, consulter les plans et les coupes, exporter en SVG ou PDF (téléchargement). Crates : `noyau`, `modele`, `scene`, `maillage`, `moteur2d`, `moteur3d`, une partie d'`interface`, `formats` pour l'IFC.
-- **Hors périmètre** : import Revit (taille des fichiers, mémoire), pilote MCP, collaboration par fichiers partagés.
-
-#### Performances
-
-- La reconstruction de scène et les booléens (`noyau::csg`) tournent aujourd'hui en parallèle. Sans fils d'exécution, il faut s'attendre à un facteur 4 à 8 sur ce poste : c'est une estimation à mesurer, pas une mesure.
-- La mémoire d'un onglet est limitée à 4 Go en `wasm32`.
-
-#### Étapes
-
-1. Remplacer `std::time::Instant` par `web-time` dans tout le dépôt : changement mécanique, sans effet sur le poste.
-2. Créer une couche `config::fichiers` (lire, écrire, choisir un fichier) avec une implémentation poste et une implémentation navigateur.
-3. Rendre `rayon` facultatif (fonctionnalité `parallele` activée par défaut).
-4. Compiler `modele` et `moteur2d` pour `wasm32-unknown-unknown` en intégration continue.
-5. Écrire une application web minimale (`crates/web`) : visionneuse en lecture seule.
+Décisions à prendre avant W5 (§9) : hébergement (GitHub Pages ne pose pas COOP et COEP ; serveur de l'agence) ; WebGPU seul ou repli WebGL2 (fonctionnalités `wgpu` d'eframe 0.37 à vérifier, parc de navigateurs de l'agence).
