@@ -1,6 +1,6 @@
 # Crate `web` (binaire `bimedit-web`, navigateur)
 
-Rôle : BIMedit dans le navigateur (ROADMAP §10.3). `src/main.rs` crée `interface::Application` dans le canevas `#bimedit` de `index.html` par `eframe::WebRunner`, en WebGPU seul (`Backends::BROWSER_WEBGPU`) ; sans WebGPU ou après perte du périphérique, le bandeau `#attente` le dit. Visionneuse : un projet `.bem` déposé sur la page s'ouvre (`interface/src/socle/depot.rs`).
+Rôle : BIMedit dans le navigateur (ROADMAP §10.3). `src/main.rs` crée `interface::Application` dans le canevas `#bimedit` de `index.html` par `eframe::WebRunner`, en WebGPU seul (`Backends::BROWSER_WEBGPU`) ; sans WebGPU ou après perte du périphérique, le bandeau `#attente` le dit. Un projet `.bem` déposé sur la page s'ouvre (`interface/src/socle/depot.rs`). « Début → Nouveau » crée un projet en mémoire. « Sortie → Télécharger » ou Ctrl+S demande son téléchargement (`interface/src/socle/projet_natif.rs`).
 
 Dépendances internes autorisées : `interface` seule, sans sa fonctionnalité `poste` (`default-features = false`) : ni pilote MCP ni registre des instances.
 

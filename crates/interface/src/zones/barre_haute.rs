@@ -313,7 +313,11 @@ impl Application {
                 use crate::zones::ruban::{Commande as C, Icone as I};
                 let disponible = (self.natif.is_some() || self.rvt_source.is_some()) && self.loading.is_none() && self.sauvegarde.is_none();
                 let enregistrer = vec![
+                    #[cfg(target_arch = "wasm32")]
+                    C::new("enregistrer", "Télécharger", I::Enregistrer, "Télécharger le projet .bem (Ctrl+S)", disponible),
+                    #[cfg(not(target_arch = "wasm32"))]
                     C::new("enregistrer", "Enregistrer", I::Enregistrer, "Enregistrer en modèle natif v0 (Ctrl+S)", disponible),
+                    #[cfg(not(target_arch = "wasm32"))]
                     C::new("enregistrer_sous", "Enregistrer sous", I::EnregistrerSous, "Enregistrer le projet natif dans un autre fichier", self.natif.is_some() && self.collaboration.is_none()),
                 ];
                 let exporter = vec![
@@ -341,6 +345,7 @@ impl Application {
                         "synchro" => self.demander_synchro(),
                         "styles" => self.ouvrir_materiaux_categories(&ctx),
                         "enregistrer" => self.enregistrer_projet_arriere_plan(&ctx),
+                        #[cfg(not(target_arch = "wasm32"))]
                         "enregistrer_sous" => self.enregistrer_sous(),
                         "svg" => self.exporter_svg_dialogue(&ctx),
                         "pdf" => self.export_pdf_dialogue(&ctx),

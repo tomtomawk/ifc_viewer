@@ -47,6 +47,7 @@ impl Controle {
 pub(crate) enum Fin {
     /// Projet natif enregistré : la copie enregistrée, pour savoir si le projet a
     /// changé depuis.
+    #[cfg(not(target_arch = "wasm32"))]
     Natif { projet: Box<modele::Projet>, chemin: PathBuf },
     /// Fichiers écrits : message de confirmation.
     Fichiers(String),
@@ -142,8 +143,14 @@ impl Application {
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn enregistrer_projet_arriere_plan(&mut self, ctx: &egui::Context) {
+        self.enregistrer_projet(ctx);
+    }
+
     /// Ctrl+S et bouton Enregistrer : projet natif enregistré en arrière-plan. Le
     /// fichier Revit et la confirmation de fermeture gardent leur parcours.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn enregistrer_projet_arriere_plan(&mut self, ctx: &egui::Context) {
         if self.natif.is_none() || self.loading.is_some() {
             self.enregistrer_projet(ctx);
@@ -274,6 +281,7 @@ impl Application {
         let Some(t) = self.tache.take() else { return };
         match resultat {
             Ok(Fin::Fichiers(message)) => self.status = message,
+            #[cfg(not(target_arch = "wasm32"))]
             Ok(Fin::Natif { projet, chemin }) => self.fin_enregistrement(t.document, &projet, &chemin),
             Ok(Fin::Lien { lien, elements, alerte }) if t.document == self.document_actif => {
                 let nom = lien.nom.clone();
@@ -300,6 +308,7 @@ impl Application {
 
     /// Le projet enregistré est la copie prise au lancement : le document reste modifié
     /// s'il a changé depuis, et sa copie de récupération est alors gardée.
+    #[cfg(not(target_arch = "wasm32"))]
     fn fin_enregistrement(&mut self, document: usize, projet: &modele::Projet, chemin: &Path) {
         let (historique, natif, modifie) = if document == self.document_actif {
             (&mut self.historique, &self.natif, &mut self.natif_modifie)
