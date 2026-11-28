@@ -201,7 +201,7 @@ mod tests {
         let mut app = Application::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
         app.options = Default::default();
         let chemin =
-            std::env::temp_dir().join(format!("identique-{}.modele.json", noyau::uuid::uuid()));
+            std::env::temp_dir().join(format!("identique-{}.bem", noyau::uuid::uuid()));
         app.natif = Some((projet, chemin));
         app.bim.selection = vec![id.to_owned()];
         (app, ctx)

@@ -55,7 +55,7 @@ def run(exe):
                         if processus.poll() is not None or time.monotonic() > limite:
                             raise RuntimeError("Instance de test indisponible")
                         time.sleep(0.2)
-                commande("nouveau", {"chemin": str(root / "Projet.modele.json")})
+                commande("nouveau", {"chemin": str(root / "Projet.bem")})
                 nom = commande("editeur_hachure")["nom"]
                 projet = commande("projet_natif")["projet"]
                 vue = [v["id"] for v in projet["vues"] if v["genre"] == "dessin"][-1]

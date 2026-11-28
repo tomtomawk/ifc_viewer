@@ -57,7 +57,7 @@ def run(exe, captures):
 
         try:
             demarrer()
-            commande("nouveau",{"chemin":str(root/"Ajuster.modele.json")})
+            commande("nouveau",{"chemin":str(root/"Ajuster.bem")})
             ref=commande("mur","4000 -3000 4000 6000 2800 300")["mur"]
             ids=[commande("mur",v)["mur"] for v in ["0 0 2000 0 2800 300","0 2000 6000 2000 2800 300","6000 4000 8000 4000 2800 300"]]
             commande("camera","cadrer")

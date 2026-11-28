@@ -61,7 +61,7 @@ def run(exe, captures):
         try:
             demarrer()
             assert commande("options")["options"]["delai_accrochage"]==.8
-            chemin=str(root/"Projet 1.modele.json")
+            chemin=str(root/"Projet 1.bem")
             commande("nouveau",{"chemin":chemin,"nom":"Premier projet"})
             id1=commande("mur","0 0 3000 0 2800 300")["mur"]
             id2=commande("mur","3000 2000 6000 2000 2800 300")["mur"]
@@ -103,7 +103,7 @@ def run(exe, captures):
             commande("parametres","fermer")
             commande("enregistrer")
             # Le dernier onglet ferme le projet, puis restaure l'autre projet.
-            commande("nouveau",{"chemin":str(root/"Projet 2.modele.json"),"nom":"Deuxième projet"})
+            commande("nouveau",{"chemin":str(root/"Projet 2.bem"),"nom":"Deuxième projet"})
             assert len(commande("documents")["documents"])==2
             commande("fermer_vue")
             assert len(commande("documents")["documents"])==1
@@ -119,7 +119,7 @@ def run(exe, captures):
             assert commande("etat")["fichier"] is None
             capture("aucun-projet.png")
             capture("vue-videe.png","vue")
-            commande("nouveau",{"chemin":str(root/"Projet 3.modele.json")})
+            commande("nouveau",{"chemin":str(root/"Projet 3.bem")})
             commande("mur","0 0 2000 0 2800 200")
             commande("fermer","abandonner")
             assert commande("documents")["documents"]==[]

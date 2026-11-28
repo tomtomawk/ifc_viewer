@@ -54,7 +54,7 @@ def run(exe):
                 try: return commande("etat")["ok"]
                 except OSError: return False
             attendre(pret, 45)
-            commande("nouveau", {"chemin": str(root / "Verrou.modele.json")})
+            commande("nouveau", {"chemin": str(root / "Verrou.bem")})
             a = commande("mur", "0 0 4000 0 2800 200")["mur"]
             b = commande("mur", "0 3000 4000 3000 2800 200")["mur"]
 

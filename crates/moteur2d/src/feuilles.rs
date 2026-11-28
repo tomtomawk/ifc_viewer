@@ -34,7 +34,7 @@ pub fn dessin_vue(p: &Projet, id: &str) -> Result<Dessin, String> {
     let mut vue = p.vues.iter().find(|v| v.id == id).ok_or("Vue absente.")?.clone();
     vue.elements_masques.extend(p.elements_masques_contextes(&p.contextes_vues.get(id).cloned().unwrap_or_default()));
     let v = &vue;
-    let s = depuis_natif(p, std::path::Path::new("projet.modele.json"))?;
+    let s = depuis_natif(p, std::path::Path::new("projet.bem"))?;
     let (o, mut u, mut h) = repere(p, v);
     if matches!(v.genre, GenreVue::Plan { .. }) {
         let (sin, cos) = v.orientation_plan.sin_cos();

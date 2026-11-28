@@ -65,7 +65,7 @@ def run(exe):
                 try: return commande("etat")["ok"]
                 except OSError: return False
             attendre(pret, 45)
-            commande("nouveau", {"chemin": str(root / "Accrochage.modele.json")})
+            commande("nouveau", {"chemin": str(root / "Accrochage.bem")})
             # murs écartés de l'origine du projet, pour tester aussi l'accrochage à l'origine
             diag = commande("mur", "1000 0 4000 3000 2800 200")["mur"]
             horiz = commande("mur", "1000 -2000 4000 -2000 2800 200")["mur"]

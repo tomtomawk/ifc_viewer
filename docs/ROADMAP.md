@@ -180,7 +180,7 @@ Demandes n° 4 et 3 de la feuille de route du 16 novembre 2026 (tâches E2, E3 d
 
 #### Périmètre proposé pour une première version web
 
-- **Lecture seule d'abord** : ouvrir un `.modele.json` ou un IFC téléversé, naviguer en 3D, consulter les plans et les coupes, exporter en SVG ou PDF (téléchargement). Crates : `noyau`, `modele`, `scene`, `maillage`, `moteur2d`, `moteur3d`, une partie d'`interface`, `formats` pour l'IFC.
+- **Lecture seule d'abord** : ouvrir un `.bem` ou un IFC téléversé, naviguer en 3D, consulter les plans et les coupes, exporter en SVG ou PDF (téléchargement). Crates : `noyau`, `modele`, `scene`, `maillage`, `moteur2d`, `moteur3d`, une partie d'`interface`, `formats` pour l'IFC.
 - **Hors périmètre** : import Revit (taille des fichiers, mémoire), pilote MCP, collaboration par fichiers partagés.
 
 #### Performances

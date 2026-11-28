@@ -57,7 +57,7 @@ def run(exe, captures):
 
         try:
             demarrer()
-            commande("nouveau",{"chemin":str(root/"Courbes.modele.json")})
+            commande("nouveau",{"chemin":str(root/"Courbes.bem")})
             h=commande("mur","-10000 -10000 10000 -10000 2800 300")["mur"]
             v=commande("mur","-10000 -8000 -10000 10000 2800 300")["mur"]
             commande("camera","cadrer")

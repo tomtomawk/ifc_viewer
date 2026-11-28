@@ -97,7 +97,7 @@ impl Application {
 
     /// Ouvre un fichier de famille de profil (`.bef`) dans l'éditeur commun.
     pub(crate) fn charger_profil_fichier(&mut self) {
-        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[echanges::enregistrement::EXTENSION_FAMILLE, "json"]).pick_file() else { return };
+        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[echanges::enregistrement::EXTENSION_FAMILLE]).pick_file() else { return };
         if let Err(e) = self.ouvrir_famille_fichier(&chemin) { self.error = Some(e); }
     }
 

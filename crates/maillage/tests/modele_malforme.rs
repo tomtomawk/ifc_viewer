@@ -1,4 +1,4 @@
-//! T1 : `.modele.json` malformés. Des valeurs remplacées au hasard (graine fixe) dans les
+//! T1 : projets `.bem` malformés. Des valeurs remplacées au hasard (graine fixe) dans les
 //! projets d'exemple donnent une erreur de lecture, de `verifier()` ou de construction de
 //! la scène, jamais une panique.
 #![allow(clippy::unwrap_used, reason = "tests d'intégration : les fonctions d'aide hors #[test] échouent par panique, comme les tests")]
@@ -69,7 +69,7 @@ fn modeles_mutes_sans_panique() {
     }));
     let mut a = Alea(0x51_7cc1_b727_220a);
     let (mut lus, mut verifies, mut scenes) = (0, 0, 0);
-    for nom in ["maison_native.bem", "ilot_demo/Terreplein2.modele.json"] {
+    for nom in ["maison_native.bem", "ilot_demo/ilot_demo.bem"] {
         let texte = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/").to_string() + nom).unwrap();
         let source: Value = serde_json::from_str(&texte).unwrap();
         let n = compter(&source);
@@ -83,7 +83,7 @@ fn modeles_mutes_sans_panique() {
             lus += 1;
             if p.verifier().is_err() { continue }
             verifies += 1;
-            if maillage::depuis_natif(&p, std::path::Path::new("t.modele.json")).is_ok() { scenes += 1; }
+            if maillage::depuis_natif(&p, std::path::Path::new("t.bem")).is_ok() { scenes += 1; }
         }
     }
     eprintln!("lus {lus}, vérifiés {verifies}, scènes {scenes}");

@@ -57,7 +57,7 @@ def run(exe, captures):
 
         try:
             demarrer()
-            commande("nouveau",{"chemin":str(root/"Angle.modele.json")})
+            commande("nouveau",{"chemin":str(root/"Angle.bem")})
             ref=commande("mur","4000 -3000 4000 -1000 2800 300")["mur"]
             id=commande("mur","0 0 2000 0 2800 300")["mur"]
             commande("camera","cadrer")

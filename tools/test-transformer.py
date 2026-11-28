@@ -73,7 +73,7 @@ def run(exe):
                 try: return commande("etat")["ok"]
                 except OSError: return False
             attendre(pret, 45)
-            commande("nouveau", {"chemin": str(root / "Transformer.modele.json")})
+            commande("nouveau", {"chemin": str(root / "Transformer.bem")})
             a = commande("mur", "0 0 4000 0 2800 200")["mur"]
             b = commande("mur", "6000 1500 9000 1500 2800 200")["mur"]
             commande("camera", "cadrer")

@@ -95,7 +95,7 @@ def run(exe, captures=None):
                 try: return commande("etat")["ok"]
                 except OSError: return False
             attendre(pret, 45)
-            commande("nouveau", {"chemin": str(root / "Pieces.modele.json")})
+            commande("nouveau", {"chemin": str(root / "Pieces.bem")})
             pts = [(0, 0), (5000, 0), (5000, 4000), (0, 4000)]
             murs = [commande("mur", f"{a[0]} {a[1]} {b[0]} {b[1]} 2800 200")["mur"] for a, b in zip(pts, pts[1:] + pts[:1])]
             commande("camera", "cadrer")
@@ -242,7 +242,7 @@ def run(exe, captures=None):
 
             # 7. Rouvrir le fichier : le plan d'étage n'est pas en visibilité temporaire
             commande("enregistrer")
-            chemin = str(root / "Pieces.modele.json")
+            chemin = str(root / "Pieces.bem")
             commande("fermer")
             commande("ouvrir", chemin)
             attendre(lambda: len(projet().get("pieces", [])) > 0)

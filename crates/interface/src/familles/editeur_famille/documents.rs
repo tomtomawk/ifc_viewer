@@ -793,7 +793,7 @@ impl Application {
     /// Charger une famille : choix d'un fichier `.bef`, chargé dans le projet ;
     /// `placer` : le nouveau type devient celui des prochaines ouvertures.
     pub(crate) fn charger_famille_dialogue(&mut self, placer: bool) -> Result<(), String> {
-        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE, "json"]).set_title("Charger une famille").pick_file() else { return Ok(()) };
+        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_title("Charger une famille").pick_file() else { return Ok(()) };
         let id = self.charger_famille_fichier(&chemin)?;
         let Some(t) = self.natif.as_ref().and_then(|(p, _)| p.types_ouvertures.iter().find(|t| t.id == id)).cloned() else { return Ok(()) };
         if placer {
@@ -829,7 +829,7 @@ impl Application {
                     None => Ok(()),
                 }
             }
-            ActionFamille::Ouvrir => match rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE, "json"]).pick_file() {
+            ActionFamille::Ouvrir => match rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).pick_file() {
                 Some(c) => self.ouvrir_famille_fichier(&c),
                 None => Ok(()),
             },

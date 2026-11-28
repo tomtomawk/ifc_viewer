@@ -15,8 +15,7 @@ bimedit --modele <fichier.rvt|.rfa|.ifc> [sortie.bem]
 (`fichier.rapport.md`) et affiche ce rapport.
 
 Les projets utilisent l’extension `.bem` et les familles l’extension `.bef`.
-Le contenu reste du JSON. Les fichiers JSON existants de même schéma, notamment
-`.modele.json` et `.famille.json`, s’ouvrent avec le même lecteur. Le fichier
+Le contenu reste du JSON ; seules ces deux extensions sont lues. Le fichier
 d’entrée d’un projet partagé conserve l’extension `.bimpartage`.
 
 ## Principes
@@ -449,4 +448,4 @@ Chaque volume (`volumes[]`), forme à profil (`extrusions[]`) et élément 2D (`
 
 Le modèle de famille porte une `categorie` explicite et peut contenir des `elements_2d` associés à une vue, avec les formes d'annotation du projet et une hauteur de texte en millimètres papier. Les cartouches, étiquettes et profils chargés depuis ce modèle conservent le document complet ; leur rendu ou leur section est recalculé depuis la vue en plan. Un profil nécessite une seule polyligne fermée en plan. Les profils embarqués du gabarit sont définis par des plans contraints et des formules dans leur document de famille. L'ajout de `categorie` modifie le JSON des familles ; les anciens fichiers ne sont pas migrés.
 
-**Changement incompatible (18/11/2026)** : `document_famille` devient obligatoire dans `profils[]`, `familles_cartouches[]` et `familles_etiquettes[]`. Les champs `parametres[]` et `contour[]` des profils, `traits[]`, `textes[]` et `formes[]` des cartouches et des étiquettes sont retirés (ignorés à la lecture) ; un projet dont un profil, un cartouche ou une étiquette n'a pas de `document_famille` est refusé. Les fichiers spécialisés `bimedit.profil` (`.profil.json`), `bimedit.cartouche` et `bimedit.etiquette` ne sont plus lus ni écrits : ces familles s'échangent en `.famille.json`. Aucune conversion : le gabarit et les exemples ont été réécrits (profils des exemples remplacés par ceux du gabarit, mêmes identifiants).
+**Changement incompatible (18/11/2026)** : `document_famille` devient obligatoire dans `profils[]`, `familles_cartouches[]` et `familles_etiquettes[]`. Les champs `parametres[]` et `contour[]` des profils, `traits[]`, `textes[]` et `formes[]` des cartouches et des étiquettes sont retirés (ignorés à la lecture) ; un projet dont un profil, un cartouche ou une étiquette n'a pas de `document_famille` est refusé. Les fichiers spécialisés `bimedit.profil` (`.profil.json`), `bimedit.cartouche` et `bimedit.etiquette` ne sont plus lus ni écrits : ces familles s'échangent en famille (`.bef`). Aucune conversion : le gabarit et les exemples ont été réécrits (profils des exemples remplacés par ceux du gabarit, mêmes identifiants).

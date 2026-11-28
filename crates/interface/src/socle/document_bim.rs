@@ -84,7 +84,6 @@ impl Application {
             return;
         };
         let nom = ancien.file_stem().unwrap_or_default().to_string_lossy();
-        let nom = nom.strip_suffix(".modele").unwrap_or(&nom);
         let Some(mut chemin) = rfd::FileDialog::new()
             .set_title("Enregistrer sous")
             .add_filter("Projet BIMedit", &[EXTENSION_PROJET])
@@ -181,7 +180,7 @@ impl Application {
                         return Err("La source ne peut pas être remplacée.".into());
                     }
                     if !extension_projet(&sortie) {
-                        return Err("Choisissez une destination .bem ou .json.".into());
+                        return Err("Choisissez une destination .bem.".into());
                     }
                     let (p, mesures) = if is_revit_file(&source) {
                         echanges::depuis_rvt::convertir(&source, &progress)?

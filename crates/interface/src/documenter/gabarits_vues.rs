@@ -156,7 +156,7 @@ mod tests {
 
         let ctx = egui::Context::default();
         let mut app = Application::new(&eframe::CreationContext::_new_kittest(ctx.clone()), None);
-        let chemin = std::env::temp_dir().join(format!("gabarit-{}.modele.json", noyau::uuid::uuid()));
+        let chemin = std::env::temp_dir().join(format!("gabarit-{}.bem", noyau::uuid::uuid()));
         app.natif = Some((projet, chemin.clone()));
         app.ouvrir_gabarit_par_id(&vue, &source.id, true);
         let brouillon = app.editeur_gabarit_vue.as_ref().unwrap();

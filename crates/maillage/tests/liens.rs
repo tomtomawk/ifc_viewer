@@ -17,12 +17,12 @@ const IFC: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/test_ifc4.
 #[test]
 fn objets_lies_dans_la_scene() {
     let p = maison();
-    let seule = maillage::depuis_natif(&p, std::path::Path::new("maison.modele.json")).unwrap();
+    let seule = maillage::depuis_natif(&p, std::path::Path::new("maison.bem")).unwrap();
     let fichier = maillage::liens::charger(std::path::Path::new(IFC)).unwrap();
     let mut q = p.clone();
     q.liens.push(lien(IFC, [10_000.0, 0.0, 0.0], 0.0));
     q.verifier().unwrap();
-    let s = maillage::depuis_natif(&q, std::path::Path::new("maison.modele.json")).unwrap();
+    let s = maillage::depuis_natif(&q, std::path::Path::new("maison.bem")).unwrap();
     assert_eq!(s.objects.len(), seule.objects.len() + fichier.elements.len());
     let niveaux: Vec<u64> = q.niveaux.iter().map(|n| id_natif("niveau", &n.id)).collect();
     for e in &fichier.elements {

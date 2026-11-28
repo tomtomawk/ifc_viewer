@@ -64,7 +64,7 @@ def run(exe):
                 try: return commande("etat")["ok"]
                 except OSError: return False
             attendre(pret, 45)
-            commande("nouveau", {"chemin": str(root / "Visibilite.modele.json")})
+            commande("nouveau", {"chemin": str(root / "Visibilite.bem")})
             a = commande("mur", "0 0 4000 0 2800 200")["mur"]
             b = commande("mur", "0 3000 4000 3000 2800 200")["mur"]
             commande("camera", "cadrer")

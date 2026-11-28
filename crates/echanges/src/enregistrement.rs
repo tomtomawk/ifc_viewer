@@ -10,14 +10,11 @@ pub const EXTENSION_PROJET: &str = "bem";
 pub const EXTENSION_FAMILLE: &str = "bef";
 
 pub fn extension_projet(chemin: &Path) -> bool {
-    chemin.extension().is_some_and(|e| {
-        e.eq_ignore_ascii_case(EXTENSION_PROJET) || e.eq_ignore_ascii_case("json")
-    })
+    chemin.extension().is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION_PROJET))
 }
 
 pub fn fichier_famille(chemin: &Path) -> bool {
     chemin.extension().is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION_FAMILLE))
-        || chemin.file_name().is_some_and(|n| n.to_string_lossy().to_ascii_lowercase().ends_with(".famille.json"))
 }
 
 #[derive(Clone)]
@@ -184,10 +181,11 @@ mod tests {
         enregistrer_natif(&projet, &chemin).unwrap();
         let relu = Projet::lire_json(&std::fs::read_to_string(&chemin).unwrap()).unwrap();
         assert_eq!(relu.identite, projet.identite);
-        assert!(extension_projet(Path::new("Maison.modele.json")));
+        assert!(extension_projet(Path::new("Maison.bem")));
+        assert!(!extension_projet(Path::new("Maison.json")));
         assert!(!extension_projet(Path::new("Fenêtre.bef")));
         assert!(fichier_famille(Path::new("Fenêtre.BEF")));
-        assert!(fichier_famille(Path::new("Fenêtre.famille.json")));
+        assert!(!fichier_famille(Path::new("Fenêtre.json")));
         assert!(!fichier_famille(Path::new("Maison.bem")));
         std::fs::remove_file(chemin).unwrap();
         std::fs::remove_dir(dir).unwrap();
@@ -197,7 +195,7 @@ mod tests {
     /// l'interface, une seule fois.
     #[test]
     fn echec_de_recuperation_rendu() {
-        let chemin = dossier().join("absent").join("projet.modele.json");
+        let chemin = dossier().join("absent").join("projet.bem");
         recuperer_plus_tard(&Projet::nouveau("essai"), &chemin).unwrap();
         let debut = std::time::Instant::now();
         let e = loop {
@@ -205,7 +203,7 @@ mod tests {
             assert!(debut.elapsed().as_secs() < 10, "aucune erreur rendue");
             std::thread::sleep(std::time::Duration::from_millis(20));
         };
-        assert!(e.contains("Copie de récupération non écrite") && e.contains("projet.modele.recuperation.json"), "{e}");
+        assert!(e.contains("Copie de récupération non écrite") && e.contains("projet.recuperation.json"), "{e}");
         assert_eq!(erreur_recuperation(), None);
     }
     static TEST: AtomicU64 = AtomicU64::new(0);

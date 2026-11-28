@@ -57,7 +57,7 @@ def run(exe, captures):
 
         try:
             demarrer()
-            commande("nouveau",{"chemin":str(root/"Verifications.modele.json")})
+            commande("nouveau",{"chemin":str(root/"Verifications.bem")})
             id=commande("mur","0 0 4000 0 2800 300")["mur"]
             commande("outil","aucun");commande("selection_native",[id])
             avant=commande("projet_natif")
@@ -83,7 +83,7 @@ def run(exe, captures):
             assert commande("options")["options"]["theme_interface"]=="sombre"
             commande("options",{"theme_interface":"systeme"})
             commande("enregistrer")
-            cmdpath=str(root/"Verifications.modele.json")
+            cmdpath=str(root/"Verifications.bem")
             commande("fermer")
             commande("ouvrir",cmdpath)
             attendre(lambda:commande("projet_natif")["projet"]["vues"][i].get("fond_plan")==source)

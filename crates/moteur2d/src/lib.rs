@@ -155,7 +155,7 @@ mod mesure {
             let c = [5000.0 + 4000.0 * r.cos(), 4000.0 * r.sin()];
             p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &o).unwrap();
             p.ajouter_mur([5000.0, 0.0], c, &o).unwrap();
-            let s = maillage::depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+            let s = maillage::depuis_natif(&p, std::path::Path::new("t.bem")).unwrap();
             let visible = vec![true; s.objects.len()];
             let prims = crate::coupe(&s, &visible, crate::TOUT, glam::Vec4::new(0.0, 0.0, 1.0, -1.0), 100.0, crate::Poche::Hachure);
             let mut segs: Vec<[glam::DVec3; 2]> = Vec::new();

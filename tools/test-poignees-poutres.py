@@ -59,7 +59,7 @@ def run(exe, capture):
         p = subprocess.Popen([str(exe.resolve())], env=env, stdout=log, stderr=log)
         try:
             attendre(lambda: commande("etat")["ok"], 60)
-            commande("nouveau", {"chemin": str(root / "Poutres.modele.json")})
+            commande("nouveau", {"chemin": str(root / "Poutres.bem")})
             niveau = commande("projet_natif")["projet"]["niveaux"][0]["id"]
             type_poutre = commande("projet_natif")["projet"]["types_poutres"][0]["id"]
             r = commande("editer", {"action": "barre", "barre": {"id": "", "nom": "Poutre", "genre": "poutre", "niveau": niveau,

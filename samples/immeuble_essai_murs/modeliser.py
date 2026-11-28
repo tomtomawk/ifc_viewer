@@ -2,7 +2,7 @@
 
 Par niveau : 2 façades, 2 pignons, 2 murs de circulation, 30 refends, 64 cloisons de salle
 d'eau (100 murs), 32 portes, 32 fenêtres, 1 plancher.
-Usage : python modeliser.py <niveaux> <chemin.modele.json> <resultats.json>
+Usage : python modeliser.py <niveaux> <chemin.bem> <resultats.json>
 """
 import json
 import os

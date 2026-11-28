@@ -28,7 +28,7 @@ fn topographie_revit_importee_est_geographique() {
         let origine = Some(Origine { source: "rvt".into(), id: id.into(), guid: None, classe: classe.into() });
         p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine, donnees: Default::default() });
     }
-    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let s = depuis_natif(&p, std::path::Path::new("t.bem")).unwrap();
     let classe = |id: &str| &*s.objects[s.object_of[&id_natif("importe", id)] as usize].class;
     assert_eq!(classe("a"), "IFCGEOGRAPHICELEMENT");
     assert_eq!(classe("b"), "IFCGEOGRAPHICELEMENT");
@@ -45,7 +45,7 @@ fn terrain_sous_le_mur_et_ses_traits() {
     p.ajouter_mur([0.0, 0.0], [5000.0, 0.0], &ParametresMur { epaisseur: 200.0, ..Default::default() }).unwrap();
     let z = |x: f64| 200.0 + x / 10.0;
     p.terrains.push(Terrain { id: "t".into(), nom: "Topo".into(), contour: vec![[-5000.0, -5000.0, z(-5000.0)], [10000.0, -5000.0, z(10000.0)], [10000.0, 5000.0, z(10000.0)], [-5000.0, 5000.0, z(-5000.0)]], points: vec![], type_terrain: None });
-    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let s = depuis_natif(&p, std::path::Path::new("t.bem")).unwrap();
     let visible = vec![true; s.objects.len()];
     let plan = glam::Vec4::new(0.0, 0.0, -1.0, 1.2 - s.origin.z as f32);
     let haut = glam::Vec3::new(2.5 - s.origin.x as f32, -s.origin.y as f32, 10.0);
@@ -68,7 +68,7 @@ fn lame_air_vide_mais_epaisse() {
     let t = p.types_murs.iter().find(|t| t.nom == "Mur ossature bois 145").unwrap().clone();
     assert!(t.couches.iter().any(|c| c.fonction == modele::FonctionCouche::LameAir));
     p.ajouter_mur([0.0, 0.0], [4000.0, 0.0], &ParametresMur { type_mur: Some(t.id.clone()), ..Default::default() }).unwrap();
-    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let s = depuis_natif(&p, std::path::Path::new("t.bem")).unwrap();
     let couches = p.murs.iter().filter(|m| m.assemblage.is_some()).collect::<Vec<_>>();
     assert_eq!(couches.len(), t.couches.len());
     for m in &couches {
@@ -98,7 +98,7 @@ fn couleur_de_l_element_importe() {
         let donnees = modele::importes::DonneesImportees { couleur, ..Default::default() };
         p.importes.push(ElementImporte { id: id.into(), nom: id.into(), categorie: "Autres".into(), niveau: None, maillage: Maillage::depuis_triangles(&tris), raison: String::new(), origine: None, donnees });
     }
-    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let s = depuis_natif(&p, std::path::Path::new("t.bem")).unwrap();
     let couleurs = |id: &str| {
         let o = s.object_of[&id_natif("importe", id)];
         s.vertices.iter().filter(|v| v.obj == o).map(|v| v.color).collect::<std::collections::HashSet<_>>()
@@ -122,13 +122,13 @@ fn famille_visible_selon_detail_et_type_de_vue() {
     let mut q = p.clone();
     q.types_composants.push(t.clone());
     q.composants.push(composant(&t.id));
-    assert!(depuis_natif(&q, std::path::Path::new("t.modele.json")).unwrap().visibilite.is_empty(), "sans restriction, pas de masque");
+    assert!(depuis_natif(&q, std::path::Path::new("t.bem")).unwrap().visibilite.is_empty(), "sans restriction, pas de masque");
     t.modele.volumes[0].visibilite.faible = false;
     t.modele.volumes[0].visibilite.moyen = false;
     t.modele.volumes[1].visibilite.vue_3d = false;
     p.composants.push(composant(&t.id));
     p.types_composants.push(t);
-    let s = depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap();
+    let s = depuis_natif(&p, std::path::Path::new("t.bem")).unwrap();
     assert_eq!(s.visibilite.len(), s.vertices.len());
     let o = &s.objects[s.object_of[&id_natif("composant", "c")] as usize];
     let compte = |detail, vue| {
@@ -159,7 +159,7 @@ fn vegetal_rendu_par_reference_sans_arete() {
         t.modele.parametres.iter_mut().find(|x| x.nom == modele::famille::modelee::PARAMETRE_RENDU).unwrap().formule = reference.into();
         p.composants.push(Composant { id: "c".into(), nom: "c".into(), type_composant: t.id.clone(), niveau: "n".into(), position: [0.0; 2], decalage: 0.0, rotation: 0.0 });
         p.types_composants.push(t);
-        depuis_natif(&p, std::path::Path::new("t.modele.json")).unwrap()
+        depuis_natif(&p, std::path::Path::new("t.bem")).unwrap()
     };
     let (avec, sans) = (scene("arbre:feuillu"), scene(""));
     let objet = |s: &scene::Scene| { let o = &s.objects[s.object_of[&id_natif("composant", "c")] as usize]; (o.opaque, o.aretes) };

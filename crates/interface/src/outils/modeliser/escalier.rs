@@ -577,7 +577,7 @@ mod tests {
             altitude: 0.0,
             origine: None,
         });
-        let chemin = std::env::temp_dir().join(format!("escalier-{}.modele.json", noyau::uuid::uuid()));
+        let chemin = std::env::temp_dir().join(format!("escalier-{}.bem", noyau::uuid::uuid()));
         app.scene = Some(maillage::depuis_natif(&p, &chemin).unwrap());
         app.natif = Some((p, chemin.clone()));
         app.onglet_ruban = OngletRuban::Modeliser;

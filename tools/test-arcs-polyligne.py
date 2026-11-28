@@ -64,7 +64,7 @@ def run(exe, capture):
                     assert p.poll() is None, (root / "instance.log").read_text(encoding="utf-8")
                     return False
             attendre(pret)
-            commande("nouveau", {"chemin": str(root / "Arcs.modele.json"), "nom": "Arcs"})
+            commande("nouveau", {"chemin": str(root / "Arcs.bem"), "nom": "Arcs"})
             niveau = commande("projet_natif")["projet"]["niveaux"][0]["id"]
             commande("vue_plan", niveau)
             # l'outil Arc n'existe plus : l'arc est un segment de la polyligne
@@ -113,7 +113,7 @@ def run(exe, capture):
 
             # 3. relecture : les courbures sont enregistrées et relues à l'identique
             commande("enregistrer")
-            relu = json.loads((root / "Arcs.modele.json").read_text(encoding="utf-8"))
+            relu = json.loads((root / "Arcs.bem").read_text(encoding="utf-8"))
             assert [a for a in relu["annotations"] if a["forme"] == "polyligne"] == formes
             # 4. Modifier tracé puis valider : les arcs restent sur leurs segments
             commande("outil", "aucun")

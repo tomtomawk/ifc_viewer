@@ -335,7 +335,7 @@ impl Application {
         if chemin.extension().is_none() {
             chemin.set_extension(EXTENSION_PROJET);
         }
-        let nom = chemin.file_stem().map(|n| n.to_string_lossy().trim_end_matches(".modele").to_string()).unwrap_or_else(|| "Nouveau projet".into());
+        let nom = chemin.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "Nouveau projet".into());
         let projet = modele::Projet::depuis_gabarit(&nom, &modele::gabarit::actif());
         let resultat = maillage::depuis_natif(&projet, &chemin).and_then(|scene| {
             echanges::enregistrement::enregistrer_natif(&projet, &chemin)?;
@@ -499,10 +499,10 @@ impl Application {
 
     pub(crate) fn open_dialog(&mut self, ctx: &egui::Context) {
         if let Some(p) = rfd::FileDialog::new()
-             .add_filter("Documents BIMedit et Revit", &["bimpartage", EXTENSION_PROJET, EXTENSION_FAMILLE, "json", "rvt", "rfa", "rte", "rft"])
+             .add_filter("Documents BIMedit et Revit", &["bimpartage", EXTENSION_PROJET, EXTENSION_FAMILLE, "rvt", "rfa", "rte", "rft"])
             .add_filter("Projet partagé BIMedit", &["bimpartage"])
-            .add_filter("Projet BIMedit", &[EXTENSION_PROJET, "json"])
-            .add_filter("Famille BIMedit", &[EXTENSION_FAMILLE, "json"])
+            .add_filter("Projet BIMedit", &[EXTENSION_PROJET])
+            .add_filter("Famille BIMedit", &[EXTENSION_FAMILLE])
             .add_filter("Revit (murs et métadonnées)", &["rvt", "rfa", "rte", "rft"])
             .pick_file()
         {

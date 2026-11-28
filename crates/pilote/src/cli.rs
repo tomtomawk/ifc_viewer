@@ -114,7 +114,7 @@ mod tests {
         }
         let dossier = std::env::temp_dir().join(format!("bimedit-supprimer-{}", std::process::id()));
         std::fs::create_dir_all(&dossier).unwrap();
-        let (entree, commande) = (dossier.join("p.modele.json"), dossier.join("c.json"));
+        let (entree, commande) = (dossier.join("p.bem"), dossier.join("c.json"));
         std::fs::write(&entree, p.json().unwrap()).unwrap();
         std::fs::write(&commande, format!(r#"{{"action":"supprimer","ids":["{mur}"]}}"#)).unwrap();
         let args: Vec<String> = ["--editer".into(), entree.to_string_lossy().into_owned(), commande.to_string_lossy().into_owned()].into();
