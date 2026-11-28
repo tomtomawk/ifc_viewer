@@ -6,6 +6,12 @@ edition = "2024"
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = ["poste"]
+# poste : serveur de pilotage (MCP) et registre des instances. La crate `web` s'en passe
+# (`default-features = false`, ROADMAP §10.3).
+poste = []
+
 [dependencies]
 noyau = { path = "../noyau" }
 modele = { path = "../modele" }

@@ -66,6 +66,12 @@ jobs:
           cargo check --target wasm32-unknown-unknown
           -p noyau -p modele -p ifc_base -p scene -p formats -p maillage -p commandes
           -p moteur2d -p moteur3d -p echanges -p collaboration -p pilote -p config
+      - run: cargo check --target wasm32-unknown-unknown -p interface --no-default-features
+      - name: Interface sans la fonctionnalité poste (poste)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev
+          cargo check -p interface --no-default-features --tests
 
   # Tests en mode debug : les assertions de débogage (debug_assert, débordements)
   # y sont actives, contrairement au mode release des autres tâches.

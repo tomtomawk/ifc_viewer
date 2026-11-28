@@ -61,6 +61,8 @@ Le tableau est resserré aux dépendances réellement utilisées (aucune autoris
 
 Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, `config`, `interface`, `app` ; `egui`/`wgpu` jamais dans `noyau`, `ifc_base`, `modele`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` (vérifié par le test). `eframe` est la seule déclaration d'egui : `moteur3d` (rendu), `pilote` (`egui::Event`, `egui::Context`), `config` (`DragValue`, `ThemePreference`, `Key`), `interface` (tout).
 
+Cibles : `interface` a une fonctionnalité `poste` (active par défaut, prise par `app`) qui porte le pilote MCP et le registre des instances ; une crate web en dépendra sans elle. Le code propre à une cible s'écarte par `cfg(target_arch = "wasm32")` dans quelques modules d'adaptation (`noyau::fil`, `interface::socle::dialogue`, `interface::socle::fenetre`) ; voir ROADMAP §10.3 pour l'avancement.
+
 ## 3. Règles
 
 1. Une crate n'importe que des crates situées avant elle ; aucun cycle ; le sens est vérifié par `cargo test -p bimedit --release --test dependances`.

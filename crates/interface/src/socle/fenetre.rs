@@ -1,10 +1,10 @@
 //! Fenêtre native : création de la fenêtre eframe, mode arrière-plan, cadre du système.
-
-use std::path::PathBuf;
+//! Dans le navigateur (wasm32), la crate `web` crée le canevas : `lancer` n'existe pas.
 
 /// Ouvre la fenêtre de l'application (projet ou fichier optionnel) et bloque jusqu'à sa
 /// fermeture.
-pub fn lancer(path: Option<PathBuf>) -> eframe::Result<()> {
+#[cfg(not(target_arch = "wasm32"))]
+pub fn lancer(path: Option<std::path::PathBuf>) -> eframe::Result<()> {
     // l'anticrénelage de la vue 3D est celui du rendu (BIMEDIT_MSAA), pas de la fenêtre
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title("BIMedit")
@@ -13,7 +13,7 @@ pub fn lancer(path: Option<PathBuf>) -> eframe::Result<()> {
         .with_inner_size([1500.0, 920.0])
         .with_drag_and_drop(true);
     // icône embarquée illisible : fenêtre sans icône plutôt qu'un arrêt
-    if let Ok(icone) = eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icone.png")) {
+    if let Some(icone) = icone() {
         viewport = viewport.with_icon(icone);
     }
     // Mode arrière-plan (tests, pilotage) : fenêtre créée sans activation, hors de l'écran et
@@ -38,6 +38,12 @@ pub fn lancer(path: Option<PathBuf>) -> eframe::Result<()> {
     eframe::run_native("BIMedit", options, Box::new(move |cc| Ok(Box::new(crate::Application::new(cc, path)))))
 }
 
+/// Icône embarquée en RGBA, même décodeur sur poste et navigateur ; `None` si illisible.
+pub(crate) fn icone() -> Option<eframe::egui::IconData> {
+    let (largeur, hauteur, rgba) = formats::rvt::decode_png_rgba(include_bytes!("../../assets/icone.png"))?;
+    Some(eframe::egui::IconData { rgba, width: largeur as u32, height: hauteur as u32 })
+}
+
 /// `BIMEDIT_ARRIERE_PLAN=1` : la fenêtre ne passe pas devant celles de l'utilisateur.
 pub fn arriere_plan() -> bool {
     std::env::var("BIMEDIT_ARRIERE_PLAN").is_ok_and(|v| !v.is_empty() && v != "0")
@@ -46,6 +52,7 @@ pub fn arriere_plan() -> bool {
 /// Périphérique GPU aux limites de tampon de la carte (souvent plusieurs Go) au lieu des
 /// 256 Mo par défaut de wgpu : sommets et traits d'un gros modèle Revit tiennent en un
 /// tampon. Le reste des réglages d'egui est conservé.
+#[cfg(not(target_arch = "wasm32"))]
 fn limites_gpu() -> eframe::egui_wgpu::WgpuConfiguration {
     let mut config = eframe::egui_wgpu::WgpuConfiguration::default();
     if let eframe::egui_wgpu::WgpuSetup::CreateNew(creation) = &mut config.wgpu_setup {
@@ -64,8 +71,11 @@ fn limites_gpu() -> eframe::egui_wgpu::WgpuConfiguration {
 /// l'application. Par défaut sous Windows 10 seulement : une fenêtre sans décoration y
 /// garde une bande en haut de la zone cliente, qui décale l'affichage par rapport aux
 /// clics (Windows 11 n'a pas ce défaut). `BIMEDIT_CADRE=natif` ou `perso` force l'un
-/// ou l'autre.
+/// ou l'autre. Dans le navigateur, le cadre est celui de l'onglet : pas de boutons de fenêtre.
 pub fn cadre_natif() -> bool {
+    if cfg!(target_arch = "wasm32") {
+        return true;
+    }
     match std::env::var("BIMEDIT_CADRE").as_deref() {
         Ok("natif") => true,
         Ok("perso") => false,

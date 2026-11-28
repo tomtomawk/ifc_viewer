@@ -25,6 +25,7 @@ Règles :
 - Visibilité : `pub(crate)` pour ce qui sert hors du dossier ; `pub(super)` seulement à l'intérieur d'un sous-dossier (`ruban/`, `dessin_plan/`, `editeur_famille/`). Rien de `pub` hors `socle::fenetre`.
 - Le module local `projet::collaboration` masque la crate du même nom dans `projet/` : écrire `::collaboration::…` pour la crate.
 - 20 fichiers dépassent 600 lignes (chantier du découpage §5.19 c) : ne pas les agrandir ; découpage prévu en 11c.
+- Fonctionnalité `poste` (par défaut) : pilote MCP et registre des instances (`cfg!(feature = "poste")`) ; la fenêtre native (`socle::fenetre::lancer`) est `cfg(not(target_arch = "wasm32"))`. Vérifier aussi `cargo check -p interface --no-default-features --target wasm32-unknown-unknown`.
 - Choix de fichier : `crate::socle::dialogue::Fichier`, jamais `rfd::FileDialog` (absent en wasm32) ; fond : `noyau::fil::lancer`, pas `std::thread`.
 - Les `mod.rs` des dossiers de premier niveau et d'`outils/` ne contiennent que des déclarations de modules. Ceux de `ruban/`, `dessin_plan/` et `editeur_famille/` portent du code (antérieur au lot 11b).
 

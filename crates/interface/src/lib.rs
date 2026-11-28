@@ -814,7 +814,8 @@ impl Application {
             point_clique: None,
             vol: Vol::default(),
             nomenclature_ouverte: None,
-            pilote: pilote::demarrer(cc.egui_ctx.clone()),
+            // navigateur (sans `poste`) : ni serveur de pilotage ni registre des instances
+            pilote: if cfg!(feature = "poste") { pilote::demarrer(cc.egui_ctx.clone()) } else { None },
             prochaine_tentative_pilote: web_time::Instant::now(),
             requetes: Vec::new(),
             saisies_pilote: Default::default(),
@@ -923,7 +924,7 @@ impl eframe::App for Application {
         if self.captures_en_attente.load(std::sync::atomic::Ordering::Acquire) > 0 {
             ctx.request_repaint();
         }
-        if self.pilote.is_none() {
+        if cfg!(feature = "poste") && self.pilote.is_none() {
             if web_time::Instant::now() >= self.prochaine_tentative_pilote {
                 self.pilote = pilote::demarrer(ctx.clone());
                 self.prochaine_tentative_pilote = web_time::Instant::now() + std::time::Duration::from_secs(2);
@@ -931,11 +932,11 @@ impl eframe::App for Application {
             if self.pilote.is_none() { ctx.request_repaint_after(std::time::Duration::from_secs(2)); }
         }
         // registre des instances : fichier ouvert et partage, pour que le pont MCP choisisse
-        pilote::instances::publier(
+        if cfg!(feature = "poste") { pilote::instances::publier(
             self.natif.as_ref().map(|(_, p)| p.to_string_lossy().into_owned()).or_else(|| self.scene.as_ref().map(|s| s.file_name.clone())),
             // le .bimpartage commun, pas la copie locale propre à chaque instance
             self.collaboration.as_ref().and_then(|c| c.copie.partage.as_ref()).map(|p| p.to_string_lossy().into_owned()),
-        );
+        ); }
         self.valider_saisie(&ctx);
         self.recevoir_collaboration();
         self.niveau_creation_courant();
