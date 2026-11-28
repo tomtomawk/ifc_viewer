@@ -130,7 +130,7 @@ impl Application {
         controle.etape(format!("{nom}…"));
         let (tx, rx) = channel();
         let (c, contexte) = (controle.clone(), ctx.clone());
-        let lance = std::thread::Builder::new().name(format!("tache : {nom}")).stack_size(64 << 20).spawn(move || {
+        let lance = noyau::fil::lancer(&format!("tache : {nom}"), move || {
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| travail(&c)))
                 .unwrap_or_else(|_| Err("Erreur interne pendant le travail (panique) ; aucun fichier partiel n'a été écrit.".into()));
             let _ = tx.send(r);

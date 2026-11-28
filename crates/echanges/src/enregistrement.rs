@@ -71,7 +71,7 @@ pub fn ecrire_atomique(chemin: &Path, contenu: &[u8]) -> Result<(), String> {
 
 pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(String)) -> Result<Bilan, String> {
     if !extension_projet(sortie) {
-        return Err("La destination doit être un fichier .bem ou .json.".into());
+        return Err("La destination doit être un fichier .bem.".into());
     }
     if sortie.canonicalize().ok().as_ref() == Some(&source.chemin) {
         return Err("Le fichier Revit source ne peut pas être remplacé.".into());
@@ -97,7 +97,7 @@ pub fn enregistrer_rvt(source: &SourceRvt, sortie: &Path, progress: &dyn Fn(Stri
 
 /// Valide et remplace un fichier natif sans écriture partielle.
 pub fn enregistrer_natif(p: &Projet, chemin: &Path) -> Result<(), String> {
-    if !extension_projet(chemin) {return Err("Un projet natif doit être enregistré dans un fichier .bem ou .json.".into());}
+    if !extension_projet(chemin) {return Err("Un projet natif doit être enregistré dans un fichier .bem.".into());}
     p.verifier()?;
     let json=p.json()?;
     Projet::lire_json(&json)?;
@@ -117,6 +117,10 @@ fn recuperations() -> &'static Recuperations {
     static R: std::sync::OnceLock<Recuperations> = std::sync::OnceLock::new();
     R.get_or_init(|| {
         let (envoi, reception) = std::sync::mpsc::channel::<(u64, Projet, PathBuf)>();
+        // wasm32 : pas de fil d'écriture ni de fichier local ; `recuperer_plus_tard` n'écrit rien
+        #[cfg(target_arch = "wasm32")]
+        drop(reception);
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::spawn(move || {
             while let Ok(premiere) = reception.recv() {
                 // plusieurs demandes en attente : seule la dernière de chaque fichier compte
@@ -158,6 +162,8 @@ fn rang_suivant(chemin: &Path) -> u64 {
 /// Demande l'écriture de la copie de récupération, faite en arrière-plan : la
 /// modification en cours ne l'attend pas.
 pub fn recuperer_plus_tard(p: &Projet, chemin: &Path) -> Result<(),String> {
+    // navigateur : pas de copie de récupération tant qu'il n'y a pas de stockage local (W3)
+    if cfg!(target_arch = "wasm32") { return Ok(()); }
     let rang = rang_suivant(chemin);
     recuperations().envoi.lock().unwrap_or_else(|e| e.into_inner()).send((rang, p.clone(), chemin.to_path_buf())).map_err(|e| e.to_string())
 }

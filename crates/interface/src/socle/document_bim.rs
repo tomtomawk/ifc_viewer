@@ -166,10 +166,7 @@ impl Application {
         let (tx, rx) = channel();
         let ctx = ctx.clone();
         self.loading = Some(rx);
-        let lancement = std::thread::Builder::new()
-            .name("import-bim".into())
-            .stack_size(64 << 20)
-            .spawn(move || {
+        let lancement = noyau::fil::lancer("import-bim", move || {
                 let progress = |s| {
                     let _ = tx.send(LoadMsg::Progress(s));
                     ctx.request_repaint();

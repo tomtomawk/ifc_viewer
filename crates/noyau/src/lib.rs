@@ -10,6 +10,7 @@ pub mod forme2d;
 pub mod arcs2d;
 pub mod aretes;
 pub mod chrono;
+pub mod fil;
 pub mod constantes;
 pub mod motif;
 pub mod nombres;

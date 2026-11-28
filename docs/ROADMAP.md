@@ -172,11 +172,10 @@ Cible `wasm32-unknown-unknown`, développée sur `master` comme le reste. Config
 
 | Id | Étape | Priorité | Détail |
 |---|---|---|---|
-| W2 | Tâches de fond : 21 `thread::spawn` (interface 15, echanges 2, collaboration, pilote) derrière un module de tâches (`interface/src/socle/taches.rs` existe) ; en wasm32, exécution sur le fil courant | P2 | `rayon` 1.13 se replie sur le fil courant quand il ne peut créer de fil : à vérifier à l'exécution |
 | W3 | Fichiers et dialogues : 24 `rfd::FileDialog` (synchrone, absent en wasm32) derrière une couche commune ; navigateur : `AsyncFileDialog`, téléversement et téléchargement, puis OPFS | P2 | `std::fs` : 37 fichiers, à traiter selon le périmètre de W5 |
-| W4 | Fonctionnalité `poste` d'`interface` (pilote, collaboration, `eframe::run_native`, icône) ; ARCHITECTURE §2 et `app/tests/dependances.rs` mis à jour pour la crate `web` | P2 | environ 10 fichiers d'`interface` appellent `pilote::` ou `collaboration::` |
+| W4 | Fonctionnalité `poste` d'`interface` (pilote, collaboration, `eframe::run_native`, icône) ; ARCHITECTURE §2 et `app/tests/dependances.rs` mis à jour pour la crate `web` | P2 | environ 10 fichiers d'`interface` appellent `pilote::` ou `collaboration::` ; les fils restants (pilote, collaboration, enregistrement Revit `socle/documents.rs`, modes de `app`) sont propres au poste |
 | W5 | Crate `web` : `eframe::WebRunner`, `trunk`, `index.html` ; visionneuse : ouvrir un `.bem` ou un IFC téléversé, 3D, plans et coupes, export SVG et PDF téléchargés | P2 | dépend de W1 à W4 |
-| W6 | Mesures dans le navigateur (reconstruction, mémoire : 4 Go au plus en wasm32) sur les échantillons ; décision sur le parallélisme (`wasm-bindgen-rayon` exige les en-têtes COOP et COEP) | P3 | remplace l'estimation « facteur 4 à 8 » |
+| W6 | Mesures dans le navigateur (reconstruction, mémoire : 4 Go au plus en wasm32) sur les échantillons ; décision sur le parallélisme (`wasm-bindgen-rayon` exige les en-têtes COOP et COEP) | P3 | vérifier aussi que `rayon` 1.13 se replie sur le fil courant ; remplace l'estimation « facteur 4 à 8 » |
 | W7 | Édition dans le navigateur (commandes, historique, enregistrement local) | P3 | après W6 |
 
 Hors périmètre : import Revit (taille, mémoire), pilote MCP, collaboration par fichiers partagés (sur le web elle demanderait un serveur `yrs` : décision à part).

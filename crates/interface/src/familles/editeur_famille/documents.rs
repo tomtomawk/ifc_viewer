@@ -691,8 +691,8 @@ impl Application {
         if chemin.extension().is_none() {
             chemin.set_extension(EXTENSION_FAMILLE);
         }
-        if !chemin.extension().is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION_FAMILLE) || e.eq_ignore_ascii_case("json")) {
-            return Err("Une famille BIMedit doit être enregistrée dans un fichier .bef ou .json.".into());
+        if !echanges::enregistrement::fichier_famille(&chemin) {
+            return Err("Une famille BIMedit doit être enregistrée dans un fichier .bef.".into());
         }
         ed.famille.valider(ed.largeur, ed.hauteur, ed.epaisseur)?;
         echanges::enregistrement::ecrire_atomique(&chemin, ed.fichier().json()?.as_bytes())?;

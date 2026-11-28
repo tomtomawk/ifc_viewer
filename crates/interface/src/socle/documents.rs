@@ -39,9 +39,7 @@ impl Application {
         self.loading = Some(rx);
         self.error = None;
         self.status = format!("Chargement de {}…", path.display());
-        let lancement = std::thread::Builder::new()
-            .stack_size(64 << 20)
-            .spawn(move || {
+        let lancement = noyau::fil::lancer("chargement", move || {
                 // abandon (document fermé, autre chargement) : le calcul s'arrête à la
                 // prochaine étape annoncée, par un déroulement sans message de panique
                 let progress = |s: String| {
