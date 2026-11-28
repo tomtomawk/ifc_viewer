@@ -25,7 +25,7 @@ Profondeur de la vue inversée : effacer à `LOIN_INVERSE`, comparer avec `COMPA
 
 Apparences (`scene.wgsl`) : `effet_apparence` reçoit une `Projection` ; les faces verticales courbes passent par `effet_courbe` (projections sur les plans verticaux des axes). Herbe : `fs_herbe` / `brin_herbe`, `COUCHES_HERBE` couches dessinées par instances, trois réseaux de cellules tournés (pas de rangs).
 
-`MAX_APPARENCES` est dans `noyau::constantes` et en dur dans `scene.wgsl` : les deux valeurs doivent rester égales. Les tests `shader_*_valide` valident les shaders (naga) sans GPU. Le rendu lui-même ne se teste pas sans affichage. `gpu.rs` dépasse 600 lignes (`Renderer` à un seul `impl`) : ne pas l'agrandir.
+`MAX_APPARENCES` est dans `noyau::constantes` et en dur dans `scene.wgsl` : les deux valeurs doivent rester égales. Les tests `shader_*_valide` valident les shaders (naga) sans GPU. Le rendu lui-même ne se teste pas sans affichage. `gpu.rs` dépasse 600 lignes (`Renderer` à un seul `impl`) : ne pas l'agrandir. `TAILLE_OMBRES` vaut 2048 en wasm32 (4096 sur poste) : la mémoire GPU d'un onglet est comptée.
 
 ## Quand modifier ici
 
