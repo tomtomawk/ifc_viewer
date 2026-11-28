@@ -199,7 +199,7 @@ pub(super) fn coordonnees_affichees(m: &Maquette) -> Vec<(String, String)> {
 /// Lit le fichier et construit la scène du viewer. Erreur si aucun élément n'a pu être
 /// maillé.
 pub fn load_scene(path: &Path, titre: &str, format: &str, progress: &dyn Fn(String)) -> Result<Scene, String> {
-    let t0 = std::time::Instant::now();
+    let t0 = web_time::Instant::now();
     let m = lire(path, progress)?;
     let ko = |v: &mut dyn Iterator<Item = &Geometrie>| v.filter(|g| g.is_err()).count();
     let murs_ko = ko(&mut m.murs.iter().map(|x| &x.geometrie));

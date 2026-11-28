@@ -25,6 +25,7 @@ glam.workspace = true
 rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+web-time.workspace = true
 
 # numéro de build de Windows (cadre de fenêtre : Windows 10 ou 11)
 [target.'cfg(windows)'.dependencies]

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// Conversion vers le modèle v0 : projet JSON, et rapport (Markdown) à côté et sur la
 /// sortie standard.
 pub(crate) fn modele(entree: PathBuf, sortie: PathBuf) -> i32 {
-    let t0 = std::time::Instant::now();
+    let t0 = web_time::Instant::now();
     let e = entree.clone();
     let handle = match std::thread::Builder::new()
         .stack_size(64 << 20)

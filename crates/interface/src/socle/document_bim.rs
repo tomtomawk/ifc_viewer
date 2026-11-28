@@ -175,7 +175,7 @@ impl Application {
                     ctx.request_repaint();
                 };
                 let resultat = (|| {
-                    let debut = std::time::Instant::now();
+                    let debut = web_time::Instant::now();
                     if source.canonicalize().ok() == sortie.canonicalize().ok() && sortie.exists() {
                         return Err("La source ne peut pas être remplacée.".into());
                     }

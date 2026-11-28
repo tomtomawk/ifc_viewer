@@ -138,7 +138,7 @@ mod mesure {
                 t.push([a, c, d]);
             }
         }
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let a = super::aretes(&t);
         println!("{} triangles : {} vives, {} douces en {:?}", t.len(), a.vives.len(), a.douces.len(), t0.elapsed());
     }

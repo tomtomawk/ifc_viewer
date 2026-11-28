@@ -172,7 +172,6 @@ Cible `wasm32-unknown-unknown`, développée sur `master` comme le reste. Config
 
 | Id | Étape | Priorité | Détail |
 |---|---|---|---|
-| W1 | `std::time::Instant` remplacé par `web_time::Instant` (62 appels, dont collaboration 26 et interface 15) : il panique à l'exécution en wasm32 | P2 | changement mécanique, sans effet sur le poste |
 | W2 | Tâches de fond : 21 `thread::spawn` (interface 15, echanges 2, collaboration, pilote) derrière un module de tâches (`interface/src/socle/taches.rs` existe) ; en wasm32, exécution sur le fil courant | P2 | `rayon` 1.13 se replie sur le fil courant quand il ne peut créer de fil : à vérifier à l'exécution |
 | W3 | Fichiers et dialogues : 24 `rfd::FileDialog` (synchrone, absent en wasm32) derrière une couche commune ; navigateur : `AsyncFileDialog`, téléversement et téléchargement, puis OPFS | P2 | `std::fs` : 37 fichiers, à traiter selon le périmètre de W5 |
 | W4 | Fonctionnalité `poste` d'`interface` (pilote, collaboration, `eframe::run_native`, icône) ; ARCHITECTURE §2 et `app/tests/dependances.rs` mis à jour pour la crate `web` | P2 | environ 10 fichiers d'`interface` appellent `pilote::` ou `collaboration::` |

@@ -344,9 +344,9 @@ fn enfant_reservation() {
     };
     let nom = std::env::var("BIMEDIT_TEST_POSTE").unwrap();
     let d = Depot::nouveau(&root);
-    let limite = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    let limite = web_time::Instant::now() + std::time::Duration::from_secs(15);
     while !std::path::Path::new(&root).join("depart").exists() {
-        assert!(std::time::Instant::now() < limite);
+        assert!(web_time::Instant::now() < limite);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     loop {
@@ -364,7 +364,7 @@ fn enfant_reservation() {
             .unwrap();
             break;
         }
-        assert!(std::time::Instant::now() < limite);
+        assert!(web_time::Instant::now() < limite);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }
@@ -520,12 +520,12 @@ fn instantane_et_publication_dans_deux_processus() {
 }
 
 fn attendre(s: &mut session::Session) -> Projet {
-    let fin = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let fin = web_time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         if let Some(p) = s.recevoir().unwrap() {
             return p;
         }
-        assert!(std::time::Instant::now() < fin, "{}", s.etat);
+        assert!(web_time::Instant::now() < fin, "{}", s.etat);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }
@@ -708,14 +708,14 @@ fn reponse_perdue_retrouve_uuid_et_contenu_prepare_sans_republication() {
     let id = s.copie.attente[0].id.clone();
     s.synchroniser(None, false).unwrap();
     let depot = Depot::nouveau(&central);
-    let fin = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let fin = web_time::Instant::now() + std::time::Duration::from_secs(5);
     // Attendre le dépôt préparé sans prendre l'autorité que le worker doit acquérir.
     while !s
         .chemin
         .with_extension(format!("prepare-{id}.json"))
         .exists()
     {
-        assert!(std::time::Instant::now() < fin);
+        assert!(web_time::Instant::now() < fin);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     loop {
@@ -723,7 +723,7 @@ fn reponse_perdue_retrouve_uuid_et_contenu_prepare_sans_republication() {
             && a.lire().unwrap().unwrap().acceptes.contains_key(&id) {
                 break;
             }
-        assert!(std::time::Instant::now() < fin);
+        assert!(web_time::Instant::now() < fin);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     drop(s);
@@ -731,7 +731,7 @@ fn reponse_perdue_retrouve_uuid_et_contenu_prepare_sans_republication() {
         if let Ok(s) = session::Session::ouvrir(&p, fichier.clone(), central.clone()) {
             break s;
         }
-        assert!(std::time::Instant::now() < fin);
+        assert!(web_time::Instant::now() < fin);
         std::thread::sleep(std::time::Duration::from_millis(5));
     };
     assert_eq!(s.copie.attente.len(), 1);

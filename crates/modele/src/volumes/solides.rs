@@ -445,7 +445,7 @@ impl Voisin {
 /// modification sont recalculés.
 pub fn murs(p: &Projet, jonctions: &crate::murs::jonctions::Coupes) -> Vec<Result<Vec<Tri>, String>> {
     use rayon::prelude::*;
-    let mut t = std::time::Instant::now();
+    let mut t = web_time::Instant::now();
     let percements = crate::murs::retours::Percements::calculer(p);
     noyau::chrono::chrono("murs : table des ouvertures", &mut t);
     let voisins: Vec<Voisin> = p.murs.par_iter().map(|m| Voisin::calculer(p, m)).collect();

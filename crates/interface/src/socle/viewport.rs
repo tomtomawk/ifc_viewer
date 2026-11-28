@@ -474,7 +474,7 @@ impl Application {
         }
 
 
-        let mut t_vue = std::time::Instant::now();
+        let mut t_vue = web_time::Instant::now();
         self.update_visibility();
         noyau::chrono::chrono_lent("vue : visibilité", &mut t_vue);
         self.update_coupe();

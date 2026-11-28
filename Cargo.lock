@@ -211,6 +211,7 @@ dependencies = [
  "modele",
  "noyau",
  "pilote",
+ "web-time",
  "winresource",
 ]
 
@@ -687,6 +688,7 @@ dependencies = [
  "noyau",
  "rayon",
  "serde_json",
+ "web-time",
 ]
 
 [[package]]
@@ -1058,6 +1060,7 @@ dependencies = [
  "rayon",
  "scene",
  "serde_json",
+ "web-time",
 ]
 
 [[package]]
@@ -1449,6 +1452,7 @@ dependencies = [
  "scene",
  "serde",
  "serde_json",
+ "web-time",
  "windows-sys 0.59.0",
 ]
 
@@ -1686,6 +1690,7 @@ dependencies = [
  "rayon",
  "scene",
  "serde_json",
+ "web-time",
 ]
 
 [[package]]
@@ -1739,6 +1744,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "web-time",
 ]
 
 [[package]]
@@ -1756,6 +1762,7 @@ dependencies = [
  "scene",
  "serde_json",
  "svg2pdf",
+ "web-time",
 ]
 
 [[package]]
@@ -1892,6 +1899,7 @@ dependencies = [
  "sha2",
  "skrifa",
  "uuid",
+ "web-time",
 ]
 
 [[package]]
@@ -2409,6 +2417,7 @@ dependencies = [
  "serde_ignored",
  "serde_json",
  "uuid",
+ "web-time",
 ]
 
 [[package]]

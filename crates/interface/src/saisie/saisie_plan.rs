@@ -518,7 +518,7 @@ impl Application {
         Ok(())
     }
     pub(crate) fn appliquer_projet_interne(&mut self, mut projet: modele::Projet, distant: bool) -> Result<(), String> {
-        let mut t_etape = std::time::Instant::now();
+        let mut t_etape = web_time::Instant::now();
         if !distant {
             projet.actualiser_types_murs_modifies(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0)?;
         }
@@ -551,7 +551,7 @@ impl Application {
         // comparaison des objets : utile seulement en collaboration
         let texte_seul = self.collaboration.is_some() && commandes::objets::objets(&projet)? == commandes::objets::objets(&self.natif.as_ref().ok_or("Aucun projet natif ouvert.")?.0)?;
         noyau::chrono::chrono("application : vérifications", &mut t_etape);
-        let debut_geometrie=std::time::Instant::now();
+        let debut_geometrie=web_time::Instant::now();
         let scene_preparee = if texte_seul && self.collaboration.is_some() { None } else { Some(maillage::depuis_natif_verifie(&projet, &chemin)?) };
         if let Some(c)=&mut self.collaboration{c.mesure_geometrie_ms=debut_geometrie.elapsed().as_secs_f64()*1000.0;}
         // Le commit local durable précède toute installation dans la scène.
@@ -611,7 +611,7 @@ impl Application {
             if let Some((a, b)) = &mut etat.boite { *a += delta.as_vec3(); *b += delta.as_vec3(); }
         }
         noyau::chrono::chrono("application : vues et visibilité", &mut t_etape);
-        let debut_gpu=std::time::Instant::now();
+        let debut_gpu=web_time::Instant::now();
         if let Some(r) = self.renderer.as_mut() {
             r.upload_vertices(&scene.vertices, &scene.couleurs_rendu, &scene.motifs_surface, &scene.placements_surface);
             r.upload_apparences(&scene.apparences, &scene.definitions_surface);

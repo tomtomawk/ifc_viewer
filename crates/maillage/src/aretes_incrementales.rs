@@ -284,7 +284,7 @@ mod mesure {
                 for x in q.murs.iter_mut().filter(|x| x.id == m.id || (m.assemblage.is_some() && x.assemblage == m.assemblage)) {
                     if let modele::Axe::Droit { debut, fin } = &mut x.axe { debut[1] += 50.0; fin[1] += 50.0; }
                 }
-                let t = std::time::Instant::now();
+                let t = web_time::Instant::now();
                 let _ = scene(&q);
                 eprintln!("{f} déplacement {k} : scène {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
             }

@@ -10,7 +10,7 @@
 //! image ne laissent que la dernière, sauf par `signaler`, qui écrit directement.
 use crate::*;
 use std::collections::VecDeque;
-use std::time::Instant;
+use web_time::Instant;
 
 /// Nombre d'entrées gardées par le journal.
 const TAILLE_JOURNAL: usize = 200;
@@ -54,7 +54,7 @@ impl Niveau {
 }
 
 /// Message temporaire (information ou avertissement) et son heure d'apparition.
-pub(crate) type MessageTemporaire = Option<(Niveau, String, std::time::Instant)>;
+pub(crate) type MessageTemporaire = Option<(Niveau, String, web_time::Instant)>;
 
 struct Entree {
     niveau: Niveau,
@@ -233,7 +233,7 @@ impl Application {
             self.journal.vu_erreur = Some(texte.clone());
             self.error = Some(texte.clone());
         } else {
-            self.message = Some((niveau, texte.clone(), std::time::Instant::now()));
+            self.message = Some((niveau, texte.clone(), web_time::Instant::now()));
         }
         self.journal.ajouter(niveau, texte, false);
     }
@@ -254,7 +254,7 @@ impl Application {
             && self.loading.is_none() && self.sauvegarde.is_none()
         {
             // pendant un chargement, la barre haute montre déjà le statut
-            self.message = Some((Niveau::Information, statut, std::time::Instant::now()));
+            self.message = Some((Niveau::Information, statut, web_time::Instant::now()));
         }
         if self.journal.entrees.len() != avant { ctx.request_repaint(); }
         self.fenetre_journal(ctx);

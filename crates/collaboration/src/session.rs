@@ -184,7 +184,7 @@ impl Session {
         Ok(e)
     }
     pub fn editer(&mut self, avant: &Projet, apres: &Projet) -> Resultat<()> {
-        let debut = std::time::Instant::now();
+        let debut = web_time::Instant::now();
         if !self.copie.conflits.is_empty() {
             return Err("Résoudre les conflits avant de poursuivre l'édition".into());
         }
@@ -277,7 +277,7 @@ impl Session {
             .spawn(move || {
                 let _protection_locale=protection_locale;
                 stockage::reinitialiser_mesures();
-                let debut = std::time::Instant::now();
+                let debut = web_time::Instant::now();
                 let resultat = (|| {
                     let existant=copie.partage.is_some()||copie.central_connu||!publier_attente;
                     let depot = Depot::nouveau(copie.central);

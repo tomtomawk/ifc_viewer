@@ -197,9 +197,9 @@ fn actualiser(s: &mut Session) -> Resultat<Projet> {
     s.reception_seule()?;
     // Un NAS qui ne répond plus ne bloque pas l'ouverture : la copie locale
     // s'affiche et la réponse sera reçue plus tard par l'interface.
-    let limite = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let limite = web_time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        if std::time::Instant::now() >= limite {
+        if web_time::Instant::now() >= limite {
             s.etat = "Hors connexion : dépôt central sans réponse".into();
             return s.affichage();
         }
@@ -344,12 +344,12 @@ mod tests {
         sb.editer(&b, &pb).unwrap();
         for s in [&mut sa, &mut sb] {
             s.synchroniser(None, false).unwrap();
-            let fin = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            let fin = web_time::Instant::now() + std::time::Duration::from_secs(5);
             loop {
                 if s.recevoir().unwrap().is_some() {
                     break;
                 }
-                assert!(std::time::Instant::now() < fin);
+                assert!(web_time::Instant::now() < fin);
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
         }

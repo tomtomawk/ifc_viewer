@@ -4,7 +4,7 @@ use super::*;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use web_time::Instant;
 
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct Mesures {
@@ -301,11 +301,11 @@ impl Depot {
     }
     /// Réessaie la prise de l'autorité pendant `delai` (verrou tenu par un autre poste).
     pub fn proteger_attente(&self, creer: bool, delai: std::time::Duration) -> Resultat<Autorite> {
-        let limite = std::time::Instant::now() + delai;
+        let limite = web_time::Instant::now() + delai;
         loop {
             match self.proteger_interne(creer) {
                 Ok(a) => return Ok(a),
-                Err(e) if std::time::Instant::now() >= limite => return Err(e),
+                Err(e) if web_time::Instant::now() >= limite => return Err(e),
                 Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
             }
         }

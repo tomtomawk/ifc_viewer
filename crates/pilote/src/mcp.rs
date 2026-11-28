@@ -15,7 +15,8 @@ use std::io::{BufRead, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::Instant;
 
 /// Racine du workspace (le crate est dans `crates/app`) : `target/` et les exemples y sont.
 const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");

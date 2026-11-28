@@ -119,7 +119,7 @@ impl Application {
         }
         self.coupe_dirty = false;
         self.transfo.alignement.invalider_plan();
-        let mut t_etape = std::time::Instant::now();
+        let mut t_etape = web_time::Instant::now();
         // élévation : vue depuis sa ligne, rien n'est coupé (pas de poché)
         let elevation = self.vue_active.and_then(|i| self.scene.as_ref()?.navigateur.as_ref()?.vues.get(i)).is_some_and(|v| v.genre == "Élévation" && v.plan_coupe.is_some());
         let (affichage, poche) = (self.affichage(), self.poche_style());

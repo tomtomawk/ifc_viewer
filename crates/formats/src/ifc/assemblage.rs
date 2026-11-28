@@ -8,7 +8,7 @@ use glam::{DVec3, Vec3};
 use rayon::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 /// Masque d'une partie visible partout (`modele::famille::modelee::PARTOUT`).
 const PARTOUT: u8 = u8::MAX;
 

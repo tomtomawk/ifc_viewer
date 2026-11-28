@@ -535,7 +535,7 @@ mod tests {
 
     /// Conversion d'un projet : rapport écrit dans `exports/` (hors dépôt), projet relu.
     fn convertir_et_rapporter(p: &Path) -> Projet {
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let (projet, mesures) = convertir(p, &|_| {}).unwrap();
         let rapport = crate::rapport::markdown(&projet, &mesures, t0.elapsed().as_secs_f64());
         let nom = p.file_stem().unwrap().to_string_lossy();

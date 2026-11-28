@@ -96,7 +96,7 @@ pub fn coupe_avec_cache(scene: &Scene, visible: &[bool], affichage: Affichage, p
             Some((ob.id, e, Arc::new(coupe_objet(scene, i, affichage, n, d, o, e1, e2, poche, fond, hachure, &motif, echelle))))
         })
         .collect();
-    let mut t = std::time::Instant::now();
+    let mut t = web_time::Instant::now();
     noyau::chrono::chrono_lent("coupe : empreintes et objets", &mut t);
     let prims: Vec<Primitive> = resultats.iter().flat_map(|r| r.2.iter().cloned()).collect();
     cache.objets = resultats.into_iter().map(|(id, e, p)| (id, (e, p))).collect();
@@ -348,7 +348,7 @@ fn coupe_par_solides(scene: &Scene, ob: &scene::SceneObject, affichage: Affichag
 /// régions se lisent d'un seul tenant.
 fn fusionner_materiaux(scene: &Scene, mut prims: Vec<Primitive>) -> Vec<Primitive> {
     use std::collections::HashMap;
-    let mut t_fusion = std::time::Instant::now();
+    let mut t_fusion = web_time::Instant::now();
     // matériau d'un élément : sa bande de coupe unique (couches des murs natifs)
     let materiau = |id: Option<noyau::Id>| -> Option<([u8; 4], String)> {
         let c = scene.couches_coupe.get(&id?)?;

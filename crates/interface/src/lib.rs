@@ -566,7 +566,7 @@ pub struct Application {
     vol: Vol,
     /// Commandes du serveur MCP (voir `pilote.rs`) et celles en attente de traitement.
     pilote: Option<Receiver<Requete>>,
-    prochaine_tentative_pilote: std::time::Instant,
+    prochaine_tentative_pilote: web_time::Instant,
     requetes: Vec<Requete>,
     saisies_pilote: std::collections::VecDeque<Vec<egui::Event>>,
     /// Annotations de la vue native, symboles des menuiseries découpés : clé (révision,
@@ -815,7 +815,7 @@ impl Application {
             vol: Vol::default(),
             nomenclature_ouverte: None,
             pilote: pilote::demarrer(cc.egui_ctx.clone()),
-            prochaine_tentative_pilote: std::time::Instant::now(),
+            prochaine_tentative_pilote: web_time::Instant::now(),
             requetes: Vec::new(),
             saisies_pilote: Default::default(),
             cache_symboles: Default::default(),
@@ -924,9 +924,9 @@ impl eframe::App for Application {
             ctx.request_repaint();
         }
         if self.pilote.is_none() {
-            if std::time::Instant::now() >= self.prochaine_tentative_pilote {
+            if web_time::Instant::now() >= self.prochaine_tentative_pilote {
                 self.pilote = pilote::demarrer(ctx.clone());
-                self.prochaine_tentative_pilote = std::time::Instant::now() + std::time::Duration::from_secs(2);
+                self.prochaine_tentative_pilote = web_time::Instant::now() + std::time::Duration::from_secs(2);
             }
             if self.pilote.is_none() { ctx.request_repaint_after(std::time::Duration::from_secs(2)); }
         }
@@ -994,7 +994,7 @@ impl eframe::App for Application {
             }
         }
         self.poll_loading();
-        let mut t_image = std::time::Instant::now();
+        let mut t_image = web_time::Instant::now();
         self.piloter(&ctx);
         noyau::chrono::chrono_lent("image : commandes du pilote", &mut t_image);
 

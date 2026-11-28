@@ -45,7 +45,7 @@ pub(crate) fn rvt_stats(path: &std::path::Path) -> i32 {
     for w in &info.warnings {
         println!("Avertissement : {w}");
     }
-    let t0 = std::time::Instant::now();
+    let t0 = web_time::Instant::now();
     let m = match formats::rvt::maquette::lire(path, &|s| eprintln!("{s}")) {
         Ok(m) => m,
         Err(e) => {
@@ -262,7 +262,7 @@ pub(crate) fn rvt_stats(path: &std::path::Path) -> i32 {
     }
     println!("Durée géom.  : {} ms", t0.elapsed().as_millis());
     // scène de l'application : objets, triangles, traits (motifs de surface)
-    let t1 = std::time::Instant::now();
+    let t1 = web_time::Instant::now();
     let s = formats::rvt::maquette::scene(&m, "", String::new(), "");
     let traits: u32 = s.objects.iter().map(|o| o.lines.count / 2).sum();
     let motifs = s.objects.iter().filter(|o| &*o.class == "IFCSURFACEFEATURE").count();

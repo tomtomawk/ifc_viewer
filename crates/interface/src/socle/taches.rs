@@ -66,7 +66,7 @@ pub(crate) struct Tache {
     document: usize,
     controle: Controle,
     fin: Receiver<Result<Fin, String>>,
-    debut: std::time::Instant,
+    debut: web_time::Instant,
 }
 
 /// Contenu d'un PDF à produire hors du fil de l'interface.
@@ -137,7 +137,7 @@ impl Application {
             contexte.request_repaint();
         });
         match lance {
-            Ok(_) => self.tache = Some(Tache { nom: nom.into(), document: self.document_actif, controle, fin: rx, debut: std::time::Instant::now() }),
+            Ok(_) => self.tache = Some(Tache { nom: nom.into(), document: self.document_actif, controle, fin: rx, debut: web_time::Instant::now() }),
             Err(e) => self.error = Some(format!("Démarrage impossible : {e}")),
         }
     }

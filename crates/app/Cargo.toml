@@ -19,6 +19,7 @@ pilote = { path = "../pilote" }
 config = { path = "../config" }
 interface = { path = "../interface" }
 glam.workspace = true
+web-time.workspace = true
 
 [target.'cfg(windows)'.build-dependencies]
 winresource.workspace = true

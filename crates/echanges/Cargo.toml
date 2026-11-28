@@ -13,6 +13,7 @@ ifc_base = { path = "../ifc_base" }
 formats = { path = "../formats" }
 glam.workspace = true
 rayon.workspace = true
+web-time.workspace = true
 
 # Les tests d'intégration (`tests/`) appellent aussi les crates situées après `modele`/`formats` :
 # leur projet de départ vient de `echanges::depuis_ifc`.

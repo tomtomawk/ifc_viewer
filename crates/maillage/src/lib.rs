@@ -117,7 +117,7 @@ pub fn depuis_natif_verifie(projet: &Projet, path: &Path) -> Result<Scene, Strin
         model.children.entry(niveau).or_default().push(id);
         model.type_of.insert(id, id_natif("type-mur", &a.type_mur));
     }
-    let mut t_etape = std::time::Instant::now();
+    let mut t_etape = web_time::Instant::now();
     let mut couches_coupe = Vec::new();
     // bandes en mètres dans le repère du fichier (dalles, ossatures), ramenées à la scène
     let mut bandes_dalles: Vec<(u64, Vec<CoucheCoupe>)> = Vec::new();

@@ -3,7 +3,8 @@ use modele::Projet;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Instant, SystemTime};
+use std::time::SystemTime;
+use web_time::Instant;
 
 /// Extensions proposées pour les documents natifs JSON.
 pub const EXTENSION_PROJET: &str = "bem";
@@ -197,7 +198,7 @@ mod tests {
     fn echec_de_recuperation_rendu() {
         let chemin = dossier().join("absent").join("projet.bem");
         recuperer_plus_tard(&Projet::nouveau("essai"), &chemin).unwrap();
-        let debut = std::time::Instant::now();
+        let debut = web_time::Instant::now();
         let e = loop {
             if let Some(e) = erreur_recuperation() { break e; }
             assert!(debut.elapsed().as_secs() < 10, "aucune erreur rendue");
