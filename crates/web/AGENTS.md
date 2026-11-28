@@ -15,7 +15,7 @@ trunk serve --release                   # http://127.0.0.1:8080
 
 Sur poste, `cargo run -p web` ne fait qu'afficher ce rappel : le binaire n'a de sens qu'en wasm32.
 
-Publication : `.github/workflows/web.yml` (trunk sur `master`, artefact `bimedit-web`, Cloudflare Pages si les secrets existent). `_headers` (COOP, COEP) est copié dans `dist` par `index.html`.
+Publication : `.github/workflows/web.yml` (trunk sur `master`, artefact `bimedit-web`, puis `wrangler deploy` du Worker « bimedit » décrit par `wrangler.jsonc` si les secrets existent). En ligne : https://bimedit.thebault-th.workers.dev. `_headers` (COOP, COEP) est copié dans `dist` par `index.html`.
 
 ## Quand modifier ici
 

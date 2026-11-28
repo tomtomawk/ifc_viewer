@@ -206,14 +206,14 @@ par Collaborer et Ouvrir.
 ou Start-Process -Wait, car le binaire Windows release est un exécutable graphique) :
 
 ```text
---collaboration associer C:\PosteA\maison.json \\NAS\BIMedit\Projet
---editer C:\PosteA\maison.json C:\PosteA\commande.json
---collaboration synchroniser C:\PosteA\maison.json
---collaboration etat C:\PosteA\maison.json
---collaboration reserver C:\PosteA\maison.json murs/IDENTIFIANT
---collaboration reprendre C:\PosteA\maison.json murs/IDENTIFIANT
---collaboration liberer C:\PosteA\maison.json murs/IDENTIFIANT
---collaboration instantane C:\PosteA\maison.json
+--collaboration associer C:\PosteA\maison.bem \\NAS\BIMedit\Projet
+--editer C:\PosteA\maison.bem C:\PosteA\commande.json
+--collaboration synchroniser C:\PosteA\maison.bem
+--collaboration etat C:\PosteA\maison.bem
+--collaboration reserver C:\PosteA\maison.bem murs/IDENTIFIANT
+--collaboration reprendre C:\PosteA\maison.bem murs/IDENTIFIANT
+--collaboration liberer C:\PosteA\maison.bem murs/IDENTIFIANT
+--collaboration instantane C:\PosteA\maison.bem
 ```
 
 Les noms de groupes exacts sont les clés collection/identifiant des transactions. Le pilote
@@ -223,7 +223,7 @@ la proposition de l'ancien détenteur.
 
 ## Fichiers locaux et récupération
 
-À côté de `maison.json`, conserver ensemble :
+À côté de `maison.bem`, conserver ensemble :
 
 - `maison.collaboration.json` : base, queue, conflits et historique personnel ;
 - `maison.collaboration.ressources-locales/` : ressources par empreinte ;
@@ -245,8 +245,8 @@ préparé. Une acceptation sans accusé ne crée donc pas une deuxième opérati
 Pour extraire sans NAS une projection ou un texte supprimé :
 
 ```text
---collaboration recuperer C:\PosteA\maison.json C:\Recuperation\maison.json
---collaboration texte-recuperer C:\PosteA\maison.json ANNOTATION C:\Recuperation\texte.txt
+--collaboration recuperer C:\PosteA\maison.bem C:\Recuperation\maison.bem
+--collaboration texte-recuperer C:\PosteA\maison.bem ANNOTATION C:\Recuperation\texte.txt
 ```
 
 En cas de corruption d'un enregistrement complet, d'une empreinte ou d'une ressource

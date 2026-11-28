@@ -98,7 +98,7 @@ def run(exe):
             commande("famille_modifier",f)
             commande("famille_fermer",ok=False)
             type_famille=commande("famille_charger_projet")["id"]
-            commande("famille_enregistrer",str(root / "Famille avec espaces.json"))
+            commande("famille_enregistrer",str(root / "Famille avec espaces.bef"))
             commande("famille_fermer")
             assert any(t[0]==type_famille for t in commande("familles")["familles"])
             commande("gabarit_exporter",str(root / "Gabarit agence.json"))

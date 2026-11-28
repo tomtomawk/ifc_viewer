@@ -1,0 +1,7 @@
+// Worker Cloudflare qui sert la version navigateur (fichiers statiques de `dist`, construits
+// par trunk ; `_headers` y est appliqué). Publié par `.github/workflows/web.yml`.
+{
+  "name": "bimedit",
+  "compatibility_date": "2025-11-01",
+  "assets": { "directory": "./dist" }
+}

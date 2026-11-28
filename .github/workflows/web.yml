@@ -1,8 +1,9 @@
 name: Web
 
 # Version navigateur (crates/web, ROADMAP §10.3) : construite par trunk sur master, publiée
-# sur Cloudflare Pages si les secrets CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID existent
-# (projet Pages « bimedit »). Sinon, le site construit reste téléchargeable (artefact).
+# sur le Worker Cloudflare « bimedit » (crates/web/wrangler.jsonc) si les secrets
+# CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID existent. Sinon, le site construit reste
+# téléchargeable (artefact bimedit-web).
 on:
   push:
     branches: [master]
@@ -30,6 +31,7 @@ jobs:
         with:
           name: bimedit-web
           path: crates/web/dist
-      - name: Publication sur Cloudflare Pages
+      - name: Publication sur Cloudflare (Worker bimedit)
         if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
-        run: npx --yes wrangler@4 pages deploy crates/web/dist --project-name=bimedit --branch=master
+        working-directory: crates/web
+        run: npx --yes wrangler@4 deploy

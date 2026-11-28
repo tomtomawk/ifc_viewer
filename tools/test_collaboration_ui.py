@@ -61,7 +61,7 @@ try:
         # Refuse de parler à un pilote déjà présent.
         with socket.socket() as sonde:
             sonde.bind(("127.0.0.1", port))
-        copie = essai / f"poste-{n}.json"
+        copie = essai / f"poste-{n}.bem"
         shutil.copyfile(racine / "samples/maison_native.bem", copie)
         journal = open(essai / f"poste-{n}.log", "w", encoding="utf-8")
         journaux.append(journal)
