@@ -1,10 +1,10 @@
 # Architecture du dépôt
 
-Le dépôt est un workspace Cargo (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`) de 15 crates. Les dépendances externes sont déclarées une fois dans `[workspace.dependencies]` et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine. À la racine aussi : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`.
+Le dépôt est un workspace Cargo (`Cargo.toml` racine, `resolver = "3"`, `members = ["crates/*"]`) de 16 crates. Les dépendances externes sont déclarées une fois dans `[workspace.dependencies]` et reprises par `dep.workspace = true`. `Cargo.lock` et `target/` restent à la racine. À la racine aussi : `docs/`, `samples/`, `gabarits/`, `tools/`, `.github/`, `.mcp.json`, `README.md`, `AGENTS.md`.
 
 Pour travailler sur une partie : lire l'`AGENTS.md` de la crate (≤ 40 lignes) et le §2 ci-dessous ; ne pas charger le reste. L'historique du découpage (lots 0 à 11b), supprimé du dépôt le 20/11/2026, se lit par `git show 9121974:docs/historique/ARCHITECTURE_CHANTIER_2026-11.md` : journal, pas à lire pour travailler.
 
-## 1. Les 15 crates
+## 1. Les 16 crates
 
 Tailles : fichiers `.rs` et lignes de `src/` (état du lot 12). Ordre = ordre des dépendances.
 
@@ -25,6 +25,7 @@ Tailles : fichiers `.rs` et lignes de `src/` (état du lot 12). Ordre = ordre de
 | `config` | options utilisateur et raccourcis | 3 | 343 |
 | `interface` | toute l'interface egui (`Application`) et la fenêtre native | 81 | 34 340 |
 | `app` | binaire `bimedit` : arguments, modes console (`src/modes/`), icône Windows | 9 | 601 |
+| `web` | binaire `bimedit-web` : interface dans le navigateur (wasm32, `trunk`, `index.html`) | 1 | 33 |
 
 Package et binaire : `bimedit` (`crates/app`, `cargo run -p bimedit`).
 
@@ -34,7 +35,7 @@ Une flèche = « dépend de » ; une crate n'importe que des crates situées ava
 
 ```
 noyau <- modele <- ifc_base <- scene <- formats <- maillage <- commandes <- moteur2d <- moteur3d
-      <- echanges <- collaboration <- pilote <- config <- interface <- app
+      <- echanges <- collaboration <- pilote <- config <- interface <- app <- web
 ```
 
 Ce tableau est celui que vérifie `crates/app/tests/dependances.rs` (constantes `AUTORISEES` et `DEV_SEULEMENT`) : modifier les deux ensemble. « Réel » = dépendances déclarées dans les `Cargo.toml` ; « dev » = `[dev-dependencies]` (tests d'intégration), autorisées séparément.
@@ -56,10 +57,11 @@ Ce tableau est celui que vérifie `crates/app/tests/dependances.rs` (constantes 
 | config | noyau, modele, echanges | les trois |  |
 | interface | toutes jusqu'à `config` | les 13 |  |
 | app | noyau, modele, ifc_base, formats, echanges, collaboration, pilote, config, interface | les neuf |  |
+| web | interface (sans la fonctionnalité `poste`) | interface |  |
 
 Le tableau est resserré aux dépendances réellement utilisées (aucune autorisation inutilisée). Ajouter une dépendance interne se décide : modifier ce tableau et le test ensemble, en respectant l'ordre.
 
-Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, `config`, `interface`, `app` ; `egui`/`wgpu` jamais dans `noyau`, `ifc_base`, `modele`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` (vérifié par le test). `eframe` est la seule déclaration d'egui : `moteur3d` (rendu), `pilote` (`egui::Event`, `egui::Context`), `config` (`DragValue`, `ThemePreference`, `Key`), `interface` (tout).
+Externes : `eframe` (egui, wgpu) et `wgpu` seulement dans `moteur3d`, `pilote`, `config`, `interface`, `app`, `web` ; `egui`/`wgpu` jamais dans `noyau`, `ifc_base`, `modele`, `scene`, `formats`, `maillage`, `commandes`, `moteur2d`, `echanges`, `collaboration` (vérifié par le test). `eframe` est la seule déclaration d'egui : `moteur3d` (rendu), `pilote` (`egui::Event`, `egui::Context`), `config` (`DragValue`, `ThemePreference`, `Key`), `interface` (tout).
 
 Cibles : `interface` a une fonctionnalité `poste` (active par défaut, prise par `app`) qui porte le pilote MCP et le registre des instances ; une crate web en dépendra sans elle. Le code propre à une cible s'écarte par `cfg(target_arch = "wasm32")` dans quelques modules d'adaptation (`noyau::fil`, `interface::socle::dialogue`, `interface::socle::fenetre`) ; voir ROADMAP §10.3 pour l'avancement.
 

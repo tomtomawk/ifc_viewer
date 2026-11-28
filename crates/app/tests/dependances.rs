@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 /// Ordre des crates : une crate n'importe que des crates situées avant elle.
-const ORDRE: [&str; 15] = [
+const ORDRE: [&str; 16] = [
     "noyau",
     "modele",
     "ifc_base",
@@ -28,11 +28,12 @@ const ORDRE: [&str; 15] = [
     "config",
     "interface",
     "app",
+    "web",
 ];
 
 /// Dépendances internes autorisées (production et développement), §2 de ARCHITECTURE.md.
 /// Resserrées aux dépendances réellement utilisées : en ajouter une se décide ici et au §2.
-const AUTORISEES: [(&str, &[&str]); 15] = [
+const AUTORISEES: [(&str, &[&str]); 16] = [
     ("noyau", &[]),
     ("modele", &["noyau"]),
     ("ifc_base", &["noyau"]),
@@ -51,6 +52,7 @@ const AUTORISEES: [(&str, &[&str]); 15] = [
         &["noyau", "modele", "ifc_base", "scene", "formats", "maillage", "commandes", "moteur2d", "moteur3d", "echanges", "collaboration", "pilote", "config"],
     ),
     ("app", &["noyau", "modele", "ifc_base", "formats", "echanges", "collaboration", "pilote", "config", "interface"]),
+    ("web", &["interface"]),
 ];
 
 /// Autorisations supplémentaires, réservées aux `[dev-dependencies]` (tests d'intégration).
@@ -62,7 +64,7 @@ const DEV_SEULEMENT: [(&str, &[&str]); 4] = [
 ];
 
 /// Seules crates qui peuvent déclarer `eframe`, `egui` ou `wgpu`.
-const CRATES_AVEC_EGUI: [&str; 5] = ["moteur3d", "pilote", "config", "interface", "app"];
+const CRATES_AVEC_EGUI: [&str; 6] = ["moteur3d", "pilote", "config", "interface", "app", "web"];
 const EXTERNES_INTERDITS_AILLEURS: [&str; 4] = ["eframe", "egui", "egui_wgpu", "wgpu"];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

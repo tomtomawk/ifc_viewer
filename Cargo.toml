@@ -26,6 +26,8 @@ geo-straight-skeleton = "0.1.1"
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
 # horloge identique sur poste et navigateur (`std::time::Instant` panique en wasm32)
 web-time = "1.1.0"
+# version navigateur (crate `web`, ROADMAP §10.3) : mêmes versions que celles d'eframe
+wasm-bindgen-futures = "0.4.79"
 sha2 = "0.11.1"
 yrs = { version = "0.28.0", features = ["sync"] }
 # numéro de build de Windows (cadre de fenêtre : Windows 10 ou 11)

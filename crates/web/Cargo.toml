@@ -1,0 +1,19 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2024"
+
+# BIMedit dans le navigateur (ROADMAP §10.3, W5) : `trunk build --release` dans ce dossier.
+[[bin]]
+name = "bimedit-web"
+path = "src/main.rs"
+
+[dependencies]
+interface = { path = "../interface", default-features = false }
+eframe.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures.workspace = true
+
+[lints]
+workspace = true

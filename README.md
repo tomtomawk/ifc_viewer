@@ -166,7 +166,7 @@ vue 3D (pilotes sans multiéchantillonnage).
 
 ## Architecture
 
-Le dépôt est un workspace Cargo de 15 crates dans `crates/` ; le binaire `bimedit` est la crate `app`. Les dépendances vont de `noyau` vers `app` (une crate n'importe que des crates situées avant elle, vérifié par `cargo test -p bimedit --release --test dependances`) ; seules `moteur3d`, `pilote`, `config`, `interface` et `app` utilisent egui. Règles, tableau des dépendances autorisées, dette technique et table « où est quoi » : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Chaque crate a un `AGENTS.md` court.
+Le dépôt est un workspace Cargo de 16 crates dans `crates/` ; le binaire `bimedit` est la crate `app`, la version navigateur la crate `web`. Les dépendances vont de `noyau` vers `app` (une crate n'importe que des crates situées avant elle, vérifié par `cargo test -p bimedit --release --test dependances`) ; seules `moteur3d`, `pilote`, `config`, `interface`, `app` et `web` utilisent egui. Règles, tableau des dépendances autorisées, dette technique et table « où est quoi » : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Chaque crate a un `AGENTS.md` court.
 
 | Crate | Rôle |
 |---|---|

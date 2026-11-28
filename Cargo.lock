@@ -1452,6 +1452,7 @@ dependencies = [
  "scene",
  "serde",
  "serde_json",
+ "wasm-bindgen-futures",
  "web-time",
  "windows-sys 0.59.0",
 ]
@@ -3574,6 +3575,15 @@ dependencies = [
  "log",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "web"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "interface",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

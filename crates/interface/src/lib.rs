@@ -999,10 +999,8 @@ impl eframe::App for Application {
         self.piloter(&ctx);
         noyau::chrono::chrono_lent("image : commandes du pilote", &mut t_image);
 
-        let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
-        if let Some(p) = dropped.into_iter().next() {
-            // IFC déposé : lié au projet natif ouvert (il ne s'ouvre pas seul)
-            if crate::outils::modeliser::liens::est_ifc(&p) && self.natif.is_some() { self.inserer_lien(&ctx, p); } else { self.open(p, &ctx); }
+        if let Some(fichier) = ctx.input(|i| i.raw.dropped_files.first().cloned()) {
+            self.deposer(fichier, &ctx);
         }
         if std::mem::take(&mut self.bim.supprimer) { self.demander_suppression(); }
         self.clavier_raccourcis(&ctx);

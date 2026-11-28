@@ -67,6 +67,7 @@ jobs:
           -p noyau -p modele -p ifc_base -p scene -p formats -p maillage -p commandes
           -p moteur2d -p moteur3d -p echanges -p collaboration -p pilote -p config
       - run: cargo check --target wasm32-unknown-unknown -p interface --no-default-features
+      - run: cargo check --target wasm32-unknown-unknown -p web
       - name: Interface sans la fonctionnalité poste (poste)
         run: |
           sudo apt-get update

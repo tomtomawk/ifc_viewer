@@ -32,6 +32,7 @@ Ne pas écrire d'état (« fait », « à faire », avancement) dans un autre do
 | `config` | options utilisateur, raccourcis |
 | `interface` | interface egui (`Application`) et fenêtre |
 | `app` | binaire `bimedit`, modes console, test des dépendances |
+| `web` | binaire `bimedit-web` : interface dans le navigateur (wasm32, `trunk`) |
 
 ## Je veux modifier… -> où aller
 
@@ -50,6 +51,7 @@ Ne pas écrire d'état (« fait », « à faire », avancement) dans un autre do
 | collaboration | `crates/collaboration/` + `docs/COLLABORATION.md` ; écran : `crates/interface/src/projet/` |
 | options, raccourcis | `crates/config/` |
 | option de ligne de commande | `crates/app/src/main.rs`, `crates/app/src/modes/` |
+| version navigateur (wasm32) | `crates/web/` + `docs/ROADMAP.md` §10.3 |
 | dépendances entre crates | `docs/ARCHITECTURE.md` §2 + `crates/app/tests/dependances.rs` |
 
 Règles : `docs/SUIVI.md` (journal) et `docs/ROADMAP.md` (à faire) tenus à jour à chaque commit ; pas de ré-export de compatibilité ; fichiers ≤ ~600 lignes pour tout nouveau code ; un `AGENTS.md` court par crate, à tenir à jour avec le code.
