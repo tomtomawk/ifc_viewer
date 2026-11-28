@@ -136,7 +136,7 @@ impl Application {
             let n = fichiers(&etat.cases, &feuilles, &etat.jeu, self.feuilles.pdf_groupe).len();
             exporter = ui.add_enabled(n > 0, egui::Button::new(format!("Exporter {n} fichier(s)…"))).clicked();
         });
-        if exporter && let Some(dossier) = rfd::FileDialog::new().pick_folder() {
+        if exporter && let Some(dossier) = crate::socle::dialogue::Fichier::new().pick_folder() {
             // écrit en arrière-plan, un fichier après l'autre (`socle::taches`)
             let a_ecrire = fichiers(&etat.cases, &feuilles, &etat.jeu, self.feuilles.pdf_groupe);
             self.exporter_jeu_arriere_plan(ctx, etat.jeu, a_ecrire, dossier);

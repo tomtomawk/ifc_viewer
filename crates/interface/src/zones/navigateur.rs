@@ -595,7 +595,7 @@ impl Application {
         if nouveau_profil { self.ouvrir_profil(None); }
         if charger_profil { self.charger_profil_fichier(); }
         if charger_famille
-            && let Some(c) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[echanges::enregistrement::EXTENSION_FAMILLE]).pick_file()
+            && let Some(c) = crate::socle::dialogue::Fichier::new().add_filter("Famille BIMedit", &[echanges::enregistrement::EXTENSION_FAMILLE]).pick_file()
                 && let Err(e) = self.charger_famille_fichier(&c) {
                     self.error = Some(e);
                 }

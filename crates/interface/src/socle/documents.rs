@@ -328,7 +328,7 @@ impl Application {
 
     pub(crate) fn creer_projet(&mut self) {
         if self.partage_en_cours {self.error=Some("Attendre la fin de la création du partage".into());return;}
-        let Some(mut chemin) = rfd::FileDialog::new().set_title("Nouveau projet natif v0")
+        let Some(mut chemin) = crate::socle::dialogue::Fichier::new().set_title("Nouveau projet natif v0")
             .add_filter("Projet BIMedit", &[EXTENSION_PROJET]).set_file_name("Nouveau projet.bem").save_file() else { return };
         if chemin.extension().is_none() {
             chemin.set_extension(EXTENSION_PROJET);
@@ -435,7 +435,7 @@ impl Application {
             Some(p) => p.clone(),
             None => {
                 let nom = source.chemin.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Projet".into());
-                let dialogue = rfd::FileDialog::new().set_title("Enregistrer le projet Revit en modèle natif v0")
+                let dialogue = crate::socle::dialogue::Fichier::new().set_title("Enregistrer le projet Revit en modèle natif v0")
                     .add_filter("Projet BIMedit", &[EXTENSION_PROJET]).set_file_name(format!("{nom}.bem"));
                 let Some(mut p) = dialogue.save_file() else { return };
                 if p.extension().is_none() { p.set_extension(EXTENSION_PROJET); }
@@ -496,7 +496,7 @@ impl Application {
     }
 
     pub(crate) fn open_dialog(&mut self, ctx: &egui::Context) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::socle::dialogue::Fichier::new()
              .add_filter("Documents BIMedit et Revit", &["bimpartage", EXTENSION_PROJET, EXTENSION_FAMILLE, "rvt", "rfa", "rte", "rft"])
             .add_filter("Projet partagé BIMedit", &["bimpartage"])
             .add_filter("Projet BIMedit", &[EXTENSION_PROJET])

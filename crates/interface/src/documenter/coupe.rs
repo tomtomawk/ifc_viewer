@@ -417,7 +417,7 @@ impl Application {
     /// l'état de la vue), sa mise en SVG et l'écriture se font en arrière-plan.
     pub(crate) fn exporter_svg_dialogue(&mut self, ctx: &egui::Context) {
         let nom = self.scene.as_ref().map(|s| s.file_name.rsplit_once('.').map_or(s.file_name.clone(), |x| x.0.to_string())).unwrap_or_default();
-        let Some(chemin) = rfd::FileDialog::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() else { return };
+        let Some(chemin) = crate::socle::dialogue::Fichier::new().add_filter("SVG", &["svg"]).set_file_name(format!("{nom}.svg")).save_file() else { return };
         match self.dessin_et_titre() {
             Ok((d, titre)) => self.exporter_svg_arriere_plan(ctx, d, titre, chemin),
             Err(e) => self.error = Some(e),

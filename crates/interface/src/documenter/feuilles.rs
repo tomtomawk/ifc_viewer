@@ -295,7 +295,7 @@ impl Application {
     pub(crate) fn exporter_feuille(&mut self, ctx: &egui::Context, extension: &str, id: &str) {
         let Some((p, _)) = &self.natif else { return };
         let Some(f) = p.feuilles.iter().find(|f| f.id == id) else { return };
-        let Some(path) = rfd::FileDialog::new().set_file_name(format!("{} {}.{extension}", f.numero, f.nom)).add_filter(extension, &[extension]).save_file() else {
+        let Some(path) = crate::socle::dialogue::Fichier::new().set_file_name(format!("{} {}.{extension}", f.numero, f.nom)).add_filter(extension, &[extension]).save_file() else {
             return;
         };
         self.exporter_feuille_arriere_plan(ctx, extension, id.to_string(), path);

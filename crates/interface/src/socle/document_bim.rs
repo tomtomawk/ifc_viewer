@@ -84,7 +84,7 @@ impl Application {
             return;
         };
         let nom = ancien.file_stem().unwrap_or_default().to_string_lossy();
-        let Some(mut chemin) = rfd::FileDialog::new()
+        let Some(mut chemin) = crate::socle::dialogue::Fichier::new()
             .set_title("Enregistrer sous")
             .add_filter("Projet BIMedit", &[EXTENSION_PROJET])
             .set_file_name(format!("{nom}.bem"))
@@ -123,7 +123,7 @@ impl Application {
     }
 
     pub(crate) fn importer_dialogue(&mut self, ctx: &egui::Context) {
-        let Some(source) = rfd::FileDialog::new()
+        let Some(source) = crate::socle::dialogue::Fichier::new()
             .set_title("Importer")
             .add_filter("IFC / Revit", &["ifc", "ifczip", "rvt", "rfa", "rte"])
             .pick_file()
@@ -144,7 +144,7 @@ impl Application {
             }
         }
         let nom = source.file_stem().unwrap_or_default().to_string_lossy();
-        let Some(mut sortie) = rfd::FileDialog::new()
+        let Some(mut sortie) = crate::socle::dialogue::Fichier::new()
             .set_title("Destination du projet natif")
             .set_file_name(format!("{nom}.bem"))
             .add_filter("Projet BIMedit", &[EXTENSION_PROJET])

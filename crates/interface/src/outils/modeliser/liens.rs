@@ -20,7 +20,7 @@ impl Application {
             self.error = Some("Lien IFC : ouvrir ou créer d'abord un projet natif.".into());
             return;
         }
-        let Some(chemin) = rfd::FileDialog::new().set_title("Insérer un lien IFC").add_filter("IFC", &["ifc", "IFC", "ifczip"]).pick_file() else { return };
+        let Some(chemin) = crate::socle::dialogue::Fichier::new().set_title("Insérer un lien IFC").add_filter("IFC", &["ifc", "IFC", "ifczip"]).pick_file() else { return };
         self.inserer_lien(ctx, chemin);
     }
 
@@ -79,7 +79,7 @@ impl Application {
         }
         if let Some(c) = commande && let Err(e) = self.executer_bim(c) { self.error = Some(e); }
         if recharger { self.recharger_liens(); }
-        if let Some(l) = changer && let Some(chemin) = rfd::FileDialog::new().set_title(format!("Nouveau fichier du lien « {} »", l.nom)).add_filter("IFC", &["ifc", "IFC", "ifczip"]).pick_file() {
+        if let Some(l) = changer && let Some(chemin) = crate::socle::dialogue::Fichier::new().set_title(format!("Nouveau fichier du lien « {} »", l.nom)).add_filter("IFC", &["ifc", "IFC", "ifczip"]).pick_file() {
             let chemin = chemin.canonicalize().unwrap_or(chemin);
             self.lier_ifc_arriere_plan(ui.ctx(), LienIfc { chemin: chemin.to_string_lossy().into_owned(), ..l });
         }

@@ -208,7 +208,7 @@ fn apparence_materiau(ui: &mut egui::Ui, m: &mut modele::Materiau, dossier: Opti
                 let r = ui.add_sized([170.0, 18.0], egui::Button::new(nom).truncate());
                 let r = match a.textures.get(&carte) { Some(t) => r.on_hover_text(&t.chemin), None => r.on_hover_text("Choisir une image") };
                 if r.clicked()
-                    && let Some(f) = rfd::FileDialog::new().set_title(carte.libelle()).add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "exr", "hdr", "webp"]).pick_file()
+                    && let Some(f) = crate::socle::dialogue::Fichier::new().set_title(carte.libelle()).add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "exr", "hdr", "webp"]).pick_file()
                 {
                     // dans le dossier du projet : chemin relatif (le projet reste déplaçable)
                     let chemin = match dossier.as_deref().and_then(|d| f.strip_prefix(d).ok()) {

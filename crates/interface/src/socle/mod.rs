@@ -15,4 +15,5 @@ pub(crate) mod volets;
 pub(crate) mod document_bim;
 pub(crate) mod soleil;
 pub(crate) mod taches;
+pub(crate) mod dialogue;
 pub(crate) mod presse_papiers;

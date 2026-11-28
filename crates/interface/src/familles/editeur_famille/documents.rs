@@ -793,7 +793,7 @@ impl Application {
     /// Charger une famille : choix d'un fichier `.bef`, chargé dans le projet ;
     /// `placer` : le nouveau type devient celui des prochaines ouvertures.
     pub(crate) fn charger_famille_dialogue(&mut self, placer: bool) -> Result<(), String> {
-        let Some(chemin) = rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_title("Charger une famille").pick_file() else { return Ok(()) };
+        let Some(chemin) = crate::socle::dialogue::Fichier::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_title("Charger une famille").pick_file() else { return Ok(()) };
         let id = self.charger_famille_fichier(&chemin)?;
         let Some(t) = self.natif.as_ref().and_then(|(p, _)| p.types_ouvertures.iter().find(|t| t.id == id)).cloned() else { return Ok(()) };
         if placer {
@@ -824,12 +824,12 @@ impl Application {
             }
             ActionFamille::Enregistrer | ActionFamille::EnregistrerSous => {
                 let nom = self.famille.as_ref().map_or_else(String::new, |e| e.nom.trim().to_string());
-                match rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_file_name(format!("{nom}.bef")).save_file() {
+                match crate::socle::dialogue::Fichier::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_file_name(format!("{nom}.bef")).save_file() {
                     Some(c) => self.enregistrer_famille_fichier(&c),
                     None => Ok(()),
                 }
             }
-            ActionFamille::Ouvrir => match rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).pick_file() {
+            ActionFamille::Ouvrir => match crate::socle::dialogue::Fichier::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).pick_file() {
                 Some(c) => self.ouvrir_famille_fichier(&c),
                 None => Ok(()),
             },
@@ -879,7 +879,7 @@ impl Application {
                 if autonome {
                     let chemin = self.famille.as_ref().and_then(|e| e.document_famille.chemin_fichier.clone()).or_else(|| {
                         let nom = self.famille.as_ref().map_or("Famille", |e| e.nom.as_str());
-                        rfd::FileDialog::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_file_name(format!("{nom}.bef")).save_file()
+                        crate::socle::dialogue::Fichier::new().add_filter("Famille BIMedit", &[EXTENSION_FAMILLE]).set_file_name(format!("{nom}.bef")).save_file()
                     });
                     if let Some(chemin) = chemin {
                         match self.enregistrer_famille_fichier(&chemin) {

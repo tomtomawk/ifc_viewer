@@ -293,7 +293,7 @@ impl Application {
     /// Export IFC4, écrit en arrière-plan (`socle::taches`).
     pub(crate) fn export_ifc_dialogue(&mut self, ctx: &egui::Context) {
         if self.natif.is_none() { return; }
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::socle::dialogue::Fichier::new()
             .set_file_name("projet.ifc")
             .add_filter("IFC4", &["ifc"])
             .save_file()
@@ -304,7 +304,7 @@ impl Application {
     }
     /// PDF de la feuille ou du jeu affiché, sinon de la vue ; écrit en arrière-plan.
     pub(crate) fn export_pdf_dialogue(&mut self, ctx: &egui::Context) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::socle::dialogue::Fichier::new()
             .set_file_name("dessin.pdf")
             .add_filter("PDF", &["pdf"])
             .save_file()
@@ -380,7 +380,7 @@ impl Application {
                 self.error = Some(e);
             }
         if let Some(k) = export {
-            let Some(path) = rfd::FileDialog::new().set_file_name("nomenclature.csv").add_filter("csv", &["csv"]).save_file() else {
+            let Some(path) = crate::socle::dialogue::Fichier::new().set_file_name("nomenclature.csv").add_filter("csv", &["csv"]).save_file() else {
                 return;
             };
             let Some((p, _)) = self.natif.as_ref() else {

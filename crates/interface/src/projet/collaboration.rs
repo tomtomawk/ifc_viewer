@@ -18,7 +18,7 @@ impl Application {
         let Some((p, _)) = &self.natif else {
             return;
         };
-        if let Some(mut path) = rfd::FileDialog::new()
+        if let Some(mut path) = crate::socle::dialogue::Fichier::new()
             .set_title("Enregistrer le projet partagé sur le serveur")
             .add_filter("Projet partagé BIMedit", &[partage::EXTENSION])
             .set_file_name(format!("{}.bimpartage", p.nom))
